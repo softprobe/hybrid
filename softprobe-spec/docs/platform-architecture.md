@@ -3,6 +3,7 @@
 This document is the canonical shared architecture for the Softprobe platform.
 
 Related docs:
+- [Hybrid platform design](./hybrid-platform-design.md)
 - [Repo layout](./repo-layout.md)
 - [Migration plan](./migration-plan.md)
 - [HTTP control API](../protocol/http-control-api.md)
