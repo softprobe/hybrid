@@ -1,0 +1,31 @@
+# Nested git backups (local only; do not commit)
+.nested-git-backup/
+
+# OS
+.DS_Store
+
+# Rust (proxy)
+proxy/target/
+proxy/**/*.rs.bk
+
+# Node (softprobe-js)
+softprobe-js/node_modules/
+softprobe-js/dist/
+softprobe-js/coverage/
+softprobe-js/.nyc_output/
+softprobe-js/*.tsbuildinfo
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*

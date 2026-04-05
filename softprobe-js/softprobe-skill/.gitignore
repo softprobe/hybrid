@@ -1,0 +1,5 @@
+# Eval workspace run outputs (large, auto-generated)
+softprobe-workspace/*/eval-*/
+# Keep benchmark summaries
+!softprobe-workspace/*/benchmark.json
+!softprobe-workspace/*/benchmark.md

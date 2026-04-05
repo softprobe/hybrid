@@ -1,0 +1,40 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Build artifacts
+*.wasm
+*.wat
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Local environment
+.env
+.env.local
+
+# Docker
+.dockerignore
+
+# Generated protobuf files
+/src/generated/
+deploy/otel-auto-instrumentation-for-dev.yaml
+scripts/cleanup.sh
+scripts/logs-demo-airline.sh
+scripts/logs-demo-ota.sh

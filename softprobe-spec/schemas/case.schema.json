@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://softprobe.dev/spec/case.schema.json",
+  "title": "Softprobe Case",
+  "type": "object",
+  "required": ["version", "caseId", "traces"],
+  "properties": {
+    "version": { "type": "string" },
+    "caseId": { "type": "string" },
+    "suite": { "type": "string" },
+    "mode": { "type": "string", "enum": ["capture", "replay", "generate"] },
+    "createdAt": { "type": "string" },
+    "traces": {
+      "type": "array",
+      "description": "Ordered list of OTLP-compatible trace payloads (JSON encoding of trace data, e.g. resourceSpans). See docs/hybrid-platform-design.md."
+    },
+    "rules": { "type": "array" },
+    "fixtures": { "type": "array" }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,373 @@
+{
+  "metadata": {
+    "skill_name": "softprobe",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-03-15T16:34:08Z",
+    "evals_run": [
+      1,
+      2,
+      3
+    ],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 8,
+        "failed": 0,
+        "total": 8,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "instrumentation.js contains require('@softprobe/softprobe-js/init')",
+          "passed": true,
+          "evidence": "FOUND '@softprobe/softprobe-js/init' in /tmp/sp-eval-2/instrumentation.js"
+        },
+        {
+          "text": "instrumentation.js does NOT use /dist/ deep import path",
+          "passed": true,
+          "evidence": "NOT PRESENT (good) '/dist/' in /tmp/sp-eval-2/instrumentation.js"
+        },
+        {
+          "text": "instrumentation.js calls sdk.start()",
+          "passed": true,
+          "evidence": "FOUND 'sdk.start()' in /tmp/sp-eval-2/instrumentation.js"
+        },
+        {
+          "text": ".softprobe/config.yml exists",
+          "passed": true,
+          "evidence": "EXISTS: /tmp/sp-eval-2/.softprobe/config.yml"
+        },
+        {
+          "text": "package.json start script uses -r ./instrumentation.js",
+          "passed": true,
+          "evidence": "scripts.start = 'node -r ./instrumentation.js server.js' \u2014 '-r ./instrumentation.js' FOUND"
+        },
+        {
+          "text": "Cassette file aabbccdd00000002aabbccdd00000002.ndjson exists",
+          "passed": true,
+          "evidence": "EXISTS: /tmp/sp-eval-2/cassettes/aabbccdd00000002aabbccdd00000002.ndjson"
+        },
+        {
+          "text": "Softprobe init loads BEFORE NodeSDK in instrumentation.js",
+          "passed": true,
+          "evidence": "'@softprobe/softprobe-js/init' at pos 9 BEFORE 'NodeSDK' at pos 50"
+        },
+        {
+          "text": "Output file contains diff/replay result",
+          "passed": true,
+          "evidence": "Found 'PASS' in iteration-1/eval-capture-replay/with_skill/outputs/result.txt"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Fixed instrumentation.js uses public @softprobe/softprobe-js/init (not /dist/)",
+          "passed": true,
+          "evidence": "FOUND '@softprobe/softprobe-js/init' in /tmp/sp-eval-3/instrumentation.js"
+        },
+        {
+          "text": "instrumentation.js does NOT use /dist/ deep import path",
+          "passed": true,
+          "evidence": "NOT PRESENT (good) '/dist/' in /tmp/sp-eval-3/instrumentation.js"
+        },
+        {
+          "text": ".softprobe/config.yml exists",
+          "passed": true,
+          "evidence": "EXISTS: /tmp/sp-eval-3/.softprobe/config.yml"
+        },
+        {
+          "text": "Cassette file aabbccdd00000003aabbccdd00000003.ndjson exists",
+          "passed": true,
+          "evidence": "EXISTS: /tmp/sp-eval-3/cassettes/aabbccdd00000003aabbccdd00000003.ndjson"
+        },
+        {
+          "text": "Output mentions the deep import issue that was found and fixed",
+          "passed": true,
+          "evidence": "Found 'dist/' in iteration-1/eval-import-fix/with_skill/outputs/result.txt"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "instrumentation.js contains require('@softprobe/softprobe-js/init')",
+          "passed": true,
+          "evidence": "FOUND '@softprobe/softprobe-js/init' in /tmp/sp-eval-1/instrumentation.js"
+        },
+        {
+          "text": "instrumentation.js does NOT use /dist/ deep import path",
+          "passed": true,
+          "evidence": "NOT PRESENT (good) '/dist/' in /tmp/sp-eval-1/instrumentation.js"
+        },
+        {
+          "text": "instrumentation.js calls sdk.start()",
+          "passed": true,
+          "evidence": "FOUND 'sdk.start()' in /tmp/sp-eval-1/instrumentation.js"
+        },
+        {
+          "text": ".softprobe/config.yml exists",
+          "passed": true,
+          "evidence": "EXISTS: /tmp/sp-eval-1/.softprobe/config.yml"
+        },
+        {
+          "text": "package.json start script uses -r ./instrumentation.js",
+          "passed": true,
+          "evidence": "scripts.start = 'node -r ./instrumentation.js server.js' \u2014 '-r ./instrumentation.js' FOUND"
+        },
+        {
+          "text": "Cassette file aabbccdd00000001aabbccdd00000001.ndjson exists",
+          "passed": true,
+          "evidence": "EXISTS: /tmp/sp-eval-1/cassettes/aabbccdd00000001aabbccdd00000001.ndjson"
+        },
+        {
+          "text": "Softprobe init loads BEFORE NodeSDK in instrumentation.js",
+          "passed": true,
+          "evidence": "'@softprobe/softprobe-js/init' at pos 86 BEFORE 'NodeSDK' at pos 127"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.875,
+        "passed": 7,
+        "failed": 0,
+        "total": 8,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "instrumentation.js contains require('@softprobe/softprobe-js/init')",
+          "passed": true,
+          "evidence": "FOUND '@softprobe/softprobe-js/init' in /tmp/sp-eval-2/instrumentation.js"
+        },
+        {
+          "text": "instrumentation.js does NOT use /dist/ deep import path",
+          "passed": true,
+          "evidence": "NOT PRESENT (good) '/dist/' in /tmp/sp-eval-2/instrumentation.js"
+        },
+        {
+          "text": "instrumentation.js calls sdk.start()",
+          "passed": true,
+          "evidence": "FOUND 'sdk.start()' in /tmp/sp-eval-2/instrumentation.js"
+        },
+        {
+          "text": ".softprobe/config.yml exists",
+          "passed": true,
+          "evidence": "EXISTS: /tmp/sp-eval-2/.softprobe/config.yml"
+        },
+        {
+          "text": "package.json start script uses -r ./instrumentation.js",
+          "passed": true,
+          "evidence": "scripts.start = 'node -r ./instrumentation.js server.js' \u2014 '-r ./instrumentation.js' FOUND"
+        },
+        {
+          "text": "Cassette file aabbccdd00000002aabbccdd00000002.ndjson exists",
+          "passed": true,
+          "evidence": "EXISTS: /tmp/sp-eval-2b/cassettes/aabbccdd00000002aabbccdd00000002.ndjson"
+        },
+        {
+          "text": "Softprobe init loads BEFORE NodeSDK in instrumentation.js",
+          "passed": false,
+          "evidence": "init at 416, NodeSDK at 93 \u2014 WRONG ordering (OTel before Softprobe)"
+        },
+        {
+          "text": "Output file contains diff/replay result",
+          "passed": true,
+          "evidence": "Found 'PASS' in iteration-1/eval-capture-replay/without_skill/outputs/result.txt"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Fixed instrumentation.js uses public @softprobe/softprobe-js/init (not /dist/)",
+          "passed": true,
+          "evidence": "FOUND '@softprobe/softprobe-js/init' in /tmp/sp-eval-3/instrumentation.js"
+        },
+        {
+          "text": "instrumentation.js does NOT use /dist/ deep import path",
+          "passed": true,
+          "evidence": "NOT PRESENT (good) '/dist/' in /tmp/sp-eval-3/instrumentation.js"
+        },
+        {
+          "text": ".softprobe/config.yml exists",
+          "passed": true,
+          "evidence": "EXISTS: /tmp/sp-eval-3/.softprobe/config.yml"
+        },
+        {
+          "text": "Cassette file aabbccdd00000003aabbccdd00000003.ndjson exists",
+          "passed": true,
+          "evidence": "EXISTS: /tmp/sp-eval-3/cassettes/aabbccdd00000003aabbccdd00000003.ndjson"
+        },
+        {
+          "text": "Output mentions the deep import issue that was found and fixed",
+          "passed": true,
+          "evidence": "Found 'dist/' in iteration-1/eval-import-fix/without_skill/outputs/result.txt"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.8571428571428571,
+        "passed": 6,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "instrumentation.js contains require('@softprobe/softprobe-js/init')",
+          "passed": true,
+          "evidence": "FOUND '@softprobe/softprobe-js/init' in /tmp/sp-eval-1/instrumentation.js"
+        },
+        {
+          "text": "instrumentation.js does NOT use /dist/ deep import path",
+          "passed": true,
+          "evidence": "NOT PRESENT (good) '/dist/' in /tmp/sp-eval-1/instrumentation.js"
+        },
+        {
+          "text": "instrumentation.js calls sdk.start()",
+          "passed": true,
+          "evidence": "FOUND 'sdk.start()' in /tmp/sp-eval-1/instrumentation.js"
+        },
+        {
+          "text": ".softprobe/config.yml exists",
+          "passed": true,
+          "evidence": "EXISTS: /tmp/sp-eval-1/.softprobe/config.yml"
+        },
+        {
+          "text": "package.json start script uses -r ./instrumentation.js",
+          "passed": true,
+          "evidence": "scripts.start = 'node -r ./instrumentation.js server.js' \u2014 '-r ./instrumentation.js' FOUND"
+        },
+        {
+          "text": "Cassette file aabbccdd00000001aabbccdd00000001.ndjson exists",
+          "passed": true,
+          "evidence": "EXISTS: /tmp/sp-eval-1b/cassettes/aabbccdd00000001aabbccdd00000001.ndjson"
+        },
+        {
+          "text": "Softprobe init loads BEFORE NodeSDK in instrumentation.js",
+          "passed": false,
+          "evidence": "init at 409, NodeSDK at 85 \u2014 WRONG ordering (OTel before Softprobe)"
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 0.9107,
+        "stddev": 0.0778,
+        "min": 0.8571,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.09",
+      "time_seconds": "+0.0",
+      "tokens": "+0"
+    }
+  },
+  "notes": []
+}

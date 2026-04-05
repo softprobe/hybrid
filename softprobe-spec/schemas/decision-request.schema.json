@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://softprobe.dev/spec/decision-request.schema.json",
+  "title": "Softprobe HTTP Decision Request",
+  "type": "object",
+  "required": ["sessionId", "request"],
+  "properties": {
+    "sessionId": { "type": "string" },
+    "caseId": { "type": "string" },
+    "mode": { "type": "string" },
+    "request": { "type": "object" },
+    "context": { "type": "object" }
+  },
+  "additionalProperties": true
+}

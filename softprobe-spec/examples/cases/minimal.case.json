@@ -1,0 +1,10 @@
+{
+  "version": "1.0.0",
+  "caseId": "example-minimal",
+  "suite": "examples",
+  "mode": "replay",
+  "createdAt": "2026-04-05T00:00:00Z",
+  "traces": [],
+  "rules": [],
+  "fixtures": []
+}

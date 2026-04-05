@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://softprobe.dev/spec/session.schema.json",
+  "title": "Softprobe Session",
+  "type": "object",
+  "required": ["sessionId", "mode"],
+  "properties": {
+    "sessionId": { "type": "string" },
+    "caseId": { "type": "string" },
+    "mode": { "type": "string", "enum": ["capture", "replay", "generate"] },
+    "policy": { "type": "object" },
+    "rules": { "type": "array" },
+    "fixtures": { "type": "array" }
+  },
+  "additionalProperties": true
+}

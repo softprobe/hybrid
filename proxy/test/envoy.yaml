@@ -1,0 +1,196 @@
+static_resources:
+  listeners:
+    # incoming traffic proxy
+    - name: inbound_listener
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 15006
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: inbound_http
+                codec_type: AUTO
+                access_log:
+                  - name: envoy.access_loggers.stdout
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                route_config:
+                  name: inbound_route
+                  virtual_hosts:
+                    - name: inbound
+                      domains: ["*"]
+                      routes:
+                        - match:
+                            prefix: "/"
+                          route:
+                            cluster: go-app
+                http_filters:
+                  - name: envoy.filters.http.wasm
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
+                      config:
+                        name: "sp_agent"
+                        vm_config:
+                          vm_id: "sp_agent"
+                          runtime: "envoy.wasm.runtime.v8"
+                          allow_precompiled: true
+                          code:
+                            local:
+                              filename: "/etc/envoy/sp_istio_agent.wasm"
+                        configuration:
+                          "@type": type.googleapis.com/google.protobuf.StringValue
+                          value: |
+                            {
+                              "traffic_direction": "inbound",
+                              "service_name": "softprobe-integration-test",
+                              "sp_backend_url": "https://o.softprobe.ai",
+                              "public_key": "wzmD5u5n_dNBbjTSS_Ff0UqCHEsUsILbIsSI2tDedAE",
+                              "collectionRules": {
+                                "http": {
+                                  "server": [
+                                    {
+                                      "host": ".*",
+                                      "paths": [".*"]
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+                      suppress_envoy_headers: false
+
+    # outgoing http proxy
+    - name: outbound_listener
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 15001
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: outbound_http
+                codec_type: AUTO
+                http_protocol_options:
+                  accept_http_10: true # this is important for http/1.0 to be accepted
+                use_remote_address: true
+                route_config:
+                  name: outbound_route
+                  virtual_hosts:
+                    - name: outbound
+                      domains: ["*"]
+                      routes:
+                        - match:
+                            prefix: "/"
+                          route:
+                            cluster: httpbin_cluster
+                http_filters:
+                  - name: envoy.filters.http.wasm
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
+                      config:
+                        name: "sp_agent"
+                        vm_config:
+                          vm_id: "sp_agent"
+                          runtime: "envoy.wasm.runtime.v8"
+                          allow_precompiled: true
+                          code:
+                            local:
+                              filename: "/etc/envoy/sp_istio_agent.wasm"
+                        configuration:
+                          "@type": type.googleapis.com/google.protobuf.StringValue
+                          value: |
+                            {
+                              "traffic_direction": "outbound",
+                              "service_name": "softprobe-integration-test",
+                              "sp_backend_url": "https://o.softprobe.ai",
+                              "public_key": "wzmD5u5n_dNBbjTSS_Ff0UqCHEsUsILbIsSI2tDedAE",
+                              "collectionRules": {
+                                "http": {
+                                  "server": [],
+                                  "client": [
+                                    {
+                                      "host": ".*",
+                                      "paths": [".*"]
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+                      suppress_envoy_headers: false
+
+  clusters:
+    - name: inbound_passthrough
+      type: ORIGINAL_DST
+      lb_policy: CLUSTER_PROVIDED
+      connect_timeout: 10s
+
+    - name: go-app
+      type: LOGICAL_DNS
+      dns_lookup_family: V4_ONLY
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 5s
+      load_assignment:
+        cluster_name: go-app
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: go-app
+                      port_value: 80
+
+
+    - name: httpbin_cluster
+      type: LOGICAL_DNS
+      dns_lookup_family: V4_ONLY
+      lb_policy: ROUND_ROBIN
+      transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+          sni: o.softprobe.ai
+      load_assignment:
+        cluster_name: httpbin_cluster
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: httpbin.org
+                      port_value: 443
+
+    # Cluster with name format expected by WASM plugin
+    - name: "outbound|443||o.softprobe.ai"
+      type: LOGICAL_DNS
+      dns_lookup_family: V4_ONLY
+      lb_policy: ROUND_ROBIN
+      transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+          sni: o.softprobe.ai
+      load_assignment:
+        cluster_name: "outbound|443||o.softprobe.ai"
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: o.softprobe.ai
+                      port_value: 443
+
+admin:
+  address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 18001

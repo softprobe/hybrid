@@ -1,0 +1,9 @@
+cassettePath: "./softprobe-cassettes.ndjson"
+capture:
+  maxPayloadSize: 1048576
+
+replay:
+  ignoreUrls:
+    - "localhost:431[78]"
+    - "/v1/traces"
+    - "api\\.stripe\\.com"

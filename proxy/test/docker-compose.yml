@@ -1,0 +1,41 @@
+services:
+  envoy:
+    image: envoyproxy/envoy:v1.27-latest
+    command: ["/usr/local/bin/envoy", "-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml
+      - ../target/wasm32-unknown-unknown/release/sp_istio_agent.wasm:/etc/envoy/sp_istio_agent.wasm
+    restart: always
+    ports:
+      - "15001:15001" # outbound traffic
+      - "15006:15006" # inbound traffic
+      - "18001:18001" # admin interface
+
+  go-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      no_cache: true
+    environment:
+      - ENVOY_HOST=envoy:15001
+      - HTTP_PROXY=http://envoy:15001
+      - http_proxy=http://envoy:15001
+      # - OTEL_EXPORTER_OTLP_ENDPOINT=https://o.softprobe.ai
+    restart: always
+    ports:
+      - "8080:80"
+
+  test-runner:
+    image: golang:1.23-alpine
+    working_dir: /workspace/test
+    volumes:
+      - ..:/workspace
+    command: ["sh", "-c", "sleep 2 && go run test.go"]
+    environment:
+      - ENVOY_HOST=envoy
+      - BACKEND_URL=https://o.softprobe.ai
+      - SERVICE_NAME=softprobe-integration-test
+    restart: always
+    depends_on:
+      - envoy
+      - go-app

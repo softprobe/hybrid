@@ -1,0 +1,383 @@
+# SERVER Mode - Deployed on demo-airline to collect inbound traffic
+---
+apiVersion: extensions.istio.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: sp-istio-agent-server
+spec:
+  url: oci://docker.io/softprobe/softprobe:latest
+  phase: AUTHN
+  match:
+    - mode: SERVER
+  pluginConfig:
+    sp_backend_url: "https://o.softprobe.ai"
+    public_key: "demo-ota-01"
+    traffic_direction: "server"
+    collectionRules:
+      http:
+        server:
+          - path: ".*"
+  vmConfig:
+    env:
+---
+# CLIENT Mode - Deployed on demo-ota to collect outbound traffic
+apiVersion: extensions.istio.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: sp-istio-agent-client
+spec:
+  url: oci://docker.io/softprobe/softprobe:latest
+  phase: AUTHN
+  match:
+    - mode: CLIENT
+  pluginConfig:
+    sp_backend_url: "https://o.softprobe.ai"
+    public_key: "demo-ota-01"
+    traffic_direction: "client"
+    collectionRules:
+      http:
+        client:
+          - host: ".*"
+            paths: [".*"]
+  vmConfig:
+    env:
+---
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: softprobe-backend
+  namespace: istio-system
+spec:
+  hosts:
+  - o.softprobe.ai
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  location: MESH_EXTERNAL
+  resolution: DNS
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: softprobe-backend-tls
+  namespace: istio-system
+spec:
+  host: o.softprobe.ai
+  trafficPolicy:
+    tls:
+      mode: SIMPLE
+      sni: o.softprobe.ai
+---
+
+# EnvoyFilter - Automatically inject application name header (applied to all workloads)
+# TODO: move the following logic into WASM itself.
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: inject-app-name-header
+  namespace: default
+spec:
+  configPatches:
+  # Configuration 1: SIDECAR_INBOUND - Handle inbound requests (server side)
+  - applyTo: HTTP_FILTER
+    match:
+      context: SIDECAR_INBOUND
+      listener:
+        filterChain:
+          filter:
+            name: "envoy.filters.network.http_connection_manager"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.lua
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+          inline_code: |
+            function envoy_on_request(request_handle)
+              -- Remove existing x-sp-service-name header to prevent duplication
+              request_handle:headers():remove("x-sp-service-name")
+              
+              local service_name = nil
+              
+              -- Method 1: Get from OTEL_SERVICE_NAME environment variable (highest priority)
+              local otel_service_name = os.getenv("OTEL_SERVICE_NAME")
+              if otel_service_name and otel_service_name ~= "" then
+                service_name = otel_service_name
+              end
+              
+              -- Method 2: Get from APP_NAME environment variable
+              if not service_name then
+                local app_name = os.getenv("APP_NAME")
+                if app_name and app_name ~= "" then
+                  service_name = app_name
+                end
+              end
+              
+              -- Method 2: Get from SERVICE_NAME environment variable
+              if not service_name then
+                local svc_name = os.getenv("SERVICE_NAME")
+                if svc_name and svc_name ~= "" then
+                  service_name = svc_name
+                end
+              end
+              
+              -- Method 3: Get from POD_NAME environment variable and parse
+              if not service_name then
+                local pod_name = os.getenv("POD_NAME")
+                if pod_name and pod_name ~= "" then
+                  -- Extract application name from pod name (format: app-name-deployment-hash-pod-hash)
+                  -- Extract the part before the second last hyphen
+                  local extracted_app = string.match(pod_name, "^(.+)%-[^%-]+%-[^%-]+$")
+                  if extracted_app and extracted_app ~= "" then
+                    service_name = extracted_app
+                  end
+                end
+              end
+              
+              -- Method 4: Extract application name from HOSTNAME
+              if not service_name then
+                local hostname = os.getenv("HOSTNAME")
+                if hostname and hostname ~= "" then
+                  -- Extract application name from hostname (format: app-name-deployment-hash-pod-hash)
+                  -- Extract the part before the second last hyphen
+                  local extracted_app = string.match(hostname, "^(.+)%-[^%-]+%-[^%-]+$")
+                  if extracted_app and extracted_app ~= "" then
+                    service_name = extracted_app
+                  end
+                end
+              end
+              
+              -- Method 5: Get from APP_LABEL environment variable (Downward API)
+              if not service_name then
+                local app_label = os.getenv("APP_LABEL")
+                if app_label and app_label ~= "" then
+                  service_name = app_label
+                end
+              end
+              
+              -- Method 6: Get from SERVICE_LABEL environment variable (Downward API)
+              if not service_name then
+                local service_label = os.getenv("SERVICE_LABEL")
+                if service_label and service_label ~= "" then
+                  service_name = service_label
+                end
+              end
+              
+              -- Method 7: Get from CONTAINER_NAME
+              if not service_name then
+                local container_name = os.getenv("CONTAINER_NAME")
+                if container_name and container_name ~= "" then
+                  service_name = container_name
+                end
+              end
+              
+              -- Method 8: Get from DEPLOYMENT_NAME
+              if not service_name then
+                local deployment = os.getenv("DEPLOYMENT_NAME")
+                if deployment and deployment ~= "" then
+                  service_name = deployment
+                end
+              end
+              
+              -- Method 9: Get from K8S related environment variables
+              if not service_name then
+                local k8s_app = os.getenv("K8S_APP") or os.getenv("KUBERNETES_APP")
+                if k8s_app and k8s_app ~= "" then
+                  service_name = k8s_app
+                end
+              end
+              
+              -- Method 10: Get from namespace (if not default)
+              if not service_name then
+                local namespace = os.getenv("POD_NAMESPACE") or os.getenv("KUBERNETES_NAMESPACE")
+                if namespace and namespace ~= "" and namespace ~= "default" then
+                  service_name = namespace
+                end
+              end
+              
+              -- If all methods fail, use default value
+              if not service_name or service_name == "" then
+                service_name = "unknown-service"
+              end
+              
+              -- Put in x-sp-service-name
+              request_handle:headers():add("x-sp-service-name", service_name)
+              
+              -- Preserve existing headers for compatibility
+              request_handle:headers():add("x-service-name", service_name)
+              request_handle:headers():add("x-current-service", service_name .. "-workload")
+              
+              -- Add debug information headers
+              local hostname = os.getenv("HOSTNAME")
+              if hostname then
+                request_handle:headers():add("x-debug-hostname", hostname)
+              end
+              
+              local pod_name = os.getenv("POD_NAME")
+              if pod_name then
+                request_handle:headers():add("x-debug-pod-name", pod_name)
+              end
+              
+              local namespace = os.getenv("POD_NAMESPACE")
+              if namespace then
+                request_handle:headers():add("x-debug-namespace", namespace)
+              end
+              
+              local service_account = os.getenv("KUBERNETES_SERVICE_ACCOUNT")
+              if service_account then
+                request_handle:headers():add("x-debug-service-account", service_account)
+              end
+            end
+  # Configuration 2: SIDECAR_OUTBOUND - Handle outbound requests (client side)
+  - applyTo: HTTP_FILTER
+    match:
+      context: SIDECAR_OUTBOUND
+      listener:
+        filterChain:
+          filter:
+            name: "envoy.filters.network.http_connection_manager"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.lua
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+          inline_code: |
+            function envoy_on_request(request_handle)
+              -- Remove existing x-sp-service-name header to prevent duplication
+              request_handle:headers():remove("x-sp-service-name")
+              
+              local service_name = nil
+              
+              -- Method 1: Get from OTEL_SERVICE_NAME environment variable (highest priority)
+              local otel_service_name = os.getenv("OTEL_SERVICE_NAME")
+              if otel_service_name and otel_service_name ~= "" then
+                service_name = otel_service_name
+              end
+              
+              -- Method 2: Get from APP_NAME environment variable
+              if not service_name then
+                local app_name = os.getenv("APP_NAME")
+                if app_name and app_name ~= "" then
+                  service_name = app_name
+                end
+              end
+              
+              -- Method 2: Get from SERVICE_NAME environment variable
+              if not service_name then
+                local svc_name = os.getenv("SERVICE_NAME")
+                if svc_name and svc_name ~= "" then
+                  service_name = svc_name
+                end
+              end
+              
+              -- Method 3: Get from POD_NAME environment variable and parse
+              if not service_name then
+                local pod_name = os.getenv("POD_NAME")
+                if pod_name and pod_name ~= "" then
+                  -- Extract application name from pod name (format: app-name-deployment-hash-pod-hash)
+                  -- Extract the part before the second last hyphen
+                  local extracted_app = string.match(pod_name, "^(.+)%-[^%-]+%-[^%-]+$")
+                  if extracted_app and extracted_app ~= "" then
+                    service_name = extracted_app
+                  end
+                end
+              end
+              
+              -- Method 4: Extract application name from HOSTNAME
+              if not service_name then
+                local hostname = os.getenv("HOSTNAME")
+                if hostname and hostname ~= "" then
+                  -- Extract application name from hostname (format: app-name-deployment-hash-pod-hash)
+                  -- Extract the part before the second last hyphen
+                  local extracted_app = string.match(hostname, "^(.+)%-[^%-]+%-[^%-]+$")
+                  if extracted_app and extracted_app ~= "" then
+                    service_name = extracted_app
+                  end
+                end
+              end
+              
+              -- Method 5: Get from APP_LABEL environment variable (Downward API)
+              if not service_name then
+                local app_label = os.getenv("APP_LABEL")
+                if app_label and app_label ~= "" then
+                  service_name = app_label
+                end
+              end
+              
+              -- Method 6: Get from SERVICE_LABEL environment variable (Downward API)
+              if not service_name then
+                local service_label = os.getenv("SERVICE_LABEL")
+                if service_label and service_label ~= "" then
+                  service_name = service_label
+                end
+              end
+              
+              -- Method 7: Get from CONTAINER_NAME
+              if not service_name then
+                local container_name = os.getenv("CONTAINER_NAME")
+                if container_name and container_name ~= "" then
+                  service_name = container_name
+                end
+              end
+              
+              -- Method 8: Get from DEPLOYMENT_NAME
+              if not service_name then
+                local deployment = os.getenv("DEPLOYMENT_NAME")
+                if deployment and deployment ~= "" then
+                  service_name = deployment
+                end
+              end
+              
+              -- Method 9: Get from K8S related environment variables
+              if not service_name then
+                local k8s_app = os.getenv("K8S_APP") or os.getenv("KUBERNETES_APP")
+                if k8s_app and k8s_app ~= "" then
+                  service_name = k8s_app
+                end
+              end
+              
+              -- Method 10: Get from namespace (if not default)
+              if not service_name then
+                local namespace = os.getenv("POD_NAMESPACE") or os.getenv("KUBERNETES_NAMESPACE")
+                if namespace and namespace ~= "" and namespace ~= "default" then
+                  service_name = namespace
+                end
+              end
+              
+              -- If all methods fail, use default value
+              if not service_name or service_name == "" then
+                service_name = "unknown-service"
+              end
+              
+              -- Put in x-sp-service-name
+              request_handle:headers():add("x-sp-service-name", service_name)
+              
+              -- Preserve existing headers for compatibility
+              request_handle:headers():add("x-service-name", service_name)
+              request_handle:headers():add("x-current-service", service_name .. "-workload")
+              
+              -- Add debug information headers
+              local hostname = os.getenv("HOSTNAME")
+              if hostname then
+                request_handle:headers():add("x-debug-hostname", hostname)
+              end
+              
+              local pod_name = os.getenv("POD_NAME")
+              if pod_name then
+                request_handle:headers():add("x-debug-pod-name", pod_name)
+              end
+              
+              local namespace = os.getenv("POD_NAMESPACE")
+              if namespace then
+                request_handle:headers():add("x-debug-namespace", namespace)
+              end
+              
+              local service_account = os.getenv("KUBERNETES_SERVICE_ACCOUNT")
+              if service_account then
+                request_handle:headers():add("x-debug-service-account", service_account)
+              end
+            end
+
+
