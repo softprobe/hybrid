@@ -6,21 +6,22 @@ Monorepo workspace for the **Softprobe Hybrid** platform: **proxy-first HTTP** c
 
 | Path | Description |
 |------|-------------|
-| [`softprobe-spec/`](./softprobe-spec/) | Canonical contracts: schemas, protocols, architecture docs, and the [hybrid platform design](./softprobe-spec/docs/hybrid-platform-design.md). |
-| [`proxy/`](./proxy/) | Envoy/WASM data plane (Rust): HTTP interception, inject/extract OTEL API toward the runtime. |
-| [`softprobe-js/`](./softprobe-js/) | JavaScript SDK, CLI, codegen, and related tooling. |
+| [`spec/`](./spec/) | Canonical contracts: schemas, protocols, and examples; product design lives in [`docs/design.md`](./docs/design.md). |
+| [`softprobe-proxy/`](./softprobe-proxy/) | Envoy/WASM data plane (Rust): HTTP client to runtime for inject/extract per [`spec/protocol/proxy-otel-api.md`](spec/protocol/proxy-otel-api.md). |
+| **`softprobe-runtime`** (see [`tasks.md`](./tasks.md) P0.0) | OSS HTTP **control API** only ([`spec/protocol/http-control-api.md`](spec/protocol/http-control-api.md)). Inject/extract: **proxy backend** (e.g. `https://o.softprobe.ai`). |
+| [`softprobe-js/`](./softprobe-js/) | JavaScript SDK, codegen, optional temporary reference runtime. |
 
 ## Design source of truth
 
-- **Hybrid product and engineering design:** [`softprobe-spec/docs/hybrid-platform-design.md`](./softprobe-spec/docs/hybrid-platform-design.md)
-- **Platform overview:** [`softprobe-spec/docs/platform-architecture.md`](./softprobe-spec/docs/platform-architecture.md)
-- **Repo topology:** [`softprobe-spec/docs/repo-layout.md`](./softprobe-spec/docs/repo-layout.md)
+- **Hybrid product and engineering design:** [`docs/design.md`](./docs/design.md)
+- **Platform overview:** [`docs/platform-architecture.md`](./docs/platform-architecture.md)
+- **Repo topology:** [`docs/repo-layout.md`](./docs/repo-layout.md)
 
 ## Contracts quick links
 
-- [HTTP control API](softprobe-spec/protocol/http-control-api.md) — sessions, cases, rules (JSON)
-- [Proxy OTEL API](softprobe-spec/protocol/proxy-otel-api.md) — inject lookup and trace extract (protobuf)
-- [Session headers](softprobe-spec/protocol/session-headers.md)
+- [HTTP control API](spec/protocol/http-control-api.md) — sessions, cases, rules (JSON)
+- [Proxy OTEL API](spec/protocol/proxy-otel-api.md) — inject lookup and trace extract (protobuf)
+- [Session headers](spec/protocol/session-headers.md)
 
 ## Nested Git history (local backup)
 
@@ -30,4 +31,4 @@ This monorepo previously used separate Git repositories under `proxy/` and `soft
 
 ## Contributing
 
-Implementations should validate behavior against `softprobe-spec` schemas and compatibility fixtures as they are added. Prefer extending the spec before changing proxy or SDK behavior in incompatible ways.
+Implementations should validate behavior against `spec` schemas and compatibility fixtures as they are added. Prefer extending the spec before changing proxy or SDK behavior in incompatible ways.

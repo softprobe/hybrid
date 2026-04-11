@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://softprobe.dev/spec/session-operation.response.schema.json",
+  "title": "Softprobe Session Operation Response",
+  "type": "object",
+  "required": ["sessionId", "sessionRevision"],
+  "properties": {
+    "sessionId": { "type": "string" },
+    "sessionRevision": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false
+}

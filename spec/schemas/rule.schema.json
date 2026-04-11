@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://softprobe.dev/spec/rule.schema.json",
+  "title": "Softprobe Rule",
+  "type": "object",
+  "required": ["when", "then"],
+  "properties": {
+    "id": { "type": "string" },
+    "priority": { "type": "integer" },
+    "consume": { "type": "string", "enum": ["once", "many"] },
+    "when": {
+      "type": "object",
+      "properties": {
+        "direction": { "type": "string", "enum": ["inbound", "outbound"] },
+        "service": { "type": "string" },
+        "host": { "type": "string" },
+        "notHostSuffix": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "method": { "type": "string" },
+        "path": { "type": "string" },
+        "pathPrefix": { "type": "string" },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 1
+              }
+            ]
+          }
+        },
+        "bodyJsonPath": { "type": "string" },
+        "traceTags": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "then": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["action"],
+          "properties": {
+            "action": { "const": "mock" },
+            "response": { "type": "object", "additionalProperties": true }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["action"],
+          "properties": {
+            "action": { "const": "replay" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["action"],
+          "properties": {
+            "action": { "const": "passthrough" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["action", "error"],
+          "properties": {
+            "action": { "const": "error" },
+            "error": {
+              "type": "object",
+              "required": ["status"],
+              "properties": {
+                "status": { "type": "integer" },
+                "body": {}
+              },
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["action"],
+          "properties": {
+            "action": { "const": "capture_only" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

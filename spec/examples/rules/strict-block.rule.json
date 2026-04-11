@@ -1,0 +1,18 @@
+{
+  "id": "block-unknown-external",
+  "priority": 1000,
+  "consume": "many",
+  "when": {
+    "direction": "outbound",
+    "notHostSuffix": [".internal", "localhost"]
+  },
+  "then": {
+    "action": "error",
+    "error": {
+      "status": 599,
+      "body": {
+        "error": "external call blocked in strict mode"
+      }
+    }
+  }
+}

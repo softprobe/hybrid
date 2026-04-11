@@ -3,7 +3,7 @@
 This document defines the recommended repository strategy and package/module boundaries for the Softprobe platform as it expands beyond JavaScript into Python and Java.
 
 Transition note:
-- canonical repo-topology guidance now belongs in `../softprobe-spec/`
+- canonical repo-topology guidance now belongs in `../spec/`
 - this file remains a transition copy inside `softprobe-js` so current repo docs stay connected during migration
 
 Status:
@@ -66,7 +66,7 @@ The layout must therefore separate:
 
 Create and maintain five repos:
 
-1. `softprobe-spec`
+1. `spec`
 2. `softprobe-proxy`
 3. `softprobe-js`
 4. `softprobe-python`
@@ -76,7 +76,7 @@ This is the recommended long-term layout.
 
 ### 4.1 Repo purposes
 
-#### `softprobe-spec`
+#### `spec`
 
 Owns the shared contracts:
 
@@ -134,17 +134,17 @@ Owns Java ergonomics and implementation:
 
 Dependency direction must remain strict:
 
-- language repos depend on `softprobe-spec`
-- `softprobe-proxy` depends on `softprobe-spec`
+- language repos depend on `spec`
+- `softprobe-proxy` depends on `spec`
 - `softprobe-proxy` must not depend on `softprobe-js`, `softprobe-python`, or `softprobe-java`
 - language repos must not depend on each other
-- `softprobe-spec` must not depend on any language repo
+- `spec` must not depend on any language repo
 
 Allowed dependency graph:
 
 ```mermaid
 flowchart TD
-  Spec[softprobe-spec]
+  Spec[spec]
   Proxy[softprobe-proxy]
   JS[softprobe-js]
   Py[softprobe-python]
@@ -161,18 +161,18 @@ Disallowed:
 - `softprobe-python -> softprobe-js`
 - `softprobe-java -> softprobe-js`
 - `softprobe-proxy -> softprobe-js`
-- `softprobe-spec -> softprobe-js`
+- `spec -> softprobe-js`
 
 ---
 
-## 6) `softprobe-spec` layout
+## 6) `spec` layout
 
 This repo is the shared contract authority. It should be small, stable, and heavily tested.
 
 Recommended layout:
 
 ```text
-softprobe-spec/
+spec/
   README.md
   docs/
     versioning.md
@@ -201,7 +201,7 @@ softprobe-spec/
   changelog/
 ```
 
-### 6.1 What belongs in `softprobe-spec`
+### 6.1 What belongs in `spec`
 
 - JSON Schemas
 - OpenAPI spec for runtime control APIs
@@ -209,7 +209,7 @@ softprobe-spec/
 - normative matching and precedence rules
 - golden test fixtures that all implementations must pass
 
-### 6.2 What must not live in `softprobe-spec`
+### 6.2 What must not live in `spec`
 
 - production runtime code
 - proxy implementation code
@@ -504,7 +504,7 @@ Cons:
 Use a staged strategy:
 
 1. short term: keep the reference runtime in `softprobe-js`
-2. medium term: stabilize the protocol in `softprobe-spec`
+2. medium term: stabilize the protocol in `spec`
 3. later: extract a standalone `softprobe-runtime` repo only when multiple language clients are active and the API has settled
 
 This avoids premature platform extraction while still keeping the architecture clean.
@@ -515,7 +515,7 @@ This avoids premature platform extraction while still keeping the architecture c
 
 ### 13.1 Spec versioning
 
-`softprobe-spec` should own semantic versions for:
+`spec` should own semantic versions for:
 
 - case schema
 - rule schema
@@ -532,15 +532,15 @@ Each implementation repo should declare:
 Example:
 
 ```text
-softprobe-proxy 1.4.0 supports softprobe-spec 1.x
-softprobe-js 3.2.0 supports softprobe-spec 1.x
-softprobe-python 0.8.0 supports softprobe-spec 1.x
-softprobe-java 0.6.0 supports softprobe-spec 1.x
+softprobe-proxy 1.4.0 supports spec 1.x
+softprobe-js 3.2.0 supports spec 1.x
+softprobe-python 0.8.0 supports spec 1.x
+softprobe-java 0.6.0 supports spec 1.x
 ```
 
 ### 13.3 Compatibility tests
 
-The compatibility fixtures in `softprobe-spec` should be run in CI by every implementation repo.
+The compatibility fixtures in `spec` should be run in CI by every implementation repo.
 
 ---
 
@@ -548,7 +548,7 @@ The compatibility fixtures in `softprobe-spec` should be run in CI by every impl
 
 Recommended ownership:
 
-- `softprobe-spec`
+- `spec`
   - architecture/platform owners
 - `softprobe-proxy`
   - systems or networking owners
@@ -559,7 +559,7 @@ Recommended ownership:
 - `softprobe-java`
   - Java owners
 
-Cross-repo changes that alter protocol or schema must start in `softprobe-spec`.
+Cross-repo changes that alter protocol or schema must start in `spec`.
 
 ---
 
@@ -567,7 +567,7 @@ Cross-repo changes that alter protocol or schema must start in `softprobe-spec`.
 
 Recommended release order for shared-contract changes:
 
-1. update `softprobe-spec`
+1. update `spec`
 2. release contract artifacts
 3. update `softprobe-proxy`
 4. update language repos
@@ -585,7 +585,7 @@ This order prevents silent drift.
 - keep `softprobe-js` as-is
 - add multi-repo and proxy-first RFCs
 
-### Phase 2: create `softprobe-spec`
+### Phase 2: create `spec`
 
 - extract from current docs the shared pieces:
   - case schema
@@ -596,8 +596,8 @@ This order prevents silent drift.
 
 ### Phase 3: bind current repos to the spec
 
-- make `softprobe-js` consume `softprobe-spec`
-- make `softprobe-proxy` consume `softprobe-spec`
+- make `softprobe-js` consume `spec`
+- make `softprobe-proxy` consume `spec`
 - add compatibility CI in both repos
 
 ### Phase 4: add new language repos
@@ -626,7 +626,7 @@ This order prevents silent drift.
 
 Adopt a contract-first platform layout:
 
-- `softprobe-spec` for shared truth
+- `spec` for shared truth
 - `softprobe-proxy` for HTTP interception
 - `softprobe-js`, `softprobe-python`, and `softprobe-java` for language-native operator experience
 

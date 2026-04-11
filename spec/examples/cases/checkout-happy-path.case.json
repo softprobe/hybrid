@@ -1,0 +1,83 @@
+{
+  "version": "1.0.0",
+  "caseId": "checkout-happy-path",
+  "suite": "payments",
+  "mode": "replay",
+  "createdAt": "2026-04-05T12:00:00Z",
+  "traces": [
+    {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "api"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "spans": [
+                {
+                  "traceId": "5b8efff798038103d269b633813fc60c",
+                  "spanId": "051581bf3cb55c13",
+                  "name": "HTTP POST",
+                  "kind": 2,
+                  "attributes": [
+                    {
+                      "key": "sp.session.id",
+                      "value": {
+                        "stringValue": "sess_checkout_001"
+                      }
+                    },
+                    {
+                      "key": "sp.traffic.direction",
+                      "value": {
+                        "stringValue": "outbound"
+                      }
+                    },
+                    {
+                      "key": "sp.span.type",
+                      "value": {
+                        "stringValue": "inject"
+                      }
+                    },
+                    {
+                      "key": "url.host",
+                      "value": {
+                        "stringValue": "api.stripe.com"
+                      }
+                    },
+                    {
+                      "key": "url.path",
+                      "value": {
+                        "stringValue": "/v1/payment_intents"
+                      }
+                    },
+                    {
+                      "key": "http.request.method",
+                      "value": {
+                        "stringValue": "POST"
+                      }
+                    },
+                    {
+                      "key": "http.request.body",
+                      "value": {
+                        "stringValue": "{\"amount\":1000,\"currency\":\"usd\"}"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "rules": [],
+  "fixtures": []
+}

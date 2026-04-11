@@ -220,7 +220,7 @@ No `NPM_TOKEN` repository secret is required for this workflow.
 This repo ships a ready-to-use Cursor Skill at:
 
 - `cursor-skills/softprobe/SKILL.md`
-- `cursor-skills/softprobe/docs/softprobe-spec.md`
+- `cursor-skills/softprobe/docs/spec.md`
 - `cursor-skills/softprobe/docs/architecture-contract.md`
 - `cursor-skills/softprobe/docs/integration-runbook.md`
 - `cursor-skills/softprobe/docs/workflow-contract.md`

@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://softprobe.dev/spec/case-trace.schema.json",
+  "title": "Softprobe Case Trace",
+  "type": "object",
+  "required": ["resourceSpans"],
+  "properties": {
+    "resourceSpans": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["scopeSpans"],
+        "properties": {
+          "resource": {
+            "type": "object",
+            "properties": {
+              "attributes": {
+                "type": "array"
+              }
+            },
+            "additionalProperties": true
+          },
+          "scopeSpans": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["spans"],
+              "properties": {
+                "spans": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "required": ["traceId", "spanId", "attributes"],
+                    "properties": {
+                      "traceId": { "type": "string" },
+                      "spanId": { "type": "string" },
+                      "parentSpanId": { "type": "string" },
+                      "name": { "type": "string" },
+                      "kind": { "type": "integer" },
+                      "startTimeUnixNano": { "type": "string" },
+                      "endTimeUnixNano": { "type": "string" },
+                      "attributes": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["key", "value"],
+                          "properties": {
+                            "key": { "type": "string" },
+                            "value": {
+                              "type": "object",
+                              "additionalProperties": true
+                            }
+                          },
+                          "additionalProperties": true
+                        }
+                      },
+                      "status": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

@@ -21,7 +21,7 @@ behavioral regressions.
 
 Before executing any Softprobe task in any repository, read these reference files in order:
 
-1. `references/softprobe-spec.md` — product baseline, modes, cassette layout, matching
+1. `references/spec.md` — product baseline, modes, cassette layout, matching
 2. `references/architecture-contract.md` — OTel ordering, dependency rules, replay flow contract
 3. `references/integration-runbook.md` — bootstrap pattern, config, preflight checks, CLI commands
 4. `references/workflow-contract.md` — required sequence, verification standard, failure policy

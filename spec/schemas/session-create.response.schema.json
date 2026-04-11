@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://softprobe.dev/spec/session-create.response.schema.json",
+  "title": "Softprobe Session Create Response",
+  "description": "New sessions start at sessionRevision 0.",
+  "allOf": [
+    { "$ref": "./session-operation.response.schema.json" }
+  ]
+}

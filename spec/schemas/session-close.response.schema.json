@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://softprobe.dev/spec/session-close.response.schema.json",
+  "title": "Softprobe Session Close Response",
+  "type": "object",
+  "required": ["sessionId", "closed"],
+  "properties": {
+    "sessionId": { "type": "string" },
+    "closed": { "type": "boolean", "const": true }
+  },
+  "additionalProperties": false
+}

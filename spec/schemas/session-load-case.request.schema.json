@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://softprobe.dev/spec/session-load-case.request.schema.json",
+  "title": "Softprobe Session Load Case Request",
+  "allOf": [
+    { "$ref": "./case.schema.json" }
+  ]
+}

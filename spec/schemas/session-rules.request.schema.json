@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://softprobe.dev/spec/session-rules.request.schema.json",
+  "title": "Softprobe Session Rules Request",
+  "type": "object",
+  "required": ["rules"],
+  "properties": {
+    "version": { "type": "integer" },
+    "rules": {
+      "type": "array",
+      "items": { "$ref": "./rule.schema.json" }
+    }
+  },
+  "additionalProperties": false
+}

@@ -4,9 +4,16 @@
 # OS
 .DS_Store
 
-# Rust (proxy)
-proxy/target/
-proxy/**/*.rs.bk
+# Rust (softprobe-proxy)
+softprobe-proxy/target/
+softprobe-proxy/**/*.rs.bk
+
+# Java (softprobe-java)
+softprobe-java/target/
+
+# Python (softprobe-python)
+softprobe-python/**/__pycache__/
+softprobe-python/**/*.pyc
 
 # Node (softprobe-js)
 softprobe-js/node_modules/

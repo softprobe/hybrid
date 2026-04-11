@@ -3,7 +3,7 @@
 This document defines the target design for combining `softprobe-js` and `proxy` into one proxy-first product.
 
 Transition note:
-- canonical shared architecture is moving to `../softprobe-spec/`
+- canonical shared architecture is moving to `../spec/`
 - this file remains a repo-local working copy for the JavaScript implementation until the migration is complete
 
 Status:

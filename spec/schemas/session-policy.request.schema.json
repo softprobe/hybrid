@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://softprobe.dev/spec/session-policy.request.schema.json",
+  "title": "Softprobe Session Policy Request",
+  "type": "object",
+  "properties": {
+    "externalHttp": { "type": "string", "enum": ["strict", "allow"] },
+    "defaultOnMiss": { "type": "string", "enum": ["error", "passthrough"] },
+    "allowHosts": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "blockHosts": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": true
+}

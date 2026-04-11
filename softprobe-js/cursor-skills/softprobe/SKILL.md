@@ -6,7 +6,7 @@ Use this skill when validating backend behavior with recorded traffic.
 
 Before executing any Softprobe task in any repository, read:
 
-1. `docs/softprobe-spec.md`
+1. `docs/spec.md`
 2. `docs/architecture-contract.md`
 3. `docs/integration-runbook.md`
 4. `docs/workflow-contract.md`

@@ -1,0 +1,48 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": { "stringValue": "api" }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "spans": [
+            {
+              "traceId": "5b8efff798038103d269b633813fc60c",
+              "spanId": "051581bf3cb55c13",
+              "name": "HTTP GET",
+              "kind": 2,
+              "attributes": [
+                {
+                  "key": "sp.session.id",
+                  "value": { "stringValue": "sess_abc" }
+                },
+                {
+                  "key": "sp.traffic.direction",
+                  "value": { "stringValue": "outbound" }
+                },
+                {
+                  "key": "sp.span.type",
+                  "value": { "stringValue": "inject" }
+                },
+                {
+                  "key": "url.host",
+                  "value": { "stringValue": "api.stripe.com" }
+                },
+                {
+                  "key": "url.path",
+                  "value": { "stringValue": "/v1/payment_intents" }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
