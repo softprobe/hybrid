@@ -6,9 +6,9 @@ This is the canonical contract for proxy integration. The proxy backend exposes 
 
 ## Who implements this API
 
-The **proxy backend** implements **`POST /v1/inject`** and standard OTLP collector endpoints such as **`POST /v1/traces`**. In many deployments this is a **hosted** service (for example **`https://o.softprobe.ai`**); self-hosted backends are allowed if they honor the same contract. The **`softprobe-runtime`** OSS service that implements the [HTTP control API](./http-control-api.md) does **not** implement this OTLP API.
+The **proxy backend** implements **`POST /v1/inject`** and **`POST /v1/traces`**. It may be a **hosted** service (for example **`https://o.softprobe.ai`**) or the **OSS `softprobe-runtime`** binary: in the **unified OSS layout**, the same process that implements the [HTTP control API](./http-control-api.md) also implements these OTLP routes and shares one session store with the control API ([`docs/design.md`](../../docs/design.md) §2.4, §4.3).
 
-The proxy (Envoy/WASM) is a **client** and does **not** call the JSON control API on the request path. Internal datastore, scaling, and how the backend stays aligned with control API session data are **opaque** here—see [platform-architecture.md](../../docs/platform-architecture.md#10-softprobe-runtime-implementation-and-deployment) and `docs/design.md` open questions.
+The proxy (Envoy/WASM) is a **client** of this OTLP API and does **not** call the JSON control API on the request path. Scaling and multi-replica session affinity are deployment concerns; see [platform-architecture.md](../../docs/platform-architecture.md#10-softprobe-runtime-implementation-and-deployment) and `docs/design.md`.
 
 ---
 

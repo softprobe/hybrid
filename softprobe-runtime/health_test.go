@@ -6,21 +6,21 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"softprobe-runtime/internal/runtimeapp"
+	"softprobe-runtime/internal/controlapi"
 )
 
 func TestHealthHandlerReturnsOK(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
 
-	runtimeapp.NewMux().ServeHTTP(rec, req)
+	controlapi.NewMux().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 	var body struct {
-		Status       string `json:"status"`
-		SpecVersion  string `json:"specVersion"`
+		Status        string `json:"status"`
+		SpecVersion   string `json:"specVersion"`
 		SchemaVersion string `json:"schemaVersion"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {

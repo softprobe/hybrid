@@ -30,6 +30,8 @@ To achieve complete session-based tracing capabilities, Softprobe Agent can be u
 3. **Backend Correlation**: Softprobe Agent captures these headers and correlates requests with the same session ID
 4. **Session Flow Visualization**: In Softprobe Dashboard, you can view complete session flows across your service mesh
 
+For **service-to-service** HTTP, the WASM filter injects **W3C Trace Context**: **`traceparent`** for trace/span identity (same as OpenTelemetry’s TraceContext propagator) and **`tracestate`** merged with **`x-softprobe-session-id`** via `build_new_tracestate` in `src/headers.rs`. **Backend applications** should propagate context with **OpenTelemetry** (TraceContext + Baggage propagators)—**do not** manually copy `x-softprobe-session-id` onto outbound requests. See the platform [session-headers.md](../spec/protocol/session-headers.md).
+
 ### Benefits of Combined Usage
 
 - **Session-Level Tracing**: Track complete user journeys across multiple services

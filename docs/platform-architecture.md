@@ -54,23 +54,22 @@ Owns:
 - Envoy/WASM data plane
 - HTTP interception
 - normalization
-- OTLP trace **client** calls to the **proxy backend** (`/v1/inject`, `/v1/traces` per [proxy-otel-api.md](../spec/protocol/proxy-otel-api.md)) — **not** to the JSON control runtime (see below)
+- OTLP trace **client** calls to **`softprobe-runtime`** (`/v1/inject`, `/v1/traces` per [proxy-otel-api.md](../spec/protocol/proxy-otel-api.md)) — **not** to the JSON control API (see below)
 - enforcement of inject/passthrough/error outcomes
 - async extraction of observed exchanges
 
-### `softprobe-runtime` (control API service)
+### `softprobe-runtime` (unified service)
 
-The **Softprobe Runtime** is the **network service** that implements **only** the [HTTP control API](../spec/protocol/http-control-api.md) (JSON) for CLI, SDKs, and automation: sessions, `load-case`, rules, policy, fixtures, close.
+The **Softprobe Runtime** is the **network service** that implements **both**:
 
-It **does not** implement [proxy-otel-api.md](../spec/protocol/proxy-otel-api.md) in the reference OSS layout. Envoy/WASM calls a **separate proxy backend** (hosted example: `https://o.softprobe.ai`) for inject and OTLP collector-style extract.
+- The [HTTP control API](../spec/protocol/http-control-api.md) (JSON) for CLI, SDKs, and automation: sessions, `load-case`, rules, policy, fixtures, close.
+- The [Proxy OTLP API](../spec/protocol/proxy-otel-api.md): `POST /v1/inject` and `POST /v1/traces` for the Envoy/WASM data plane.
+
+Both handler groups share a **single in-memory session store** (`internal/store/`). When a test calls `load-case` or `rules`, the inject handler immediately sees the updated state — no sync or external backend needed.
+
+For local and self-hosted setups, `SOFTPROBE_RUNTIME_URL` (CLI/SDK config) and `sp_backend_url` (proxy WASM config) both point to the **same** `softprobe-runtime` base URL. The hosted service (`https://o.softprobe.ai`) is the same unified service with durable storage behind it.
 
 It is **not** specified as a Kubernetes DaemonSet, Operator, or second mesh control plane. It is a **normal HTTP API service** (see [section 10](#10-softprobe-runtime-implementation-and-deployment)).
-
-### Proxy backend (inject / extract service)
-
-The **proxy backend** implements [proxy-otel-api.md](../spec/protocol/proxy-otel-api.md) for the mesh data plane. It may be **hosted** (production default in many deployments: **`https://o.softprobe.ai`**) or self-hosted for air-gapped environments; the contract is the same. The hosted service exposes standard OTLP collector ingestion endpoints and a Softprobe-specific **`POST /v1/inject`** endpoint on the same OTLP trace schema. **Wasm plugin / proxy config** sets this base URL (for example `sp_backend_url`), independent of **`SOFTPROBE_RUNTIME_URL`** (or equivalent) for the control API.
-
-**Session and case data** used at inject time must stay **consistent** with what tests register via the control API; the exact **sync or unified storage** mechanism is **product integration** (see `docs/design.md` open questions). The open-source `softprobe-runtime` does not need to terminate protobuf inject traffic.
 
 ### Language repos
 
@@ -96,24 +95,32 @@ The **canonical `softprobe` CLI** is **language-agnostic** (HTTP to the **contro
 The most important platform boundary is:
 
 - proxy is the HTTP data plane
-- **control runtime** exposes the session/case **control API** to tests and tooling
-- **proxy backend** performs **inject/extract** and replay decisions for mesh traffic
+- **`softprobe-runtime`** serves **both** the session/case control API (for tests and tooling) **and** the inject/extract OTLP handler (for the mesh data plane), from one process with a shared session store
 
-The proxy must remain simple. It should not embed the full rule engine; it **delegates** inject/extract to the **proxy backend** over [proxy-otel-api.md](../spec/protocol/proxy-otel-api.md).
+The proxy must remain simple. It should not embed the full rule engine; it **delegates** inject/extract to **`softprobe-runtime`** over [proxy-otel-api.md](../spec/protocol/proxy-otel-api.md).
+
+**What we capture and replay:** the **application’s inbound HTTP** (client → proxy → app) and the **app’s outbound HTTP to dependencies** (app → proxy → upstream), including **requests and responses** on **both** legs. The **Envoy + WASM** path is **not** the system under test—it is the **dual interception point** (ingress + egress) where exchanges are **recorded** (extract), **short-circuited** (inject / replay from case), or **blocked** (policy) without rewriting app code.
 
 ```mermaid
 flowchart LR
-  CLI[softprobe CLI] --> Runtime[Softprobe Runtime control API]
+  CLI[softprobe CLI] --> Runtime[softprobe-runtime\nControl JSON API + OTLP handler]
   Test[Test code] --> SDK[Language SDK]
   SDK --> Runtime
-  App[Application] --> Proxy[Envoy + Softprobe WASM]
-  Proxy --> Backend[Proxy backend inject or extract API]
-  Proxy --> Upstream[Live upstream]
+  Client[Client / test traffic] --> P1[Proxy\ningress]
+  P1 --> App[Application\nSUT]
+  App --> P2[Proxy\negress]
+  P2 --> Dep[Dependency HTTP\nlive or injected]
+  P1 -->|OTLP inject/extract| Runtime
+  P2 -->|OTLP inject/extract| Runtime
+  Runtime --> Store[(Shared in-memory store\nsessions · cases · rules)]
   Runtime --> CaseFiles[Case JSON files]
-  Runtime -.->|product-specific sync| Backend
 ```
 
-Tests may use **either** the canonical CLI (typical for scripts and agents) **or** a language SDK; both talk to the **same** HTTP control API on the **control runtime**. The application under test does not call either service directly; it sends traffic through the **proxy**, which calls the **proxy backend** using the [Proxy OTEL API](../spec/protocol/proxy-otel-api.md) (HTTP with OTLP `TracesData` payloads in protobuf or JSON). The JSON control API is **not** used on the proxy request path.
+In a real mesh, **P1** and **P2** are the **same sidecar**; the diagram shows two edges to stress **two interception directions**. Local **`e2e/`** uses **two listeners** on one Envoy to model that without iptables redirection.
+
+Tests may use **either** the canonical CLI (typical for scripts and agents) **or** a language SDK; both talk to the **same** HTTP control API on **`softprobe-runtime`**. The application under test does not call either service directly; it sends traffic through the **proxy**, which calls **`softprobe-runtime`** OTLP endpoints using the [Proxy OTEL API](../spec/protocol/proxy-otel-api.md) (HTTP with OTLP `TracesData` payloads in protobuf or JSON). The JSON control API is **not** used on the proxy request path.
+
+**Propagation:** Callers (tests) send **`x-softprobe-session-id`** on **ingress**. The **Softprobe WASM** extension injects **W3C Trace Context** on forwarded requests. **Application outbound** calls should use **OpenTelemetry** propagators (**TraceContext**, **Baggage** as needed)—not ad-hoc copying of the session header—so the same trace context (including session data in `tracestate` per proxy behavior) reaches dependencies. See [session-headers.md](../spec/protocol/session-headers.md) and `softprobe-proxy` (`inject_trace_context_headers`, `build_new_tracestate`).
 
 ---
 
@@ -138,9 +145,9 @@ Istio control-plane responsibilities:
 Softprobe responsibilities (split by service):
 
 - **Control runtime:** test sessions, case loading via control API, policy and rules as **data** for orchestration; optional tooling (inspect, export) that uses the same session model.
-- **Proxy backend:** request-path **inject** resolution, async **extract** handling, and replay/match semantics for traffic seen by the mesh (per [proxy-otel-api.md](../spec/protocol/proxy-otel-api.md)).
+- **`softprobe-runtime` (OTLP handler):** request-path **inject** resolution, async **extract** handling, and replay/match semantics for traffic seen by the mesh (per [proxy-otel-api.md](../spec/protocol/proxy-otel-api.md)).
 
-Softprobe must not mutate Envoy topology or compete with Istio for routing authority. The **proxy backend** answers inject/extract for the WASM extension; it is **not** a second Istio control plane for routing or xDS.
+Softprobe must not mutate Envoy topology or compete with Istio for routing authority. The **`softprobe-runtime` OTLP handler** answers inject/extract for the WASM extension; it is **not** a second Istio control plane for routing or xDS.
 
 ---
 
@@ -225,12 +232,12 @@ This matches the proxy implementation:
 
 So the canonical model should be:
 
-- **Proxy → proxy backend** wire protocol:
+- **Proxy → `softprobe-runtime`** wire protocol:
   - `/v1/inject` using OTLP trace payloads and `200`/`404` semantics
   - `/v1/traces` using OTLP collector ingestion for extraction uploads
-- **Tests / CLI → control runtime** use JSON ([http-control-api.md](../spec/protocol/http-control-api.md)) for ergonomics.
+- **Tests / CLI → `softprobe-runtime`** use JSON ([http-control-api.md](../spec/protocol/http-control-api.md)) for ergonomics.
 
-Rule precedence for **inject** must be deterministic and shared between the proxy backend and whatever consumes control API updates (implementation detail of the hosted stack or sync layer).
+Rule precedence for **inject** is deterministic and comes directly from the shared in-memory store — no sync layer needed.
 
 ---
 
@@ -259,36 +266,34 @@ The **contracts** (`spec/protocol/*.md`, `spec/schemas/*.json`) define **behavio
 
 ### 10.1 Responsibilities
 
-| Surface | Protocol | Typical implementer |
-|---------|----------|---------------------|
-| Session, case, rules, policy, fixtures, close | [HTTP control API](../spec/protocol/http-control-api.md) (JSON) | **`softprobe-runtime`** (OSS / self-hosted) |
-| Inject lookup, extract upload | [Proxy OTEL API](../spec/protocol/proxy-otel-api.md) (OTLP traces) | **Proxy backend** (e.g. **`https://o.softprobe.ai`**) |
+| Surface | Protocol | Implementer |
+|---------|----------|-------------|
+| Session, case, rules, policy, fixtures, close | [HTTP control API](../spec/protocol/http-control-api.md) (JSON) | **`softprobe-runtime`** (unified OSS service) |
+| Inject lookup, extract upload | [Proxy OTEL API](../spec/protocol/proxy-otel-api.md) (OTLP traces) | **`softprobe-runtime`** (same service; `sp_backend_url` = `SOFTPROBE_RUNTIME_URL`) |
 
-These are **different base URLs** in production: proxy Wasm config points at the **proxy backend**; CLI and SDKs point at the **control runtime**.
+For local and self-hosted deployments, `SOFTPROBE_RUNTIME_URL` (CLI/SDK) and `sp_backend_url` (proxy WASM config) point to the **same** `softprobe-runtime` base URL.
 
 ### 10.2 Datastore
 
-- **Control runtime (`softprobe-runtime`):** For v1, **in-process memory** is sufficient for session state and parsed case payloads loaded via `load-case`. **No database is required** for the reference OSS service. Add a datastore (for example Redis or PostgreSQL) only if you need **multi-replica HA**, **survive restarts**, or **audit** — document that as a deployment profile when introduced.
-- **Proxy backend:** May use any internal storage; **opaque** to the open contracts. Consistency with control API registrations is a **product** concern (see `docs/design.md` open questions).
+For v1, **in-process memory** is sufficient for all session state, loaded cases, rules, and policy. **No database is required** for the reference OSS service. Both the control API handler and the OTLP inject handler share the same `internal/store/` in-memory store — no sync needed. Add a datastore (for example Redis or PostgreSQL) only if you need **multi-replica HA**, **survive restarts**, or **audit** — document that as a deployment profile when introduced.
 
-### 10.3 Implementation language (control runtime)
+### 10.3 Implementation language
 
-**Recommended** for **`softprobe-runtime`** and the canonical CLI: **Go** or **Rust** (HTTP JSON server + static CLI binary). **Node** is acceptable short-term inside `softprobe-js` until extraction.
+**`softprobe-runtime`** and the canonical CLI: **Go** (HTTP JSON server + OTLP handler + static CLI binary).
 
-The control runtime **does not** need to parse protobuf inject requests **as a server** unless you later add an optional colocated mode; the default architecture keeps protobuf **only on the proxy backend**.
+The runtime accepts OTLP JSON payloads for `/v1/inject` and `/v1/traces`. Protobuf support can be added later if proxy volume demands it; JSON OTLP is sufficient for v1.
 
 ### 10.4 Binaries and packaging
 
-- **`softprobe` CLI:** HTTP client to the **control** runtime only.
-- **Control runtime server:** JSON routes only per [http-control-api.md](../spec/protocol/http-control-api.md).
+- **`softprobe` CLI:** HTTP client to the **control** API on `softprobe-runtime` only.
+- **`softprobe-runtime` server:** JSON control routes + OTLP inject/extract routes from one binary.
 
 ### 10.5 Kubernetes (informative)
 
-- **`softprobe-runtime`:** `Deployment` + `Service` for the **control API**; tests and CI reach it via DNS or port-forward.
-- **Proxy backend:** Usually **external** URL (`https://o.softprobe.ai`) or a **separate** in-cluster `Deployment` if self-hosting that stack.
-- **`softprobe-proxy`:** Wasm plugin **`sp_backend_url`** (or equivalent) = **proxy backend** base URL, **not** the control runtime URL.
+- **`softprobe-runtime`:** Single `Deployment` + `Service`; tests, CLI, and proxy WASM all reach it via DNS or port-forward.
+- **`softprobe-proxy`:** Wasm plugin `sp_backend_url` = **`softprobe-runtime`** service URL (same as `SOFTPROBE_RUNTIME_URL`).
 
-HA and multi-tenant isolation apply **independently** to each service.
+HA and scaling apply to the single `softprobe-runtime` service. A future multi-process split (separate inject/extract scale-out) is an explicit non-goal for v1.
 
 ---
 
@@ -301,5 +306,5 @@ Short term:
 
 Long term:
 
-- all language SDKs consume the **same versioned** control API contracts; proxy consumes **proxy-otel-api** against the **proxy backend**.
-- **`softprobe-runtime`** is the **home for the OSS control API server** and CLI; **inject/extract** remain the responsibility of the **proxy backend** product unless an optional self-hosted bundle is documented separately.
+- all language SDKs consume the **same versioned** control API contracts; proxy consumes **proxy-otel-api** against **`softprobe-runtime`**.
+- **`softprobe-runtime`** is the **home for the OSS unified server** (control API + OTLP inject/extract) and CLI. A separate inject/extract scale-out service is a future option documented when HA requirements arise.

@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	if err := http.ListenAndServe(defaultListenAddr, newMux()); err != nil {
+	if err := http.ListenAndServe(listenAddr(), newMux()); err != nil {
 		log.Fatal(err)
 	}
 }

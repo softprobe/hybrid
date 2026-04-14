@@ -1,4 +1,4 @@
-package runtimeapp
+package controlapi
 
 import (
 	"bytes"
@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"softprobe-runtime/internal/store"
 )
 
 func TestCreateSessionPersistsModeAndReturnsRevision(t *testing.T) {
-	store := NewStore()
-	mux := NewMux(store)
+	st := store.NewStore()
+	mux := NewMux(st)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/sessions", bytes.NewBufferString(`{"mode":"replay"}`))
 	rec := httptest.NewRecorder()
@@ -35,7 +37,7 @@ func TestCreateSessionPersistsModeAndReturnsRevision(t *testing.T) {
 		t.Fatalf("sessionRevision = %d, want 0", resp.SessionRevision)
 	}
 
-	session, ok := store.Get(resp.SessionID)
+	session, ok := st.Get(resp.SessionID)
 	if !ok {
 		t.Fatalf("session %q not found in store", resp.SessionID)
 	}
@@ -45,8 +47,8 @@ func TestCreateSessionPersistsModeAndReturnsRevision(t *testing.T) {
 }
 
 func TestCloseSessionInvalidatesSubsequentControlCalls(t *testing.T) {
-	store := NewStore()
-	mux := NewMux(store)
+	st := store.NewStore()
+	mux := NewMux(st)
 
 	createReq := httptest.NewRequest(http.MethodPost, "/v1/sessions", bytes.NewBufferString(`{"mode":"replay"}`))
 	createRec := httptest.NewRecorder()
@@ -93,8 +95,8 @@ func TestCloseSessionInvalidatesSubsequentControlCalls(t *testing.T) {
 }
 
 func TestLoadCaseBumpsRevisionAndReplacesCase(t *testing.T) {
-	store := NewStore()
-	mux := NewMux(store)
+	st := store.NewStore()
+	mux := NewMux(st)
 
 	createReq := httptest.NewRequest(http.MethodPost, "/v1/sessions", bytes.NewBufferString(`{"mode":"replay"}`))
 	createRec := httptest.NewRecorder()
@@ -126,7 +128,7 @@ func TestLoadCaseBumpsRevisionAndReplacesCase(t *testing.T) {
 		t.Fatalf("first sessionRevision = %d, want 1", firstResp.SessionRevision)
 	}
 
-	session, ok := store.Get(created.SessionID)
+	session, ok := st.Get(created.SessionID)
 	if !ok {
 		t.Fatalf("session %q not found after first load-case", created.SessionID)
 	}
@@ -156,7 +158,7 @@ func TestLoadCaseBumpsRevisionAndReplacesCase(t *testing.T) {
 		t.Fatalf("second sessionRevision = %d, want 2", secondResp.SessionRevision)
 	}
 
-	session, ok = store.Get(created.SessionID)
+	session, ok = st.Get(created.SessionID)
 	if !ok {
 		t.Fatalf("session %q not found after second load-case", created.SessionID)
 	}
@@ -174,14 +176,14 @@ func TestPolicyRulesAndFixturesBumpRevision(t *testing.T) {
 		path    string
 		body1   string
 		body2   string
-		inspect func(Session) []byte
+		inspect func(store.Session) []byte
 	}{
 		{
 			name:  "policy",
 			path:  "/policy",
 			body1: `{"externalHttp":"strict"}`,
 			body2: `{"externalHttp":"allow"}`,
-			inspect: func(session Session) []byte {
+			inspect: func(session store.Session) []byte {
 				return session.Policy
 			},
 		},
@@ -190,7 +192,7 @@ func TestPolicyRulesAndFixturesBumpRevision(t *testing.T) {
 			path:  "/rules",
 			body1: `{"rules":[{"when":{"direction":"outbound"},"then":{"action":"passthrough"}}]}`,
 			body2: `{"rules":[{"when":{"direction":"inbound"},"then":{"action":"passthrough"}}]}`,
-			inspect: func(session Session) []byte {
+			inspect: func(session store.Session) []byte {
 				return session.Rules
 			},
 		},
@@ -199,7 +201,7 @@ func TestPolicyRulesAndFixturesBumpRevision(t *testing.T) {
 			path:  "/fixtures/auth",
 			body1: `{"tokens":["t1"]}`,
 			body2: `{"tokens":["t2"]}`,
-			inspect: func(session Session) []byte {
+			inspect: func(session store.Session) []byte {
 				return session.FixturesAuth
 			},
 		},
@@ -207,8 +209,8 @@ func TestPolicyRulesAndFixturesBumpRevision(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			store := NewStore()
-			mux := NewMux(store)
+			st := store.NewStore()
+			mux := NewMux(st)
 
 			createReq := httptest.NewRequest(http.MethodPost, "/v1/sessions", bytes.NewBufferString(`{"mode":"replay"}`))
 			createRec := httptest.NewRecorder()
@@ -221,11 +223,11 @@ func TestPolicyRulesAndFixturesBumpRevision(t *testing.T) {
 				t.Fatalf("unmarshal create response: %v", err)
 			}
 
-			update := func(body string) (int, Session) {
+			update := func(body string) (int, store.Session) {
 				req := httptest.NewRequest(http.MethodPost, "/v1/sessions/"+created.SessionID+tc.path, bytes.NewBufferString(body))
 				rec := httptest.NewRecorder()
 				mux.ServeHTTP(rec, req)
-				session, _ := store.Get(created.SessionID)
+				session, _ := st.Get(created.SessionID)
 				return rec.Code, session
 			}
 

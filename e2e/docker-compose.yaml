@@ -1,0 +1,96 @@
+services:
+  softprobe-runtime:
+    image: golang:1.22-alpine
+    working_dir: /workspace/softprobe-runtime
+    command: ["sh", "-c", "go run ."]
+    volumes:
+      - ..:/workspace
+    environment:
+      SOFTPROBE_LISTEN_ADDR: 0.0.0.0:8080
+      SOFTPROBE_CAPTURE_CASE_PATH: ../e2e/captured.case.json
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 20
+
+  softprobe-proxy:
+    image: envoyproxy/envoy:v1.27-latest
+    command: ["/usr/local/bin/envoy", "-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml
+      - ../softprobe-proxy/target/wasm32-unknown-unknown/release/sp_istio_agent.wasm:/etc/envoy/sp_istio_agent.wasm
+    ports:
+      - "8082:8082"
+      - "8084:8084"
+      - "18001:18001"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "true"]
+      interval: 5s
+      timeout: 2s
+      retries: 20
+
+  # HTTP dependency the app calls outbound through the proxy (egress listener).
+  upstream:
+    image: golang:1.22-alpine
+    working_dir: /workspace/e2e/upstream
+    command: ["sh", "-c", "go run ."]
+    volumes:
+      - ..:/workspace
+    ports:
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8083/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 20
+
+  # Application under test (SUT): ingress via :8082, egress to dependency via :8084.
+  app:
+    image: golang:1.22-alpine
+    working_dir: /workspace/e2e/app
+    command: ["sh", "-c", "go run ."]
+    volumes:
+      - ..:/workspace
+    environment:
+      EGRESS_PROXY_URL: http://softprobe-proxy:8084
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 20
+    depends_on:
+      softprobe-proxy:
+        condition: service_healthy
+      upstream:
+        condition: service_healthy
+
+  test-runner:
+    image: golang:1.22-alpine
+    working_dir: /workspace/e2e/test-runner
+    command: ["sh", "-c", "go run . && touch /tmp/e2e-ok && sleep infinity"]
+    volumes:
+      - ..:/workspace
+    environment:
+      RUNTIME_URL: http://softprobe-runtime:8080
+      PROXY_URL: http://softprobe-proxy:8082
+      APP_URL: http://app:8081
+      UPSTREAM_URL: http://upstream:8083
+    depends_on:
+      softprobe-runtime:
+        condition: service_healthy
+      softprobe-proxy:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+      upstream:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/e2e-ok"]
+      interval: 5s
+      timeout: 2s
+      retries: 20

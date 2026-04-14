@@ -10,7 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"softprobe-runtime/internal/runtimeapp"
+	"softprobe-runtime/internal/controlapi"
+	"softprobe-runtime/internal/store"
 )
 
 func TestRunVersionPrintsBinaryVersion(t *testing.T) {
@@ -24,7 +25,7 @@ func TestRunVersionPrintsBinaryVersion(t *testing.T) {
 }
 
 func TestRunDoctorChecksRuntimeHealth(t *testing.T) {
-	server := httptest.NewServer(runtimeapp.NewMux())
+	server := httptest.NewServer(controlapi.NewMux())
 	t.Cleanup(server.Close)
 
 	var out bytes.Buffer
@@ -52,7 +53,7 @@ func TestRunDoctorReturnsNonZeroForUnhealthyRuntime(t *testing.T) {
 }
 
 func TestRunSessionStartEmitsJsonAndExportLine(t *testing.T) {
-	server := httptest.NewServer(runtimeapp.NewMux())
+	server := httptest.NewServer(controlapi.NewMux())
 	t.Cleanup(server.Close)
 
 	var out bytes.Buffer
@@ -81,7 +82,7 @@ func TestRunSessionStartEmitsJsonAndExportLine(t *testing.T) {
 }
 
 func TestRunSessionStartShellFriendlyOutput(t *testing.T) {
-	server := httptest.NewServer(runtimeapp.NewMux())
+	server := httptest.NewServer(controlapi.NewMux())
 	t.Cleanup(server.Close)
 
 	var out bytes.Buffer
@@ -94,8 +95,8 @@ func TestRunSessionStartShellFriendlyOutput(t *testing.T) {
 }
 
 func TestRunSessionStartSupportsModeFlag(t *testing.T) {
-	store := runtimeapp.NewStore()
-	server := httptest.NewServer(runtimeapp.NewMux(store))
+	st := store.NewStore()
+	server := httptest.NewServer(controlapi.NewMux(st))
 	t.Cleanup(server.Close)
 
 	var out bytes.Buffer
@@ -110,7 +111,7 @@ func TestRunSessionStartSupportsModeFlag(t *testing.T) {
 		t.Fatalf("unmarshal json output: %v", err)
 	}
 
-	session, ok := store.Get(resp.SessionID)
+	session, ok := st.Get(resp.SessionID)
 	if !ok {
 		t.Fatalf("session %q not found", resp.SessionID)
 	}
@@ -120,8 +121,8 @@ func TestRunSessionStartSupportsModeFlag(t *testing.T) {
 }
 
 func TestRunSessionLoadCasePersistsCaseAndReturnsZero(t *testing.T) {
-	store := runtimeapp.NewStore()
-	server := httptest.NewServer(runtimeapp.NewMux(store))
+	st := store.NewStore()
+	server := httptest.NewServer(controlapi.NewMux(st))
 	t.Cleanup(server.Close)
 
 	var startOut bytes.Buffer
@@ -147,7 +148,7 @@ func TestRunSessionLoadCasePersistsCaseAndReturnsZero(t *testing.T) {
 		t.Fatalf("session load-case exit code = %d, want 0", code)
 	}
 
-	session, ok := store.Get(started.SessionID)
+	session, ok := st.Get(started.SessionID)
 	if !ok {
 		t.Fatalf("session %q not found", started.SessionID)
 	}
@@ -160,8 +161,8 @@ func TestRunSessionLoadCasePersistsCaseAndReturnsZero(t *testing.T) {
 }
 
 func TestRunSessionLoadCaseLoadsGoldenCaseFixture(t *testing.T) {
-	store := runtimeapp.NewStore()
-	server := httptest.NewServer(runtimeapp.NewMux(store))
+	st := store.NewStore()
+	server := httptest.NewServer(controlapi.NewMux(st))
 	t.Cleanup(server.Close)
 
 	var startOut bytes.Buffer
@@ -182,7 +183,7 @@ func TestRunSessionLoadCaseLoadsGoldenCaseFixture(t *testing.T) {
 		t.Fatalf("session load-case exit code = %d, want 0", code)
 	}
 
-	session, ok := store.Get(started.SessionID)
+	session, ok := st.Get(started.SessionID)
 	if !ok {
 		t.Fatalf("session %q not found", started.SessionID)
 	}
@@ -192,7 +193,7 @@ func TestRunSessionLoadCaseLoadsGoldenCaseFixture(t *testing.T) {
 }
 
 func TestRunSessionLoadCaseReturnsErrorForUnknownSession(t *testing.T) {
-	server := httptest.NewServer(runtimeapp.NewMux())
+	server := httptest.NewServer(controlapi.NewMux())
 	t.Cleanup(server.Close)
 
 	casePath := filepath.Join(t.TempDir(), "demo.case.json")
@@ -235,8 +236,8 @@ func TestRunInspectCaseSummarizesGoldenFixture(t *testing.T) {
 }
 
 func TestRunSessionRulesApplyPersistsRules(t *testing.T) {
-	store := runtimeapp.NewStore()
-	server := httptest.NewServer(runtimeapp.NewMux(store))
+	st := store.NewStore()
+	server := httptest.NewServer(controlapi.NewMux(st))
 	t.Cleanup(server.Close)
 
 	var startOut bytes.Buffer
@@ -262,7 +263,7 @@ func TestRunSessionRulesApplyPersistsRules(t *testing.T) {
 		t.Fatalf("session rules apply exit code = %d, want 0", code)
 	}
 
-	session, ok := store.Get(started.SessionID)
+	session, ok := st.Get(started.SessionID)
 	if !ok {
 		t.Fatalf("session %q not found", started.SessionID)
 	}
@@ -275,8 +276,8 @@ func TestRunSessionRulesApplyPersistsRules(t *testing.T) {
 }
 
 func TestRunSessionPolicySetPersistsStrictPolicy(t *testing.T) {
-	store := runtimeapp.NewStore()
-	server := httptest.NewServer(runtimeapp.NewMux(store))
+	st := store.NewStore()
+	server := httptest.NewServer(controlapi.NewMux(st))
 	t.Cleanup(server.Close)
 
 	var startOut bytes.Buffer
@@ -297,7 +298,7 @@ func TestRunSessionPolicySetPersistsStrictPolicy(t *testing.T) {
 		t.Fatalf("session policy set exit code = %d, want 0", code)
 	}
 
-	session, ok := store.Get(started.SessionID)
+	session, ok := st.Get(started.SessionID)
 	if !ok {
 		t.Fatalf("session %q not found", started.SessionID)
 	}

@@ -234,11 +234,16 @@ impl SpHttpContext {
 
         // Build new tracestate
         let session_id = self.span_builder.get_session_id().to_string();
-        let new_tracestate = build_new_tracestate(&self.request_headers, &traceparent_value, &session_id);
+        let new_tracestate = build_new_tracestate(&self.request_headers, &session_id);
 
-        // Update headers
+        // Update headers (omit empty tracestate; trace ids live on `traceparent`).
         self.remove_http_request_header("tracestate");
-        self.add_http_request_header("tracestate", &new_tracestate);
+        if new_tracestate.is_empty() {
+            self.request_headers.remove("tracestate");
+        } else {
+            self.add_http_request_header("tracestate", &new_tracestate);
+            self.request_headers.insert("tracestate".to_string(), new_tracestate.clone());
+        }
 
         // Check if traceparent exists
         let has_traceparent = self.get_http_request_headers()
@@ -249,9 +254,6 @@ impl SpHttpContext {
             self.add_http_request_header("traceparent", &traceparent_value);
             self.request_headers.insert("traceparent".to_string(), traceparent_value.clone());
         }
-
-        // Update local cache
-        self.request_headers.insert("tracestate".to_string(), new_tracestate.clone());
 
         // Handle x-sp-num header
         let current_sp_num = self.request_headers
@@ -380,10 +382,10 @@ impl Context for SpHttpContext {
                         crate::sp_debug!("Injection miss returned 404, resuming request");
                     }
                     InjectBackendResponseDisposition::Error => {
-                        crate::sp_error!(
-                            "Injection backend error status {}, falling back to upstream",
-                            status_code
-                        );
+                        crate::sp_error!("Injection backend error status {}, returning error to caller", status_code);
+                        let headers_refs = vec![("content-type", "application/json")];
+                        self.send_http_response(status_code, headers_refs, Some(&response_body));
+                        return;
                     }
                     _ => {}
                 }
@@ -443,7 +445,7 @@ impl HttpContext for SpHttpContext {
         self.inject_trace_context_headers();
 
         // If no body, perform injection lookup now
-        if end_of_stream {
+        if end_of_stream && self.should_collect_by_rules(&self.config, &self.request_headers) {
             match self.dispatch_injection_lookup() {
                 Ok(call_id) => {
                     self.pending_inject_call_token = Some(call_id);
@@ -468,7 +470,7 @@ impl HttpContext for SpHttpContext {
             self.request_body.extend_from_slice(&body);
         }
 
-        if end_of_stream {
+        if end_of_stream && self.should_collect_by_rules(&self.config, &self.request_headers) {
             match self.dispatch_injection_lookup() {
                 Ok(call_id) => {
                     self.pending_inject_call_token = Some(call_id);

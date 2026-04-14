@@ -41,7 +41,7 @@ The target platform layout is:
 
 ### `softprobe-js`
 
-- JS SDK
+- **First-stage SDK (v1):** TypeScript/JavaScript client + **Jest** reference tests and ergonomic session helpers that **materialize** `load-case` / `rules` / `policy` via the control API (see `docs/design.md` §5.3 and §7.0).
 - JS generator
 - optional **thin** launcher shim only (for example `npx` delegating to the canonical **`softprobe` binary**—see §6)
 - optional **temporary** reference runtime implementation (prefer moving server code to `softprobe-runtime` over time)

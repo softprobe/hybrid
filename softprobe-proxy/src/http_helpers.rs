@@ -118,6 +118,7 @@ fn build_backend_request(
     let mut headers = vec![
         (":method".to_string(), "POST".to_string()),
         (":path".to_string(), path.to_string()),
+        (":authority".to_string(), authority.clone()),
         ("content-type".to_string(), "application/x-protobuf".to_string()),
         ("content-length".to_string(), content_length.to_string()),
         ("x-public-key".to_string(), public_key.to_string()),
@@ -345,6 +346,7 @@ mod tests {
             vec![
                 (":method".to_string(), "POST".to_string()),
                 (":path".to_string(), "/v1/inject".to_string()),
+                (":authority".to_string(), "o.softprobe.ai".to_string()),
                 ("content-type".to_string(), "application/x-protobuf".to_string()),
                 ("accept".to_string(), "application/x-protobuf".to_string()),
                 ("content-length".to_string(), "123".to_string()),
@@ -364,6 +366,7 @@ mod tests {
             vec![
                 (":method".to_string(), "POST".to_string()),
                 (":path".to_string(), "/v1/traces".to_string()),
+                (":authority".to_string(), "o.softprobe.ai".to_string()),
                 ("content-type".to_string(), "application/x-protobuf".to_string()),
                 ("content-length".to_string(), "456".to_string()),
                 ("x-public-key".to_string(), "pubkey".to_string()),

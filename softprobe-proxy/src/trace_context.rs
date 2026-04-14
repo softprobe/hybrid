@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use crate::headers::header_get_ci;
+
 /// Parse traceparent value in format: 00-trace_id-span_id-01
 pub fn parse_traceparent_value(traceparent: &str) -> Option<(Vec<u8>, Vec<u8>)> {
     let parts: Vec<&str> = traceparent.split('-').collect();
@@ -35,29 +37,24 @@ pub fn extract_and_propagate_trace_context(
     request_headers: &HashMap<String, String>,
     response_headers: &HashMap<String, String>,
 ) {
-    // Extract trace context from request headers
-    if let Some(tracestate) = request_headers.get("tracestate") {
-        crate::sp_debug!("Found tracestate in request: {}", tracestate);
-
-        // Parse x-sp-traceparent from tracestate
-        for entry in tracestate.split(',') {
-            let entry = entry.trim();
-            if let Some(value) = entry.strip_prefix("x-sp-traceparent=") {
-                if let Some((trace_id, parent_span_id)) = parse_traceparent_value(value) {
-                    let trace_id_hex = trace_id
-                        .iter()
-                        .map(|b| format!("{:02x}", b))
-                        .collect::<String>();
-                    let parent_id_hex = parent_span_id
-                        .iter()
-                        .map(|b| format!("{:02x}", b))
-                        .collect::<String>();
-                    
-                    crate::sp_debug!("Extracted trace context from x-sp-traceparent: {}, trace_id: {}, parent_span_id: {}", value, trace_id_hex, parent_id_hex);
-                    break;
-                }
-            }
+    if let Some(tp) = header_get_ci(request_headers, "traceparent") {
+        if let Some((trace_id, parent_span_id)) = parse_traceparent_value(tp) {
+            let trace_id_hex = trace_id
+                .iter()
+                .map(|b| format!("{:02x}", b))
+                .collect::<String>();
+            let parent_id_hex = parent_span_id
+                .iter()
+                .map(|b| format!("{:02x}", b))
+                .collect::<String>();
+            crate::sp_debug!(
+                "Extracted trace context from traceparent: trace_id: {}, parent_span_id: {}",
+                trace_id_hex,
+                parent_id_hex
+            );
         }
+    } else if let Some(ts) = header_get_ci(request_headers, "tracestate") {
+        crate::sp_debug!("Request has tracestate but no traceparent: {}", ts);
     }
 
     // Check response headers for traceparent

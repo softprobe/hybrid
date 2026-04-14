@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"softprobe-runtime/internal/runtimeapp"
+	"softprobe-runtime/internal/controlapi"
 )
 
 const version = "0.0.0-dev"
@@ -245,8 +245,8 @@ func runSessionStart(args []string, stdout, stderr io.Writer) int {
 		_ = json.NewEncoder(stdout).Encode(map[string]any{
 			"sessionId":       created.SessionID,
 			"sessionRevision": created.SessionRevision,
-			"schemaVersion":   runtimeapp.SchemaVersion,
-			"specVersion":     runtimeapp.SpecVersion,
+			"schemaVersion":   controlapi.SchemaVersion,
+			"specVersion":     controlapi.SpecVersion,
 		})
 		return 0
 	}
@@ -256,8 +256,8 @@ func runSessionStart(args []string, stdout, stderr io.Writer) int {
 		"session created: %s\nexport SOFTPROBE_SESSION_ID=%s\nspec/schema: %s / %s\n",
 		created.SessionID,
 		created.SessionID,
-		runtimeapp.SpecVersion,
-		runtimeapp.SchemaVersion,
+		controlapi.SpecVersion,
+		controlapi.SchemaVersion,
 	)
 	return 0
 }
@@ -432,10 +432,10 @@ func printUsage(w io.Writer) {
 }
 
 type caseDocument struct {
-	CaseID string       `json:"caseId"`
-	Suite  string       `json:"suite"`
-	Mode   string       `json:"mode"`
-	Traces []caseTrace  `json:"traces"`
+	CaseID string      `json:"caseId"`
+	Suite  string      `json:"suite"`
+	Mode   string      `json:"mode"`
+	Traces []caseTrace `json:"traces"`
 }
 
 type caseTrace struct {

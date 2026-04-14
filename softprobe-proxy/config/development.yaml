@@ -11,7 +11,8 @@ spec:
   sha256: placeholder-hash-will-be-updated-by-build
   pluginConfig:
     # Backend Configuration
-    sp_backend_url: "https://dev.softprobe.ai"
+    # For local OSS development, match SOFTPROBE_RUNTIME_URL exactly.
+    sp_backend_url: "http://localhost:8080"
     public_key: "dev-public-key-placeholder"
     
     cache_ttl_seconds: 300  # 5 minutes

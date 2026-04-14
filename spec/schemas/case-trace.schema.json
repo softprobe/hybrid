@@ -39,7 +39,12 @@
                       "spanId": { "type": "string" },
                       "parentSpanId": { "type": "string" },
                       "name": { "type": "string" },
-                      "kind": { "type": "integer" },
+                      "kind": {
+                        "oneOf": [
+                          { "type": "integer" },
+                          { "type": "string" }
+                        ]
+                      },
                       "startTimeUnixNano": { "type": "string" },
                       "endTimeUnixNano": { "type": "string" },
                       "attributes": {

@@ -1,0 +1,188 @@
+static_resources:
+  listeners:
+    - name: proxy_listener
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 8082
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: proxy_http
+                codec_type: AUTO
+                route_config:
+                  name: proxy_route
+                  virtual_hosts:
+                    - name: app_workload
+                      domains: ["*"]
+                      routes:
+                        - match:
+                            prefix: "/"
+                          route:
+                            cluster: app
+                http_filters:
+                  - name: envoy.filters.http.wasm
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
+                      config:
+                        name: "sp_agent"
+                        vm_config:
+                          vm_id: "sp_agent"
+                          runtime: "envoy.wasm.runtime.v8"
+                          allow_precompiled: true
+                          code:
+                            local:
+                              filename: "/etc/envoy/sp_istio_agent.wasm"
+                        configuration:
+                          "@type": type.googleapis.com/google.protobuf.StringValue
+                          value: |
+                            {
+                              "traffic_direction": "outbound",
+                              "service_name": "checkout",
+                              "sp_backend_url": "http://softprobe-runtime:8080",
+                              "public_key": "dev-public-key",
+                              "collectionRules": {
+                                "http": {
+                                  "server": [],
+                                  "client": [
+                                    {
+                                      "host": ".*",
+                                      "paths": [".*"]
+                                    }
+                                  ]
+                                }
+                              }
+                              ,
+                              "exemptionRules": [
+                                {
+                                  "hostPatterns": [".*"],
+                                  "pathPatterns": ["/health", "/healthz", "/ready"]
+                                }
+                              ]
+                            }
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+                      suppress_envoy_headers: false
+
+    # Egress: app → proxy → upstream dependency (same WASM + runtime as ingress).
+    - name: proxy_egress_listener
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 8084
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: proxy_egress_http
+                codec_type: AUTO
+                route_config:
+                  name: proxy_egress_route
+                  virtual_hosts:
+                    - name: upstream_dep
+                      domains: ["*"]
+                      routes:
+                        - match:
+                            prefix: "/"
+                          route:
+                            cluster: upstream
+                http_filters:
+                  - name: envoy.filters.http.wasm
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
+                      config:
+                        name: "sp_agent_egress"
+                        vm_config:
+                          vm_id: "sp_agent_egress"
+                          runtime: "envoy.wasm.runtime.v8"
+                          allow_precompiled: true
+                          code:
+                            local:
+                              filename: "/etc/envoy/sp_istio_agent.wasm"
+                        configuration:
+                          "@type": type.googleapis.com/google.protobuf.StringValue
+                          value: |
+                            {
+                              "traffic_direction": "outbound",
+                              "service_name": "checkout",
+                              "sp_backend_url": "http://softprobe-runtime:8080",
+                              "public_key": "dev-public-key",
+                              "collectionRules": {
+                                "http": {
+                                  "server": [],
+                                  "client": [
+                                    {
+                                      "host": ".*",
+                                      "paths": [".*"]
+                                    }
+                                  ]
+                                }
+                              }
+                              ,
+                              "exemptionRules": [
+                                {
+                                  "hostPatterns": [".*"],
+                                  "pathPatterns": ["/health", "/healthz", "/ready"]
+                                }
+                              ]
+                            }
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+                      suppress_envoy_headers: false
+
+  clusters:
+    - name: outbound|8080||softprobe-runtime
+      type: LOGICAL_DNS
+      dns_lookup_family: V4_ONLY
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 5s
+      load_assignment:
+        cluster_name: outbound|8080||softprobe-runtime
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: softprobe-runtime
+                      port_value: 8080
+
+    - name: app
+      type: LOGICAL_DNS
+      dns_lookup_family: V4_ONLY
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 5s
+      load_assignment:
+        cluster_name: app
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: app
+                      port_value: 8081
+
+    - name: upstream
+      type: LOGICAL_DNS
+      dns_lookup_family: V4_ONLY
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 5s
+      load_assignment:
+        cluster_name: upstream
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: upstream
+                      port_value: 8083
+
+admin:
+  address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 18001

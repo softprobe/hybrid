@@ -30,6 +30,8 @@ pub use opentelemetry::proto::common::v1::{AnyValue, KeyValue, any_value};
 pub use opentelemetry::proto::resource::v1::Resource;
 pub use opentelemetry::proto::trace::v1::{TracesData, ResourceSpans, ScopeSpans, Span, Status, span};
 
+use crate::headers::header_get_ci;
+
 #[derive(Clone)]
 pub struct SpanBuilder {
     trace_id: Vec<u8>,
@@ -44,7 +46,10 @@ pub struct SpanBuilder {
 impl SpanBuilder {
     pub fn new() -> Self {
         Self {
-            trace_id: generate_trace_id(),
+            // Leave trace_id empty until with_context parses W3C `traceparent` (OTel TraceContext).
+            // A random default trace_id would skip the standard traceparent fallback and drop
+            // parent_span_id for typical OTel clients.
+            trace_id: Vec::new(),
             parent_span_id: None,
             current_span_id: generate_span_id(),  // 初始化当前 span ID
             service_name: "default-service".to_string(),
@@ -91,69 +96,69 @@ impl SpanBuilder {
     }
 
     pub fn with_context(mut self, headers: &HashMap<String, String>) -> Self {
-        // Extract trace context from tracestate x-sp-traceparent if present
-        if let Some(tracestate) = headers.get("tracestate") {
+        // Session id may appear in `tracestate` (merged by inject); trace ids use W3C `traceparent`.
+        if let Some(tracestate) = header_get_ci(headers, "tracestate") {
             crate::sp_info!("with_context Found tracestate header {}", tracestate);
-            
-            // 解析 tracestate 中的 x-sp-traceparent
             for entry in tracestate.split(',') {
                 let entry = entry.trim();
-                if let Some(value) = entry.strip_prefix("x-sp-traceparent=") {
-                    crate::sp_debug!("Found x-sp-traceparent entry in tracestate {}", value);
-                    // 解析完整的 traceparent 格式: 00-trace_id-span_id-01
-                    if let Some((trace_id, span_id)) = parse_traceparent(value) {
-                        self.trace_id = trace_id;
-                        self.parent_span_id = Some(span_id);
-                        crate::sp_debug!("Parsed trace context from x-sp-traceparent");
-                        break;
-                    }
-                }
-                // 解析 tracestate 中的 x-sp-session-id（如果存在）
                 if self.session_id.is_empty() {
-                    if let Some(sid) = entry.strip_prefix("x-sp-session-id=") {
-                        crate::sp_debug!("Found x-sp-session-id entry in tracestate {}", sid);
-                        self.session_id = sid.to_string();
+                    if let Some((k, v)) = entry.split_once('=') {
+                        match k.trim().to_ascii_lowercase().as_str() {
+                            "x-softprobe-session-id" | "x-sp-session-id" => {
+                                crate::sp_debug!("Found session id entry in tracestate");
+                                self.session_id = v.trim().to_string();
+                            }
+                            _ => {}
+                        }
                     }
                 }
             }
         }
 
-        // 如果没有从 tracestate 中解析到 trace context，尝试从标准的 traceparent 头部解析
-        if self.trace_id.is_empty() {
-            if let Some(traceparent) = headers.get("traceparent") {
-                crate::sp_debug!("Found traceparent header {}", traceparent);
-                // 解析标准的 traceparent 格式: 00-trace_id-span_id-01
-                if let Some((trace_id, span_id)) = parse_traceparent(traceparent) {
-                    self.trace_id = trace_id;
-                    self.parent_span_id = Some(span_id);
-                    crate::sp_debug!("Parsed trace context from traceparent");
+        // Standard W3C traceparent (OpenTelemetry TraceContext propagator).
+        if let Some(traceparent) = header_get_ci(headers, "traceparent") {
+            crate::sp_debug!("Found traceparent header {}", traceparent);
+            if let Some((tid, pid)) = parse_traceparent(traceparent) {
+                if self.trace_id.is_empty() {
+                    self.trace_id = tid;
+                    self.parent_span_id = Some(pid);
+                    crate::sp_debug!("Parsed trace context from traceparent (trace + parent)");
+                } else if self.parent_span_id.is_none() && tid == self.trace_id {
+                    self.parent_span_id = Some(pid);
+                    crate::sp_debug!("Filled parent_span_id from traceparent (matching trace id)");
                 }
             }
         }
 
         // Get session ID from headers directly
         crate::sp_debug!("Looking for session_id in headers");
-        let session_id_found = headers.get("x-sp-session-id")
-            .or_else(|| headers.get("sp_session_id"))
-            .or_else(|| headers.get("x-session-id"));
+        let session_id_found = header_get_ci(headers, "x-softprobe-session-id")
+            .or_else(|| header_get_ci(headers, "x-sp-session-id"))
+            .or_else(|| header_get_ci(headers, "sp_session_id"))
+            .or_else(|| header_get_ci(headers, "x-session-id"));
 
         if let Some(session_id) = session_id_found {
             let masked = if session_id.len() > 4 { "****" } else { "" };
             crate::sp_debug!("Found session_id in headers: {}", masked);
             self.session_id = session_id.clone();
         } else {
-            // 如果未在 headers 中找到，则尝试从 tracestate 中解析 x-sp-session-id
-            if let Some(tracestate) = headers.get("tracestate") {
+            // If not found in headers, try tracestate.
+            if let Some(tracestate) = header_get_ci(headers, "tracestate") {
                 for entry in tracestate.split(',') {
                     let entry = entry.trim();
-                    if let Some(sid) = entry.strip_prefix("x-sp-session-id=") {
-                        crate::sp_debug!("Found session_id in tracestate: ****");
-                        self.session_id = sid.to_string();
-                        break;
+                    if let Some((k, v)) = entry.split_once('=') {
+                        match k.trim().to_ascii_lowercase().as_str() {
+                            "x-softprobe-session-id" | "x-sp-session-id" => {
+                                crate::sp_debug!("Found session_id in tracestate: ****");
+                                self.session_id = v.trim().to_string();
+                                break;
+                            }
+                            _ => {}
+                        }
                     }
                 }
             }
-            // 如果依然没有，则生成新的，并在后续注入阶段补充到 tracestate 中
+            // If still missing, generate a new one and propagate it downstream.
             if self.session_id.is_empty() {
                 crate::sp_debug!("No session_id found in headers or tracestate, generating new one");
                 self.session_id = generate_session_id();
@@ -165,7 +170,21 @@ impl SpanBuilder {
         if self.trace_id.is_empty() {
             self.trace_id = generate_trace_id();
         }
-        
+
+        // `generate_span_id` is time-derived and can equal the W3C traceparent span id (the
+        // incoming parent for this hop). That makes span_id == parent_span_id; OTLP JSON then
+        // omits parentSpanId. Regenerate until the proxy span id is distinct from the parent.
+        if let Some(ref pid) = self.parent_span_id {
+            if self.current_span_id == *pid {
+                for _ in 0..32 {
+                    self.current_span_id = generate_span_id();
+                    if self.current_span_id != *pid {
+                        break;
+                    }
+                }
+            }
+        }
+
         self
     }
 
@@ -256,6 +275,14 @@ impl SpanBuilder {
             });
         }
         if let Some(host) = url_host {
+            if let Some(path) = url_path {
+                attributes.push(KeyValue {
+                    key: "url.full".to_string(),
+                    value: Some(AnyValue {
+                        value: Some(any_value::Value::StringValue(format!("http://{}{}", host, path))),
+                    }),
+                });
+            }
             attributes.push(KeyValue {
                 key: "url.host".to_string(),
                 value: Some(AnyValue {
@@ -307,7 +334,15 @@ impl SpanBuilder {
         url_path: Option<&str>,
         request_start_time: Option<u64>,  // Add request start time parameter
     ) -> TracesData {
-        let span_id = self.current_span_id.clone();
+        let mut parent_span_id = self.parent_span_id.clone().unwrap_or_default();
+        if parent_span_id.is_empty() {
+            if let Some(p) = w3c_parent_span_id_for_trace(&self.trace_id, request_headers) {
+                parent_span_id = p;
+            }
+        }
+        let mut span_id = self.current_span_id.clone();
+        ensure_span_id_distinct_from_parent(&mut span_id, &parent_span_id);
+
         let mut attributes = Vec::new();
 
         crate::sp_debug!("Building extract span: service_name set {}", self.service_name);
@@ -370,6 +405,14 @@ impl SpanBuilder {
             });
         }
         if let Some(host) = url_host {
+            if let Some(path) = url_path {
+                attributes.push(KeyValue {
+                    key: "url.full".to_string(),
+                    value: Some(AnyValue {
+                        value: Some(any_value::Value::StringValue(format!("http://{}{}", host, path))),
+                    }),
+                });
+            }
             attributes.push(KeyValue {
                 key: "url.host".to_string(),
                 value: Some(AnyValue {
@@ -439,18 +482,23 @@ impl SpanBuilder {
         let span = Span {
             trace_id: self.trace_id.clone(),
             span_id,
-            parent_span_id: self.parent_span_id.clone().unwrap_or_default(),
+            trace_state: String::new(),
+            parent_span_id,
             name: url_path.unwrap_or("unknown_path").to_string(),
             kind: span::SpanKind::Server as i32,
             start_time_unix_nano: request_start_time.unwrap_or_else(|| get_current_timestamp_nanos()),
             end_time_unix_nano: get_current_timestamp_nanos(),
             attributes,
+            dropped_attributes_count: 0,
+            events: vec![],
+            dropped_events_count: 0,
+            links: vec![],
+            dropped_links_count: 0,
             status: Some(Status {
                 code: 1, // STATUS_CODE_OK
                 message: String::new(),
             }),
             flags: 0,
-            ..Default::default()
         };
 
         self.create_traces_data(span)
@@ -571,6 +619,30 @@ fn parse_traceparent(traceparent: &str) -> Option<(Vec<u8>, Vec<u8>)> {
     let span_id = hex_decode(parts[2])?;
     
     Some((trace_id, span_id))
+}
+
+/// Resolves the W3C parent span id for `trace_id` from the `traceparent` header.
+/// Used as a fallback when `with_context` did not populate `parent_span_id` but headers still carry context.
+fn w3c_parent_span_id_for_trace(trace_id: &[u8], headers: &HashMap<String, String>) -> Option<Vec<u8>> {
+    let traceparent = header_get_ci(headers, "traceparent")?;
+    let (tid, pid) = parse_traceparent(traceparent)?;
+    if tid.as_slice() == trace_id {
+        Some(pid)
+    } else {
+        None
+    }
+}
+
+fn ensure_span_id_distinct_from_parent(span_id: &mut Vec<u8>, parent_id: &[u8]) {
+    if parent_id.is_empty() || span_id.as_slice() != parent_id {
+        return;
+    }
+    for _ in 0..32 {
+        *span_id = generate_span_id();
+        if span_id.as_slice() != parent_id {
+            break;
+        }
+    }
 }
 
 fn hex_decode(hex: &str) -> Option<Vec<u8>> {

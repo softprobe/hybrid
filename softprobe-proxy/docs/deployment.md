@@ -120,10 +120,13 @@ pluginConfig:
 ```yaml
 # config/development.yaml
 pluginConfig:
-  sp_backend_url: "https://dev.softprobe.ai"
+  # Match SOFTPROBE_RUNTIME_URL for local OSS development.
+  sp_backend_url: "http://localhost:8080"
   enable_detailed_logging: true
   cache_ttl_seconds: 300  # 5 minutes
 ```
+
+For local development, run the runtime on `http://localhost:8080` and point both `SOFTPROBE_RUNTIME_URL` and `sp_backend_url` at that same base URL.
 
 ### Staging Environment
 

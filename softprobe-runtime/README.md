@@ -1,8 +1,8 @@
 # softprobe-runtime
 
-`softprobe-runtime` is the OSS control runtime for Softprobe.
+`softprobe-runtime` is the OSS unified runtime for Softprobe.
 
-It serves the JSON HTTP control API only:
+It serves the JSON HTTP control API and the proxy OTLP endpoints used by the WASM data plane:
 
 - `POST /v1/sessions`
 - `POST /v1/sessions/{sessionId}/load-case`
@@ -15,7 +15,7 @@ Default listen address:
 
 - `127.0.0.1:8080`
 
-This runtime does not serve proxy inject/extract endpoints. Those live in the proxy backend, for example `https://o.softprobe.ai`.
+This runtime serves the proxy inject/extract endpoints too. For local and self-hosted setups, the proxy `sp_backend_url` should point at the same base URL as `SOFTPROBE_RUNTIME_URL` (for example `http://localhost:8080`).
 
 See:
 
@@ -25,7 +25,7 @@ See:
 - [Kubernetes deployment note](../docs/platform-architecture.md#105-kubernetes-informative)
 - [Proxy deployment guide](../softprobe-proxy/docs/deployment.md)
 
-An informative Kubernetes example lives in [`deploy/kubernetes.yaml`](./deploy/kubernetes.yaml). The proxy backend URL belongs on the proxy WasmPlugin as `sp_backend_url`; do not point it at the control runtime.
+An informative Kubernetes example lives in [`deploy/kubernetes.yaml`](./deploy/kubernetes.yaml). The proxy backend URL belongs on the proxy WasmPlugin as `sp_backend_url`; for local OSS development, point it at the same `http://localhost:8080` runtime URL used by `SOFTPROBE_RUNTIME_URL`.
 
 ## Placeholder CLI
 
