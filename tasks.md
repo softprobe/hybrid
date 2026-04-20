@@ -366,11 +366,11 @@ Can parallelize after P0.4a and P0.2c (client needs stable shapes).
 - [x] **P4.5p — softprobe-go SDK.** New module `softprobe-go/` with `Softprobe` facade, `SoftprobeSession` (`LoadCaseFromFile`, `FindInCase`, `MockOutbound`, `ClearRules`, `Close`), thin HTTP `Client`, and shared `CaseLookup` helpers (`FindSpans`, `ResponseFromSpan`, `FormatPredicate`, HTTP/2 pseudo-header fallback). 12 unit tests via an in-process `Transport` seam, mirroring softprobe-js / softprobe-python / softprobe-java. done: `go test ./...` green in `softprobe-go/`  
   **Verify:** `cd softprobe-go && go test ./...` green.
 
-- [x] **P4.5q — e2e/go-replay/: fragment happy path.** New Go module `e2e/go-replay/` drives the same `StartSession` → `LoadCaseFromFile` → `FindInCase` → `MockOutbound` → `GET APP_URL/hello` flow as the jest/pytest/junit harnesses, consuming `softprobe-go` via a local `replace` directive. done: `TestFragmentReplayThroughTheMesh` green against the compose stack  
-  **Verify:** `cd e2e/go-replay && go test -count=1 ./...` green.
+- [x] **P4.5q — e2e/go/go-replay/: fragment happy path.** Package under `e2e/go/go-replay/` drives the same `StartSession` → `LoadCaseFromFile` → `FindInCase` → `MockOutbound` → `GET APP_URL/hello` flow as the jest/pytest/junit harnesses (`softprobe-go` via `replace` in `e2e/go.mod`). done: `TestFragmentReplayThroughTheMesh` green against the compose stack  
+  **Verify:** `cd e2e && go test -count=1 ./go/go-replay/...` green.
 
 - [x] **P4.5r — Port TestReplayEgressInjectMocksUpstream to softprobe-go.** Rewrote the egress replay integration test in `e2e/replay_flow_test.go` around `softprobe-go`'s `Softprobe` / `SoftprobeSession` instead of raw HTTP POSTs; deleted the now-dead `TestReplayFlowUsesCapturedCase` which had been exercising the auto-ingress-replay path removed in P4.5e. Fixed shape-drift in the jest/pytest harnesses (which had been asserting a stale nested `dependency` body against an older app binary) so they match the live `{message, dep}` flat shape. done: full e2e suite (`TestCaptureFlowProducesValidCaseFile`, `TestReplayEgressInjectMocksUpstream`, `TestStrictPolicyBlocksUnmockedTraffic`) + all four SDK harnesses green  
-  **Verify:** `cd e2e && go test -count=1 .` green and all four SDK harnesses (`jest`, `pytest`, `mvn`, `go test -count=1 ./e2e/go-replay/...`) green.
+  **Verify:** `cd e2e && go test -count=1 ./...` green and all four SDK harnesses (`jest`, `pytest`, `mvn`, `go test -count=1 ./go/go-replay/...`) green. (Go e2e code consolidated under `e2e/go/`: `go-capture/`, `go-replay/`, `e2etestutil/`, runtime integration tests.)
 
 ---
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const strictPolicyErrorMessage = "strict policy requires a mock or replay match"
+const strictPolicyErrorMessage = "strict policy requires a mock rule match"
 
 type injectRuleDocument struct {
 	Version int          `json:"version"`

@@ -7,39 +7,23 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"e2e/go/e2etestutil"
 	"softprobe-go/softprobe"
 )
-
-func mustEnv(name, def string) string {
-	if v := os.Getenv(name); v != "" {
-		return v
-	}
-	return def
-}
 
 // TestFragmentReplayThroughTheMesh drives `/hello` on the app with a
 // replay session whose sole rule is a MockOutbound for `/fragment` built
 // from the captured response. Assertion: the app returns the full
 // composed body without the upstream being contacted.
 func TestFragmentReplayThroughTheMesh(t *testing.T) {
-	runtimeURL := mustEnv("SOFTPROBE_RUNTIME_URL", "http://127.0.0.1:8080")
-	appURL := mustEnv("APP_URL", "http://127.0.0.1:8081")
+	runtimeURL := e2etestutil.MustEnv("SOFTPROBE_RUNTIME_URL", "http://127.0.0.1:8080")
+	appURL := e2etestutil.MustEnv("APP_URL", "http://127.0.0.1:8081")
 
-	// Resolve the golden case relative to the test binary so `go test` works
-	// from either the repo root or the go-replay module directory.
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	casePath := filepath.Join(wd, "..", "..", "spec", "examples", "cases", "fragment-happy-path.case.json")
-	if _, err := os.Stat(casePath); err != nil {
-		t.Fatalf("case file not found at %s: %v", casePath, err)
-	}
+	casePath := filepath.Join(e2etestutil.RepoRoot(), "spec", "examples", "cases", "fragment-happy-path.case.json")
 
 	sp := softprobe.New(softprobe.Options{BaseURL: runtimeURL})
 	session, err := sp.StartSession("replay")
@@ -95,10 +79,6 @@ func TestFragmentReplayThroughTheMesh(t *testing.T) {
 		t.Fatalf("status = %d: %s", resp.StatusCode, string(body))
 	}
 
-	// The SUT composes its own response from the dependency body, so the
-	// replay is proven when both fields come through with the expected
-	// values — `message` from the app itself and `dep` from the mocked
-	// outbound call registered via MockOutbound.
 	var payload struct {
 		Message string `json:"message"`
 		Dep     string `json:"dep"`

@@ -1,4 +1,4 @@
-package main
+package e2etestutil
 
 import (
 	"bytes"
@@ -8,37 +8,9 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
 )
-
-// otlpJSONInt64 unmarshals OTLP JSON intValue, which may be a number or a decimal string (protojson).
-type otlpJSONInt64 struct {
-	V *int64
-}
-
-func (o *otlpJSONInt64) UnmarshalJSON(b []byte) error {
-	if string(b) == "null" {
-		o.V = nil
-		return nil
-	}
-	var n int64
-	if err := json.Unmarshal(b, &n); err == nil {
-		o.V = &n
-		return nil
-	}
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return fmt.Errorf("intValue: %w", err)
-	}
-	parsed, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return fmt.Errorf("intValue %q: %w", s, err)
-	}
-	o.V = &parsed
-	return nil
-}
 
 // spanDoc is a minimal OTLP JSON span shape for e2e validation (official JSON field names).
 type spanDoc struct {
@@ -48,7 +20,7 @@ type spanDoc struct {
 	Attributes   []struct {
 		Key   string `json:"key"`
 		Value struct {
-			Int    otlpJSONInt64 `json:"intValue,omitempty"`
+			Int    OtlpJSONInt64 `json:"intValue,omitempty"`
 			String *string       `json:"stringValue,omitempty"`
 		} `json:"value"`
 	} `json:"attributes"`
@@ -73,7 +45,9 @@ func attrString(sp *spanDoc, key string) string {
 	return ""
 }
 
-func captureCaseTraceSemanticsError(caseFile string) error {
+// CaptureCaseTraceSemanticsError returns nil if ingress /hello and egress /fragment
+// extract spans satisfy trace id / span id / parent expectations.
+func CaptureCaseTraceSemanticsError(caseFile string) error {
 	data, err := os.ReadFile(caseFile)
 	if err != nil {
 		return err
@@ -112,7 +86,6 @@ func captureCaseTraceSemanticsError(caseFile string) error {
 		return errors.New("no extract span for /fragment")
 	}
 
-	// Ingress /hello: test client often has no W3C context — require trace + span ids only.
 	if _, err := checkSpanIDBytes("ingress /hello traceId", helloSpan.TraceID, 16); err != nil {
 		return err
 	}
@@ -133,7 +106,6 @@ func captureCaseTraceSemanticsError(caseFile string) error {
 		return fmt.Errorf("ingress /hello: sp.traffic.direction = %q, want outbound", attrString(helloSpan, "sp.traffic.direction"))
 	}
 
-	// Egress /fragment: app uses OTel; proxy must record W3C parent on the outbound hop.
 	if _, err := checkSpanIDBytes("egress /fragment traceId", fragmentSpan.TraceID, 16); err != nil {
 		return err
 	}
@@ -172,16 +144,17 @@ func checkSpanIDBytes(field, enc string, wantLen int) ([]byte, error) {
 	return raw, nil
 }
 
-// validateCaptureCaseTraceSemantics checks OTLP identity fields for ingress (/hello) and egress (/fragment)
+// ValidateCaptureCaseTraceSemantics checks OTLP identity fields for ingress (/hello) and egress (/fragment)
 // extract spans: valid trace id (16 bytes), span id (8 bytes), parent span id (8 bytes) when W3C context exists.
-func validateCaptureCaseTraceSemantics(t *testing.T, caseFile string) {
+func ValidateCaptureCaseTraceSemantics(t *testing.T, caseFile string) {
 	t.Helper()
-	if err := captureCaseTraceSemanticsError(caseFile); err != nil {
+	if err := CaptureCaseTraceSemanticsError(caseFile); err != nil {
 		t.Fatalf("trace semantics: %v", err)
 	}
 }
 
-func egressURLFromCapturedCase(caseFile string) (string, bool) {
+// EgressURLFromCapturedCase returns the http URL built from url.host on the /fragment span, if present.
+func EgressURLFromCapturedCase(caseFile string) (string, bool) {
 	data, err := os.ReadFile(caseFile)
 	if err != nil {
 		return "", false
@@ -210,50 +183,14 @@ func egressURLFromCapturedCase(caseFile string) (string, bool) {
 	return "", false
 }
 
-func fragmentResponseBodyFromCase(caseFile string) (string, bool) {
-	data, err := os.ReadFile(caseFile)
-	if err != nil {
-		return "", false
-	}
-	var doc caseFileDoc
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return "", false
-	}
-	for _, tr := range doc.Traces {
-		for _, rs := range tr.ResourceSpans {
-			for _, ss := range rs.ScopeSpans {
-				for i := range ss.Spans {
-					sp := &ss.Spans[i]
-					if attrString(sp, "url.path") != "/fragment" {
-						continue
-					}
-					body := attrString(sp, "http.response.body")
-					if body == "" {
-						return "", false
-					}
-					return body, true
-				}
-			}
-		}
-	}
-	return "", false
-}
-
-func egressProxyURLForEnv(defaultHostPort string) string {
-	if v := os.Getenv("EGRESS_PROXY_URL"); v != "" {
-		return strings.TrimSuffix(v, "/")
-	}
-	return defaultHostPort
-}
-
-// egressHTTPBaseForTest returns the base URL for the egress Envoy listener.
+// EgressHTTPBaseForTest returns the base URL for the egress Envoy listener.
 // Captured cases record url.host as seen from inside docker-compose (e.g. softprobe-proxy:8084);
 // `go test` on the host uses published ports on 127.0.0.1 unless EGRESS_PROXY_URL is set.
-func egressHTTPBaseForTest(caseFile string) string {
+func EgressHTTPBaseForTest(caseFile string) string {
 	if v := strings.TrimSpace(os.Getenv("EGRESS_PROXY_URL")); v != "" {
 		return strings.TrimSuffix(v, "/")
 	}
-	fromCase, ok := egressURLFromCapturedCase(caseFile)
+	fromCase, ok := EgressURLFromCapturedCase(caseFile)
 	if !ok {
 		return "http://127.0.0.1:8084"
 	}

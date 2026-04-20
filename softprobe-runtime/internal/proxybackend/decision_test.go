@@ -13,8 +13,8 @@ func TestStrictMissBecomesError(t *testing.T) {
 	if decision.Kind != DecisionError {
 		t.Fatalf("kind = %v, want error", decision.Kind)
 	}
-	if decision.Message != "strict policy requires a mock or replay match" {
-		t.Fatalf("message = %q, want strict policy requires a mock or replay match", decision.Message)
+	if decision.Message != "strict policy requires a mock rule match" {
+		t.Fatalf("message = %q, want strict policy requires a mock rule match", decision.Message)
 	}
 }
 

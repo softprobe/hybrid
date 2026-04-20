@@ -394,14 +394,14 @@ The root **`e2e/`** harness models this chain with **one Envoy** and **two liste
 |------|------------|
 | **Session** | A bounded test run context: holds `mode`, **policy**, **loaded case bytes**, **session rules**, and optional **fixtures**. Identified by `sessionId` (returned from `POST /v1/sessions`). |
 | **Case** | One JSON document: metadata + **`traces[]`** (OTLP-compatible trace payloads) + optional embedded **`rules[]`** and **`fixtures[]`**. Validated by [case.schema.json](../spec/schemas/case.schema.json). |
-| **Rule** | A **`when`** matcher + **`then`** action (mock, replay-from-case, passthrough, error, capture-only). Shape defined by [rule.schema.json](../spec/schemas/rule.schema.json); session rules are applied via `POST /v1/sessions/{id}/rules`. |
+| **Rule** | A **`when`** matcher + **`then`** action (**`mock`**, **`error`**, **`passthrough`**, **`capture_only`** on the inject path). Shape defined by [rule.schema.json](../spec/schemas/rule.schema.json); session rules are applied via `POST /v1/sessions/{id}/rules`. Case-backed “replay” in tests is **`findInCase` + `mockOutbound`**, which still emits **`mock`** rules. |
 | **Policy** | Session-level defaults (e.g. `externalHttp: strict` vs allow). Applied via `POST /v1/sessions/{id}/policy`. |
 | **Inject lookup** | On each intercepted HTTP hop, the **proxy** builds an OTLP **`TracesData`** inject request and **`POST`s** **`/v1/inject`** on the **proxy OTLP API** ([proxy-otel-api.md](../spec/protocol/proxy-otel-api.md)). The backend returns **`200`** + response attributes (hit) or **`404`** (miss → forward upstream). |
 | **Extract** | After observing traffic (especially on passthrough), the proxy **`POST`s** OTLP **`TracesData`** to **`/v1/traces`** so the runtime can record **extract** spans in **capture** mode. |
 
 ### 4.2 End-to-end workflows
 
-The same physical HTTP flow applies in both modes: **client → proxy → app → proxy → dependency**. What changes is **session `mode`**, what the runtime **stores**, and whether **`/v1/inject`** returns a **hit** (replay/mock) or **miss** (forward).
+The same physical HTTP flow applies in both modes: **client → proxy → app → proxy → dependency**. What changes is **session `mode`**, what the runtime **stores**, and whether **`/v1/inject`** returns a **hit** (mock) or **miss** (forward).
 
 #### 4.2.1 Capture workflow (record a case)
 
@@ -503,14 +503,14 @@ sequenceDiagram
   C->>R: POST /v1/sessions, load-case, …
   C->>P: HTTP to app (e.g. GET /hello, session header)
   P->>B: POST /v1/inject (ingress leg)
-  alt Ingress hit: replay / mock
+  alt Ingress hit: mock rule
     B-->>P: 200 + response
     P-->>C: Return without calling app
   else Ingress passthrough
     P->>A: Forward to app
     A->>P: HTTP to dependency (egress, session header)
     P->>B: POST /v1/inject (egress leg)
-    alt Egress hit: replay / mock
+    alt Egress hit: mock rule
       B-->>P: 200 + response
       P-->>A: Injected dependency response
     else Egress passthrough
@@ -735,21 +735,23 @@ class CheckoutTest {
 
 ## 8. Dependency injection model (rules + policy)
 
-**Evaluation model:** When the OTLP inject handler runs, it applies a **fixed decision procedure** (policy → case-embedded rules → session rules; §8.3) over **data previously pushed** through the control API. Ergonomic session APIs live in the **TypeScript SDK** (first stage) and compile to the same **`when` / `then`** rule objects defined by [rule.schema.json](../spec/schemas/rule.schema.json).
+**Evaluation model:** When the OTLP inject handler runs, it is a **rule matcher**, not a case librarian. It may select at most **one** winning rule by comparing the inject lookup against **`when`** predicates across **session policy** (strictness synthesized as rules), **case-embedded `rules[]`**, and **session rules** pushed via the control API (composition order §8.3). Anything that used to be described as “replay from case” is now **authoring-time work in the SDK**: **`findInCase`** reads **`traces[]` in memory**, the author may mutate the materialized response, and **`mockOutbound`** registers a normal **`then.action: mock`** rule whose **`then.response`** is already complete. The runtime **never** walks **`traces[]`** on the inject hot path to pick which span to return, so there is **no** server-side “which mock wins” selection against OTLP history—only **`when` → `then`** on explicit rules.
 
-### 8.1 Decision space
+Ergonomic session APIs in the SDKs compile to the same **`when` / `then`** objects defined by [rule.schema.json](../spec/schemas/rule.schema.json).
 
-Runtime evaluation for each candidate HTTP exchange returns a **decision**:
+### 8.1 Inject resolution outcomes
 
-| Decision | Meaning |
-|----------|---------|
-| `MOCK` | Return a constructed response (from rule or synthesized from case). |
-| `REPLAY` | Return the **next matching** recorded response from the loaded case according to matcher + ordering. |
-| `PASSTHROUGH` | Allow live upstream (explicit rule or allowlist). |
-| `ERROR` | Fail the request (strict policy or rule). |
-| `CAPTURE_ONLY` | Used in capture mode: record, always forward (policy-dependent). |
+For each outbound inject lookup, the interpreter ends in one of:
 
-The proxy maps these to: **inject attributes** (mock/replay), **forward** (passthrough), or **local error response** (error).
+| Outcome | Meaning |
+|---------|---------|
+| **Hit (mock)** | A rule with **`then.action: mock`** matched; the handler returns OTLP response attributes built from **`then.response`** on that rule (status, headers, body already present on the rule). |
+| **Miss** | No rule matched, or the winning rule is **`passthrough`** / **`capture_only`** — the proxy forwards to the **live** upstream (capture still records on the extract path). |
+| **Error** | A rule with **`then.action: error`** matched, or **strict** external-HTTP policy rejects an outbound call with no mock hit. |
+
+There is **no** separate **`REPLAY`** inject outcome anymore: the older model (“runtime returns the **next matching** recorded response from the loaded case by walking traces”) was removed. **Test “replay”** is implemented as **SDK `findInCase` + `mockOutbound`**, which pushes the same **`mock`** rule shape the runtime already evaluates.
+
+The proxy maps these to: **inject OTLP hit** (mock), **inject miss → forward**, or **error response** (error).
 
 ### 8.2 Rule structure
 
@@ -757,7 +759,7 @@ Rules align with [rule.schema.json](../spec/schemas/rule.schema.json):
 
 - **`id`:** Stable identifier for diffs and codegen.
 - **`priority`:** Higher wins on conflict (explicit numeric total ordering).
-- **`consume`:** `once` | `many` — controls whether a matching **replay** interaction is **dequeued** from the case.
+- **`consume`:** `once` \| `many` — may appear in rule documents for ordering or future use; **v1 inject** does **not** dequeue rows from **`traces[]`**. Prefer encoding “use once” semantics by how the author builds session rules (or by registering a fresh rule per example) rather than expecting the runtime to consume case history.
 - **`when`:** Matcher object (direction, service, host, method, path, pathPrefix, header predicates, body JSONPath subset, trace tags).
 - **`then`:** Action + payload (response spec, status template, latency, fault injection).
 
@@ -778,16 +780,18 @@ rules:
         status: 599
         body: { "error": "external call blocked in strict mode" }
 
-  - id: stripe-replay
+  - id: stripe-mock
     priority: 100
-    consume: once
     when:
       direction: outbound
       host: api.stripe.com
       method: POST
       pathPrefix: /v1/payment_intents
     then:
-      action: replay
+      action: mock
+      response:
+        status: 200
+        body: '{"id":"pi_mock","object":"payment_intent"}'
 ```
 
 ### 8.3 Composition order
@@ -881,8 +885,8 @@ The proxy uses **only** the OTLP inject/extract API toward **`softprobe-runtime`
 
 ### 12.3 OTLP handler (`softprobe-runtime`)
 
-- [ ] Inject lookup resolves **rules + case replay** in the documented composition order using the shared in-memory store.
-- [ ] `consume: once` replay entries are **dequeued** exactly once per matching request.
+- [ ] Inject lookup resolves **policy + case-embedded rules + session rules** in the documented composition order using the shared in-memory store, without walking **`traces[]`**.
+- [ ] **`then.action: mock`** returns **`then.response`** on hit; strict policy and **`error`** rules behave as documented.
 
 ### 12.4 Proxy integration
 
@@ -912,7 +916,7 @@ The proxy uses **only** the OTLP inject/extract API toward **`softprobe-runtime`
 |-------|--------|
 | **P0** | Finalize JSON schemas for case traces OTLP profile; golden fixtures; **control** runtime session store (HTTP API only). |
 | **P0.6** | Refactor `softprobe-runtime`: extract shared `internal/store/`; add `internal/proxybackend/` with `POST /v1/inject` and `POST /v1/traces` handlers backed by the shared store; update proxy `sp_backend_url` default to match `SOFTPROBE_RUNTIME_URL`. |
-| **P1** | Port inject resolver (composition order, mock/replay/passthrough/error actions, `consume: once/many`) from Rust reference into Go `internal/proxybackend/`; strict policy; case file writer. Wire real handler logic replacing P0.6 stubs. |
+| **P1** | Port inject resolver (composition order, **mock** / **error** / **passthrough** / **capture_only**) from Rust reference into Go `internal/proxybackend/`; strict policy; case file writer. Wire real handler logic replacing P0.6 stubs. |
 | **P2** | JS + Python + Java SDK thin clients; Jest/pytest/JUnit examples; **canonical language-agnostic `softprobe` CLI** (language repos provide SDKs and optional shims only). |
 | **P3** | Codegen; OTLP export from case files; performance caching with sessionRevision. |
 | **P4** | Optional deep instrumentation packages (`@softprobe/js-http-hooks`, and so on) **behind** feature flags. |

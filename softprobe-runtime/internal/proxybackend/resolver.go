@@ -174,7 +174,7 @@ func ErrorDecision(message string) Decision {
 // MissDecision returns the fallback decision for strict or permissive policy.
 func MissDecision(strictPolicy bool) Decision {
 	if strictPolicy {
-		return ErrorDecision("strict policy requires a mock or replay match")
+		return ErrorDecision("strict policy requires a mock rule match")
 	}
 	return PassthroughDecision()
 }
