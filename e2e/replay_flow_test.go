@@ -10,52 +10,30 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"softprobe-go/softprobe"
 )
 
-// TestReplayFlowUsesCapturedCase checks that a replay session can serve GET /hello through the
-// ingress proxy without calling the live app or upstream. The runtime matches the captured
-// ingress extract span (client-facing /hello) and returns the full stored http.response.body
-// (the combined app response, including dep field). The live app and upstream are not contacted
-// on that path. See TestReplayEgressInjectMocksUpstream for proof that the egress /fragment
-// extract span is replayable as an inject hit (upstream mock).
-func TestReplayFlowUsesCapturedCase(t *testing.T) {
-	runtimeURL := mustEnv("RUNTIME_URL", "http://127.0.0.1:8080")
-	proxyURL := mustEnv("PROXY_URL", "http://127.0.0.1:8082")
-	appURL := mustEnv("APP_URL", "http://127.0.0.1:8081")
-	upstreamURL := mustEnv("UPSTREAM_URL", "http://127.0.0.1:8083")
-	caseFile := "captured.case.json"
-
-	ensureCapturedCase(t, runtimeURL, proxyURL, caseFile)
-	resetAppCounter(t, appURL)
-	resetUpstreamCounter(t, upstreamURL)
-
-	sessionID := startSession(t, runtimeURL, "replay")
-	loadCase(t, runtimeURL, sessionID, caseFile)
-
-	resp := doProxyHello(t, proxyURL, sessionID)
-	assertHelloBody(t, resp)
-
-	if got := appRequestCount(t, appURL); got != 0 {
-		t.Fatalf("app /hello hit count after replay = %d, want 0 (replay must not reach live workload)", got)
-	}
-	if got := upstreamFragmentCount(t, upstreamURL); got != 0 {
-		t.Fatalf("upstream /fragment hit count after replay = %d, want 0 (dependency must not be contacted live)", got)
-	}
-
-	resp = doProxyHello(t, proxyURL, sessionID)
-	assertHelloBody(t, resp)
-
-	if got := appRequestCount(t, appURL); got != 0 {
-		t.Fatalf("app /hello hit count after second replay = %d, want 0", got)
-	}
-	if got := upstreamFragmentCount(t, upstreamURL); got != 0 {
-		t.Fatalf("upstream /fragment hit count after second replay = %d, want 0", got)
-	}
-}
+// Note: the former TestReplayFlowUsesCapturedCase covered runtime-side auto-
+// ingress replay from case-embedded rules. That pathway was removed in
+// P4.5e ("Runtime: delete replay action"), which made the SDK responsible
+// for picking captured responses (FindInCase) and registering mock rules
+// (MockOutbound). Ingress replay is therefore no longer a runtime feature,
+// and the equivalent SDK-authoring flow is exercised by
+// TestReplayEgressInjectMocksUpstream below and by the four SDK harnesses
+// under e2e/{go,jest,pytest,junit}-replay/.
 
 // TestReplayEgressInjectMocksUpstream issues GET /fragment on the egress listener with a replay
 // session so the runtime must match the captured egress extract span and return the stored
 // dependency response without calling the live upstream.
+//
+// This test exercises the same SDK authoring flow as e2e/go-replay/,
+// e2e/jest-replay/, e2e/pytest-replay/, and e2e/junit-replay/: it drives
+// softprobe-go's Softprobe / SoftprobeSession facade end-to-end
+// (StartSession → LoadCaseFromFile → FindInCase → MockOutbound) against
+// the live runtime, then hits the egress proxy listener to prove the
+// mock rule is honored. The expected response body comes from the
+// captured case via FindInCase, so the assertion remains data-driven.
 func TestReplayEgressInjectMocksUpstream(t *testing.T) {
 	runtimeURL := mustEnv("RUNTIME_URL", "http://127.0.0.1:8080")
 	proxyURL := mustEnv("PROXY_URL", "http://127.0.0.1:8082")
@@ -67,15 +45,44 @@ func TestReplayEgressInjectMocksUpstream(t *testing.T) {
 
 	egressBase := egressHTTPBaseForTest(caseFile)
 	fromCase, hostOK := egressURLFromCapturedCase(caseFile)
-	wantBody, ok := fragmentResponseBodyFromCase(caseFile)
-	if !ok {
-		t.Fatal("case file: no http.response.body on /fragment extract span")
-	}
 
 	resetUpstreamCounter(t, upstreamURL)
 
-	sessionID := startSession(t, runtimeURL, "replay")
-	loadCase(t, runtimeURL, sessionID, caseFile)
+	sp := softprobe.New(softprobe.Options{BaseURL: runtimeURL})
+	session, err := sp.StartSession("replay")
+	if err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := session.Close(); err != nil {
+			t.Logf("close session: %v", err)
+		}
+	})
+
+	if err := session.LoadCaseFromFile(caseFile); err != nil {
+		t.Fatalf("LoadCaseFromFile: %v", err)
+	}
+
+	hit, err := session.FindInCase(softprobe.CaseSpanPredicate{
+		Direction: "outbound",
+		Method:    http.MethodGet,
+		Path:      "/fragment",
+	})
+	if err != nil {
+		t.Fatalf("FindInCase: %v", err)
+	}
+
+	priority := 100
+	if err := session.MockOutbound(softprobe.MockRuleSpec{
+		ID:        "fragment-egress-replay",
+		Priority:  &priority,
+		Direction: "outbound",
+		Method:    http.MethodGet,
+		Path:      "/fragment",
+		Response:  hit.Response,
+	}); err != nil {
+		t.Fatalf("MockOutbound: %v", err)
+	}
 
 	req, err := http.NewRequest(http.MethodGet, egressBase+"/fragment", nil)
 	if err != nil {
@@ -88,7 +95,7 @@ func TestReplayEgressInjectMocksUpstream(t *testing.T) {
 			req.Host = u.Host
 		}
 	}
-	req.Header.Set("x-softprobe-session-id", sessionID)
+	req.Header.Set("x-softprobe-session-id", session.ID())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("egress proxy request: %v", err)
@@ -102,8 +109,8 @@ func TestReplayEgressInjectMocksUpstream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read egress body: %v", err)
 	}
-	if strings.TrimSpace(string(body)) != strings.TrimSpace(wantBody) {
-		t.Fatalf("egress body = %q, want captured fragment body %q", strings.TrimSpace(string(body)), strings.TrimSpace(wantBody))
+	if strings.TrimSpace(string(body)) != strings.TrimSpace(hit.Response.Body) {
+		t.Fatalf("egress body = %q, want captured fragment body %q", strings.TrimSpace(string(body)), strings.TrimSpace(hit.Response.Body))
 	}
 
 	if got := upstreamFragmentCount(t, upstreamURL); got != 0 {

@@ -3,29 +3,28 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>com.softprobe</groupId>
-  <artifactId>softprobe-java</artifactId>
+  <groupId>com.softprobe.e2e</groupId>
+  <artifactId>junit-replay</artifactId>
   <version>0.1.0-SNAPSHOT</version>
-  <name>softprobe-java</name>
-  <description>Thin Softprobe control-runtime client</description>
+  <name>softprobe-junit-replay-e2e</name>
+  <description>
+    End-to-end replay check driving the compose stack through the Java SDK.
+    Mirrors e2e/jest-replay and e2e/pytest-replay.
+  </description>
 
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <junit.version>5.11.4</junit.version>
-    <jackson.version>2.18.2</jackson.version>
   </properties>
 
   <dependencies>
-    <!-- Jackson is used by the Softprobe SDK layer (Softprobe / SoftprobeSession /
-         find-in-case). The thin Client still uses a regex parser for flat control
-         API responses to keep basic usage dependency-free. -->
     <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-databind</artifactId>
-      <version>${jackson.version}</version>
+      <groupId>com.softprobe</groupId>
+      <artifactId>softprobe-java</artifactId>
+      <version>0.1.0-SNAPSHOT</version>
+      <scope>test</scope>
     </dependency>
-
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>

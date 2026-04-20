@@ -81,37 +81,36 @@ func TestInjectRouteReturnsHitAndMiss(t *testing.T) {
 		t.Fatalf("unmarshal create response: %v", err)
 	}
 
-	caseJSON := fmt.Sprintf(`{
-		"version":"1.0.0",
-		"caseId":"checkout-happy-path",
-		"traces":[{
-			"resourceSpans":[{
-				"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"api"}}]},
-				"scopeSpans":[{
-					"spans":[{
-						"name":"HTTP POST",
-						"attributes":[
-							{"key":"sp.span.type","value":{"stringValue":"inject"}},
-							{"key":"sp.session.id","value":{"stringValue":"%s"}},
-							{"key":"sp.service.name","value":{"stringValue":"checkout"}},
-							{"key":"sp.traffic.direction","value":{"stringValue":"outbound"}},
-							{"key":"url.host","value":{"stringValue":"api.stripe.com"}},
-							{"key":"url.path","value":{"stringValue":"/v1/payment_intents"}},
-							{"key":"http.response.status_code","value":{"intValue":200}},
-							{"key":"http.response.header.content-type","value":{"stringValue":"application/json"}},
-							{"key":"http.response.body","value":{"stringValue":"{\"ok\":true}"}}
-						]
-					}]
-				}]
-			}]
-		}]
-	}`, created.SessionID)
-
-	loadReq := httptest.NewRequest(http.MethodPost, "/v1/sessions/"+created.SessionID+"/load-case", bytes.NewBufferString(caseJSON))
-	loadRec := httptest.NewRecorder()
-	mux.ServeHTTP(loadRec, loadReq)
-	if loadRec.Code != http.StatusOK {
-		t.Fatalf("load-case status = %d, want 200", loadRec.Code)
+	// Register a session mock rule — this mirrors what `SoftprobeSession.mockOutbound`
+	// produces in the SDK. The runtime no longer walks case `traces[]` on the inject
+	// hot path; it only evaluates session rules + inline case rules (see
+	// `docs/design.md` §3.2.1 / §5.3).
+	rulesDoc := `{
+		"version": 1,
+		"rules": [
+			{
+				"when": {
+					"direction": "outbound",
+					"method": "POST",
+					"host": "api.stripe.com",
+					"path": "/v1/payment_intents"
+				},
+				"then": {
+					"action": "mock",
+					"response": {
+						"status": 200,
+						"headers": {"content-type": "application/json"},
+						"body": "{\"ok\":true}"
+					}
+				}
+			}
+		]
+	}`
+	rulesReq := httptest.NewRequest(http.MethodPost, "/v1/sessions/"+created.SessionID+"/rules", bytes.NewBufferString(rulesDoc))
+	rulesRec := httptest.NewRecorder()
+	mux.ServeHTTP(rulesRec, rulesReq)
+	if rulesRec.Code != http.StatusOK {
+		t.Fatalf("apply rules status = %d body = %s, want 200", rulesRec.Code, rulesRec.Body.String())
 	}
 
 	hitPayload := []byte(fmt.Sprintf(`{
@@ -129,6 +128,7 @@ func TestInjectRouteReturnsHitAndMiss(t *testing.T) {
 						{"key":"sp.session.id","value":{"stringValue":"%s"}},
 						{"key":"sp.service.name","value":{"stringValue":"checkout"}},
 						{"key":"sp.traffic.direction","value":{"stringValue":"outbound"}},
+						{"key":"http.request.method","value":{"stringValue":"POST"}},
 						{"key":"url.host","value":{"stringValue":"api.stripe.com"}},
 						{"key":"url.path","value":{"stringValue":"/v1/payment_intents"}}
 					]

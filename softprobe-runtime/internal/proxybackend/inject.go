@@ -20,6 +20,7 @@ type InjectLookupRequest struct {
 	TrafficDirection string
 	URLHost          string
 	URLPath          string
+	RequestMethod    string
 	RequestHeaders   [][2]string
 	RequestBody      string
 }
@@ -28,8 +29,14 @@ type casePolicy struct {
 	ExternalHTTP string `json:"externalHttp"`
 }
 
+// caseFileEnvelope holds only the fields the inject path still needs on the
+// hot path. The runtime no longer walks `traces[]` to synthesize responses —
+// case-time replay is materialized by the SDK via `findInCase` + `mockOutbound`
+// (see `docs/design.md` §3.2.1 / §5.3). Case-embedded **rules** (§8.2) are
+// still honored for frozen regression cases.
 type caseFileEnvelope struct {
 	Traces []json.RawMessage `json:"traces"`
+	Rules  []injectRule      `json:"rules"`
 }
 
 // ParseInjectLookupRequest extracts the first inject span from OTLP JSON payloads.
@@ -47,12 +54,22 @@ func ParseInjectLookupRequest(payload []byte) (*InjectLookupRequest, error) {
 					continue
 				}
 
+				method := firstNonEmpty(
+					spanAttrString(span, "http.request.method"),
+					spanAttrString(span, "http.request.header.:method"),
+				)
+				urlPath := firstNonEmpty(
+					spanAttrString(span, "url.path"),
+					spanAttrString(span, "http.request.header.:path"),
+				)
+
 				return &InjectLookupRequest{
 					SessionID:        spanAttrString(span, "sp.session.id"),
 					ServiceName:      firstNonEmpty(spanAttrString(span, "sp.service.name"), serviceName),
 					TrafficDirection: spanAttrString(span, "sp.traffic.direction"),
 					URLHost:          spanAttrString(span, "url.host"),
-					URLPath:          spanAttrString(span, "url.path"),
+					URLPath:          urlPath,
+					RequestMethod:    method,
 					RequestHeaders:   spanPrefixedStringAttrs(span, "http.request.header."),
 					RequestBody:      spanAttrString(span, "http.request.body"),
 				}, nil
@@ -63,7 +80,10 @@ func ParseInjectLookupRequest(payload []byte) (*InjectLookupRequest, error) {
 	return nil, errors.New("inject span not found")
 }
 
-// HandleInject parses the OTLP request and returns a miss until hit resolution is implemented.
+// HandleInject resolves a proxy-side inject lookup by evaluating the session's
+// mock rules (pushed via `PUT /v1/sessions/{id}/rules`) plus any inline rules
+// embedded in the loaded case (frozen regression cases only). There is no
+// case-trace walk on this hot path.
 func HandleInject(st *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -87,27 +107,43 @@ func HandleInject(st *store.Store) http.HandlerFunc {
 			http.Error(w, "missing session id", http.StatusBadRequest)
 			return
 		}
-		if _, ok := st.Get(req.SessionID); !ok {
+		session, ok := st.Get(req.SessionID)
+		if !ok {
 			http.Error(w, "unknown session", http.StatusNotFound)
 			return
 		}
 
-		session, _ := st.Get(req.SessionID)
-		if response, ok := replayResponseFromCase(session.LoadedCase, req); ok {
+		sessionRules, err := parseInjectRulesDocument(session.Rules)
+		if err != nil {
+			http.Error(w, "invalid session rules", http.StatusInternalServerError)
+			return
+		}
+		caseRules := caseEmbeddedRules(session.LoadedCase)
+
+		match := selectInjectRule(req, isStrictExternalHTTPPolicy(session.Policy), caseRules, sessionRules)
+		if match == nil {
+			writeInjectMiss(w)
+			return
+		}
+
+		switch match.Rule.Then.Action {
+		case "mock":
+			response := buildMockResponse(match.Rule)
+			if response == nil {
+				http.Error(w, "mock rule missing response", http.StatusInternalServerError)
+				return
+			}
 			writeInjectHit(w, response)
-			return
+		case "error":
+			status, body := buildErrorResponse(match.Rule)
+			writeInjectError(w, status, body)
+		case "passthrough", "capture_only":
+			// The proxy must perform the real outbound call; a miss tells it to
+			// pass through. Capture semantics are handled by the extract path.
+			writeInjectMiss(w)
+		default:
+			http.Error(w, "unsupported rule action", http.StatusInternalServerError)
 		}
-
-		if isStrictExternalHTTPPolicy(session.Policy) {
-			writeInjectError(w, http.StatusInternalServerError, "strict policy requires a mock or replay match")
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "no inject match",
-		})
 	}
 }
 
@@ -116,58 +152,9 @@ func mustReadAll(r *http.Request) []byte {
 	return body
 }
 
-func replayResponseFromCase(caseBytes []byte, req *InjectLookupRequest) (*MockResponse, bool) {
-	var env caseFileEnvelope
-	if err := json.Unmarshal(caseBytes, &env); err != nil {
-		return nil, false
-	}
-
-	for _, rawTrace := range env.Traces {
-		var td tracev1.TracesData
-		if err := protojson.Unmarshal(rawTrace, &td); err != nil {
-			continue
-		}
-
-		for _, resourceSpan := range td.ResourceSpans {
-			for _, scopeSpan := range resourceSpan.ScopeSpans {
-				for _, span := range scopeSpan.Spans {
-					if !isMatchingInjectSpan(span, resourceSpan.Resource, req) {
-						continue
-					}
-
-					response := responseFromSpan(span)
-					if response == nil {
-						return nil, false
-					}
-					return response, true
-				}
-			}
-		}
-	}
-
-	return nil, false
-}
-
-func isMatchingInjectSpan(span *tracev1.Span, resource *resourcev1.Resource, req *InjectLookupRequest) bool {
-	spanType := spanAttrString(span, "sp.span.type")
-	if spanType != "inject" && spanType != "extract" {
-		return false
-	}
-	if req.TrafficDirection != "" && spanAttrString(span, "sp.traffic.direction") != req.TrafficDirection {
-		return false
-	}
-	if req.URLHost != "" && spanAttrString(span, "url.host") != req.URLHost {
-		return false
-	}
-	if req.URLPath != "" && spanAttrString(span, "url.path") != req.URLPath {
-		return false
-	}
-	if req.ServiceName != "" && firstNonEmpty(spanAttrString(span, "sp.service.name"), resourceAttrString(resource, "service.name")) != req.ServiceName {
-		return false
-	}
-	return true
-}
-
+// responseFromSpan materializes an OTLP extract span into a `MockResponse`.
+// Retained because the capture path still reads this shape when persisting
+// case files — the inject hot path no longer calls it.
 func responseFromSpan(span *tracev1.Span) *MockResponse {
 	var (
 		statusCode  int
@@ -208,6 +195,14 @@ func responseFromSpan(span *tracev1.Span) *MockResponse {
 	}
 }
 
+// Silence unused warnings while responseFromSpan is kept only for the capture
+// path (which lives elsewhere in the package). These are deliberate blanks to
+// keep the function exported to the package for future reuse.
+var (
+	_ = responseFromSpan
+	_ = (*resourcev1.Resource)(nil)
+)
+
 func writeInjectHit(w http.ResponseWriter, response *MockResponse) {
 	body, err := encodeInjectResponseProto(response)
 	if err != nil {
@@ -218,6 +213,14 @@ func writeInjectHit(w http.ResponseWriter, response *MockResponse) {
 	w.Header().Set("Content-Type", "application/x-protobuf")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body)
+}
+
+func writeInjectMiss(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotFound)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error": "no inject match",
+	})
 }
 
 func writeInjectError(w http.ResponseWriter, statusCode int, message string) {

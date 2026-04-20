@@ -272,7 +272,7 @@ Can parallelize after P0.4a and P0.2c (client needs stable shapes).
 - [x] **P4.0a — Design + repo-layout alignment.** Document inject placement, materialization model, TS+Jest first tier (`docs/design.md` §5.3, §7.0, §8 intro); update `docs/repo-layout.md` §2 `softprobe-js` bullets. done: design §5.3/§7.0/§8 + repo-layout softprobe-js first-stage note  
   **Verify:** Links in `docs/design.md` / `docs/repo-layout.md` resolve.
 
-- [ ] **P4.0b — TS SDK `Softprobe` / `SoftprobeSession`.** Implement **`startSession`**, **`attach`**, **`loadCaseFromFile`**, **`mockOutbound`**, **`replayOutbound`**, **`clearRules`**, **`close`** as the **only** HTTP callers to `/v1/sessions`, `/load-case`, `/rules`, `/close` per **`docs/design.md` §3.2** (no `fetch` in generated Jest modules). **`mockOutbound` / `replayOutbound`** must **merge** then **replace** full rules document per store semantics (`ApplyRules`). Optional: **`setPolicy`**, **`setAuthFixtures`**.  
+- [x] **P4.0b — TS SDK `Softprobe` / `SoftprobeSession`.** Implement **`startSession`**, **`attach`**, **`loadCaseFromFile`**, **`findInCase`**, **`mockOutbound`**, **`clearRules`**, **`close`** as the **only** HTTP callers to `/v1/sessions`, `/load-case`, `/rules`, `/close` per **`docs/design.md` §3.2** (no `fetch` in generated Jest modules). **`mockOutbound`** must **merge** then **replace** full rules document per store semantics (`ApplyRules`). Optional: **`setPolicy`**, **`setAuthFixtures`**. done: Softprobe/SoftprobeSession shipped with findInCase + mockOutbound; replayOutbound removed per P4.5 refactor  
   **Verify:** unit tests assert outbound `POST` bodies validate against `session-rules.request.schema.json` / `rule.schema.json`; two `mockOutbound` calls in a row preserve both rules; `clearRules` sends empty `rules`.
 
 - [ ] **P4.0c — Jest canonical quickstart.** `softprobe-js/README.md` (or `examples/jest-golden-path/`) documents **one** copy-paste flow: `doctor` → session → load-case/rules via SDK → Jest test with `x-softprobe-session-id`; links `docs/design.md` §5.3.  
@@ -310,11 +310,74 @@ Can parallelize after P0.4a and P0.2c (client needs stable shapes).
 - [x] **P4.4a — Actionable errors.** Unknown session, control runtime down, strict miss: each SDK surfaces stable error type or message contract. done: added stable runtime error types in JS, Python, and Java with failure tests
   **Verify:** Contract tests per SDK or shared test vectors doc.
 
+### P4.5 Replace `replayOutbound` with `findInCase` + `mockOutbound` (SDK-side case lookup)
+
+**Normative design:** `docs/design.md` §3.2 — runtime only evaluates explicit `mock`/`error` rules; OTLP case walking and response materialization move into each SDK so test authors can mutate captured data before mocking.
+
+- [x] **P4.5a — Design + schema update.** Remove `replay` action + `consume` field from `spec/schemas/rule.schema.json`; update `docs/design.md` §3.2 with `findInCase` + `mockOutbound` flow and the Division of Labour table; realign `spec/examples/rules/strict-block.rule.json`. done: design + rule schema updated, examples realigned  
+  **Verify:** `spec/examples/**` validates against `spec/schemas/rule.schema.json`.
+
+- [x] **P4.5b — TS SDK `findInCase`.** New pure in-memory lookup against the loaded case (`softprobe-js/src/core/case/find-span.ts`). Returns a mutable `CapturedHit { response, span }`; throws on zero/multi matches with span-ids in the message. done: find-span helper + unit tests (single/zero/multi, pathPrefix/host, pseudo-headers)  
+  **Verify:** `softprobe-js` unit tests green.
+
+- [x] **P4.5c — TS SDK drop `replayOutbound`.** Remove `replayOutbound` + `SoftprobeReplayRuleSpec`; simplify rule builder to `buildMockRule`; add `updateRules` on the runtime client. done: SDK surface now only has `findInCase` + `mockOutbound`  
+  **Verify:** `softprobe-js` unit tests green; no references to `replayOutbound` remain in TS package.
+
+- [x] **P4.5d — Jest e2e migration.** Port `e2e/jest-replay/fragment.replay.test.ts` to `findInCase` + `mockOutbound`. done: jest-replay passes through compose stack using SDK-side lookup  
+  **Verify:** `cd e2e/jest-replay && npx jest` passes.
+
+- [x] **P4.5e — Runtime: delete `replay` action.** Remove `replayResponseFromCase` and the replay branch in `softprobe-runtime/internal/proxybackend/inject.go`; runtime now only honors `mock`/`error`/`passthrough`/`capture_only`. Strict policy still returns error for injects with no matching explicit rule. done: inject handler rewritten around `selectInjectRule`; controlapi + inject tests updated  
+  **Verify:** `go test ./...` in `softprobe-runtime/` green.
+
+- [x] **P4.5f — Runtime session store audit (LoadedCase).** Verify `LoadedCase` is still only used for `case.rules[]` (rule extraction) and OTLP proxy export, not for inject materialization. done: no remaining case-trace walks on the inject hot path  
+  **Verify:** `rg replayResponseFromCase softprobe-runtime/` returns no matches.
+
+- [x] **P4.5g — Codegen update.** `softprobe generate jest-session` emits `session.findInCase(...)` + `session.mockOutbound(..., response: hit.response)` instead of `replayOutbound`. done: generator + golden + integration tests updated  
+  **Verify:** `go test ./...` and generated module compiles/runs.
+
+- [x] **P4.5h — Doc sweep.** Refresh `docs/design.md` and nearby docs to describe the new client-side lookup flow. done: §3.2 rewritten with concrete examples and Division of Labour table  
+  **Verify:** no references to `replayOutbound` or `replay` action remain in `docs/design.md`.
+
+#### Python SDK parity (new ergonomic layer)
+
+- [x] **P4.5i — Python SDK: `Softprobe` + `SoftprobeSession` ergonomic classes.** Mirror the TS surface on top of the existing thin `Client`. Expose `start_session`, `attach`, `load_case_from_file`, `find_in_case`, `mock_outbound`, `clear_rules`, `close`. done: `softprobe/softprobe.py` + `softprobe/core/case_lookup.py`, 13 unit tests green  
+  **Verify:** `python3 -m unittest discover -s tests` in `softprobe-python/` green.
+
+- [x] **P4.5j — Python SDK: `find_in_case` + `mock_outbound`.** Case lookup mirrors the TS helper (traces → resourceSpans → scopeSpans → spans; pseudo-header fallbacks); `mock_outbound` builds schema-conformant rules via the thin `Client`. done: covered by P4.5i test suite  
+  **Verify:** unit tests assert rule payloads and ambiguous/missing-match error messages.
+
+- [x] **P4.5k — e2e/pytest-replay/: fragment happy path.** New harness `e2e/pytest-replay/` drives the same compose stack as `e2e/jest-replay/`. done: `test_fragment_replay.py` green against the existing stack  
+  **Verify:** `python3 -m pytest e2e/pytest-replay/` green.
+
+#### Java SDK parity (new ergonomic layer)
+
+- [x] **P4.5l — Java SDK: `Softprobe` + `SoftprobeSession` ergonomic classes.** Mirror the TS surface on top of the existing thin `Client`. Add Jackson `databind` dependency for OTLP tree parsing; keep the regex parser in `Client` for flat control-plane responses. done: `Softprobe.java`, `SoftprobeSession.java`, `CaseLookup.java`, `CapturedResponse`, `CapturedHit`, `CaseSpanPredicate`, `MockRuleSpec`; 12 unit tests green  
+  **Verify:** `mvn test` in `softprobe-java/` green.
+
+- [x] **P4.5m — Java SDK: `findInCase` + `mockOutbound`.** Case lookup + rule serialization covered by `SoftprobeSessionTest` (single/zero/multi match, pseudo-headers, rule payload shape). done: covered by P4.5l test suite  
+  **Verify:** rule payloads validate against `rule.schema.json`.
+
+- [x] **P4.5n — e2e/junit-replay/: fragment happy path.** New Maven project `e2e/junit-replay/` runs the fragment replay through the SDK against the compose stack. done: `FragmentReplayTest` green  
+  **Verify:** `mvn test` in `e2e/junit-replay/` green.
+
+- [x] **P4.5o — Full e2e validation across three SDKs.** Jest, pytest, and JUnit harnesses all pass against the same compose stack. done: all three run green sequentially in the same session  
+  **Verify:** `npx jest` + `pytest e2e/pytest-replay/` + `mvn -q test` (e2e/junit-replay) all green.
+
+- [x] **P4.5p — softprobe-go SDK.** New module `softprobe-go/` with `Softprobe` facade, `SoftprobeSession` (`LoadCaseFromFile`, `FindInCase`, `MockOutbound`, `ClearRules`, `Close`), thin HTTP `Client`, and shared `CaseLookup` helpers (`FindSpans`, `ResponseFromSpan`, `FormatPredicate`, HTTP/2 pseudo-header fallback). 12 unit tests via an in-process `Transport` seam, mirroring softprobe-js / softprobe-python / softprobe-java. done: `go test ./...` green in `softprobe-go/`  
+  **Verify:** `cd softprobe-go && go test ./...` green.
+
+- [x] **P4.5q — e2e/go-replay/: fragment happy path.** New Go module `e2e/go-replay/` drives the same `StartSession` → `LoadCaseFromFile` → `FindInCase` → `MockOutbound` → `GET APP_URL/hello` flow as the jest/pytest/junit harnesses, consuming `softprobe-go` via a local `replace` directive. done: `TestFragmentReplayThroughTheMesh` green against the compose stack  
+  **Verify:** `cd e2e/go-replay && go test -count=1 ./...` green.
+
+- [x] **P4.5r — Port TestReplayEgressInjectMocksUpstream to softprobe-go.** Rewrote the egress replay integration test in `e2e/replay_flow_test.go` around `softprobe-go`'s `Softprobe` / `SoftprobeSession` instead of raw HTTP POSTs; deleted the now-dead `TestReplayFlowUsesCapturedCase` which had been exercising the auto-ingress-replay path removed in P4.5e. Fixed shape-drift in the jest/pytest harnesses (which had been asserting a stale nested `dependency` body against an older app binary) so they match the live `{message, dep}` flat shape. done: full e2e suite (`TestCaptureFlowProducesValidCaseFile`, `TestReplayEgressInjectMocksUpstream`, `TestStrictPolicyBlocksUnmockedTraffic`) + all four SDK harnesses green  
+  **Verify:** `cd e2e && go test -count=1 .` green and all four SDK harnesses (`jest`, `pytest`, `mvn`, `go test -count=1 ./e2e/go-replay/...`) green.
+
 ---
 
 ## Phase P5 — Codegen, export, performance
 
-- [ ] **P5.0 — `softprobe generate jest-session`.** CLI subcommand emits a TypeScript module per **`docs/design.md` §3.2** using **`@softprobe/sdk`** only (`Softprobe`, `SoftprobeSession`, **`mockOutbound`** / `replayOutbound`); **no emitted `fetch`**. Default output path documented. **Verify:** golden file diff test; generated file compiles; one e2e or integration test imports it.
+- [x] **P5.0 — `softprobe generate jest-session`.** CLI subcommand emits a TypeScript module per **`docs/design.md` §3.2** using **`@softprobe/sdk`** only (`Softprobe`, `SoftprobeSession`, `findInCase`, `mockOutbound`); **no emitted `fetch`**. Default output path documented. done: generator now emits findInCase + mockOutbound pairs, golden + integration tests green (P4.5g)  
+  **Verify:** golden file diff test; generated file compiles; one e2e or integration test imports it.
 
 - [ ] **P5.1 — Codegen MVP.** `generate test` (or equivalent) emits compiling tests using **only** public SDK APIs. **Verify:** generated project passes tests in CI.
 

@@ -10,7 +10,7 @@
 
 Softprobe Hybrid unifies **HTTP capture, replay, and rule-based dependency injection** behind a **proxy-first** data plane (Envoy + Softprobe WASM) and a **language-neutral control plane** (session, case, rules, policy). Language-level framework patching (Express, Fastify, `fetch`, database drivers, and so on) is **optional** and out of the default product path, to reduce implementation cost for a small team.
 
-Recorded behavior is stored as **one JSON file per test case**, containing an ordered list of **OpenTelemetry–compatible trace payloads** (not NDJSON streams). For **Jest (first stage)**, the **default path** is **`softprobe generate jest-session`** → a **checked-in TypeScript module** that uses **`@softprobe/sdk`** only (`Softprobe` → **`startSession`** → **`loadCaseFromFile`** → **`mockOutbound` / `replayOutbound`**) so **raw `fetch` to `/v1/sessions` never appears** in generated or test code; tests import that module and set **`x-softprobe-session-id`**.
+Recorded behavior is stored as **one JSON file per test case**, containing an ordered list of **OpenTelemetry–compatible trace payloads** (not NDJSON streams). For **Jest (first stage)**, the **default path** is **`softprobe generate jest-session`** → a **checked-in TypeScript module** that uses **`@softprobe/sdk`** only (`Softprobe` → **`startSession`** → **`loadCaseFromFile`** → **`findInCase`** → **`mockOutbound`**) so **raw `fetch` to `/v1/sessions` never appears** in generated or test code; tests import that module and set **`x-softprobe-session-id`**.
 
 The **primary product surface for humans, CI, and AI agents** is the **`softprobe` CLI** (generate + doctor + session for ad-hoc use) and the **TypeScript SDK** helpers that mirror the same JSON control API. **Proxy OTLP** ([proxy-otel-api.md](../spec/protocol/proxy-otel-api.md)) stays an integration detail for proxy authors.
 
@@ -82,7 +82,20 @@ Both handler groups share a **single in-memory session store** (`internal/store/
 
 ### 3.2 Default happy path (replay + Jest, codegen-first)
 
-Tutorials and CI should assume: **one captured case file**, a **generated Jest session module** that **only calls `@softprobe/sdk`** (`startSession`, `loadCaseFromFile`, **`mockOutbound`** / `replayOutbound`, `close`), and tests that **import that module** and set **`x-softprobe-session-id`**. Authors re-run **`softprobe generate …`** after capture changes. **HTTP to `/v1/sessions` and friends is implemented once**, inside the SDK—not in generators or tests.
+Tutorials and CI should assume: **one captured case file**, a **generated Jest session module** that **only calls `@softprobe/sdk`** (`startSession`, `loadCaseFromFile`, **`findInCase`**, **`mockOutbound`**, `close`), and tests that **import that module** and set **`x-softprobe-session-id`**. Authors re-run **`softprobe generate …`** after capture changes. **HTTP to `/v1/sessions` and friends is implemented once**, inside the SDK—not in generators or tests.
+
+#### 3.2.0 Division of Labour: SDK vs. Runtime
+
+| Concern | SDK (TS / Python / Java) | Runtime (`softprobe-runtime`) |
+|---|---|---|
+| Parse captured case (OTLP traces → spans) | **Yes** — in-memory via `findInCase` | No (stores opaque bytes for export only) |
+| Choose which captured response to replay | **Yes** — test author picks via `findInCase` predicate | No |
+| Mutate captured response (timestamps, tokens, …) | **Yes** — returned as a mutable `CapturedResponse` | No |
+| Register explicit rules | **Yes** — `mockOutbound(...)` → `POST /rules` | Stores the rules document as given |
+| Match live HTTP against `when` predicates | No | **Yes** — on each `/v1/inject` |
+| Return `mock` / `error` / passthrough to the proxy | No | **Yes** — deterministic, no case-walking on the hot path |
+
+This replaces the earlier design where the runtime walked OTLP case traces to materialize replay responses. The runtime now only honors explicit `mock` / `error` / `passthrough` / `capture_only` rules; replay authoring is a pure SDK-side concern.
 
 **Prerequisites (unchanged):** runtime + mesh up; **`softprobe doctor`** green; app uses **OpenTelemetry** on outbound so **`traceparent` / `tracestate`** reach the egress proxy ([session-headers.md](../spec/protocol/session-headers.md)).
 
@@ -112,30 +125,45 @@ await session.mockOutbound({
 
 **Style note:** the same call is written **`await softprobe.attach(sessionId).mockOutbound({ … })`** when **`sessionId`** already exists (CLI export, prior step). `attach` returns the same **`SoftprobeSession`** type as **`startSession`**.
 
-**Egress replay from case** (no inline body) uses the same pattern with a different helper:
+**Egress replay from case** uses **`findInCase`** (pure, in-memory lookup against the loaded case) together with **`mockOutbound`**:
 
 ```typescript
-await session.replayOutbound({
-  method: 'GET',
-  pathPrefix: '/fragment',
+// Find the single captured /fragment response in the loaded case.
+const hit = session.findInCase({
   direction: 'outbound',
-  consume: 'many',
+  method: 'GET',
+  path: '/fragment',
+});
+
+// Mutate freely before registering — e.g. bump a timestamp or rotate a token.
+const body = JSON.parse(hit.response.body);
+body.servedAt = new Date().toISOString();
+
+await session.mockOutbound({
+  direction: 'outbound',
+  method: 'GET',
+  path: '/fragment',
+  response: {
+    status: hit.response.status,
+    headers: hit.response.headers,
+    body,
+  },
 });
 ```
 
-(`replayOutbound` compiles to **`then: { action: 'replay' }`** per §8.)
+**`findInCase`** is a **synchronous, zero-network, test-author-facing lookup**. It throws when zero or more than one span in the loaded case matches, surfacing ambiguity at authoring time rather than as a silent runtime miss.
 
-#### 3.2.1 From `mockOutbound` / `replayOutbound` to the next dependency response
+#### 3.2.1 From `mockOutbound` to the next dependency response
 
 This is the **causal chain** implementers should document in SDK READMEs; it is **not** “Envoy cached the upstream HTTP body.”
 
-1. **`mockOutbound` / `replayOutbound`** end in **`POST /v1/sessions/{sessionId}/rules`** with JSON that conforms to [session-rules.request.schema.json](../spec/schemas/session-rules.request.schema.json). The runtime stores that payload on the **session record** in memory (same store the OTLP handler reads). **No rule payload is pushed into Envoy** by these calls.
+1. **`mockOutbound`** ends in **`POST /v1/sessions/{sessionId}/rules`** with JSON that conforms to [session-rules.request.schema.json](../spec/schemas/session-rules.request.schema.json). The runtime stores that payload on the **session record** in memory (same store the OTLP handler reads). **No rule payload is pushed into Envoy** by these calls.
 
-2. When the **app** later issues an **outbound** HTTP call through the mesh, the **proxy** sends **`POST /v1/inject`** with an OTLP **inject** span describing that hop. The runtime **matches** that span against **policy**, the **loaded case**, and **session rules** (§8.3). On a **mock** rule hit it returns **`200`** + OTLP attributes (e.g. **`http.response.body`**) built from the rule; on a **replay** hit it returns **`200`** with attributes taken from the **case**; on **miss** it returns **`404`** and the proxy forwards to the **real** upstream.
+2. When the **app** later issues an **outbound** HTTP call through the mesh, the **proxy** sends **`POST /v1/inject`** with an OTLP **inject** span describing that hop. The runtime **matches** that span against **policy**, **case-embedded rules**, and **session rules** (§8.3). On a **mock** rule hit it returns **`200`** + OTLP attributes (e.g. **`http.response.body`**) built from the rule; on **miss** (or `passthrough` / `capture_only`) it returns **`404`** and the proxy forwards to the **real** upstream. The runtime **does not walk OTLP case traces** on the hot path — case-based replay happens entirely in the SDK via `findInCase`.
 
 3. **Wording:** the runtime holds **session state** used for **inject evaluation**. Use **“inject hit / session rules”**, not **“cached upstream response”**, except when referring explicitly to the **optional proxy-side inject decision cache** in §8.4 (which must invalidate on **`sessionRevision`** change).
 
-**Replace semantics for `POST …/rules` (v1 OSS):** the runtime **replaces** the entire session `rules` blob on each call ([`ApplyRules`](../softprobe-runtime/internal/store/store.go)). The SDK **`mockOutbound` / `replayOutbound`** must therefore **merge** new rules with any rules already applied in-process (or re-fetch before write) so consecutive calls **accumulate** behaviour unless the author calls **`clearRules`**.
+**Replace semantics for `POST …/rules` (v1 OSS):** the runtime **replaces** the entire session `rules` blob on each call ([`ApplyRules`](../softprobe-runtime/internal/store/store.go)). The SDK **`mockOutbound`** must therefore **merge** new rules with any rules already applied in-process (or re-fetch before write) so consecutive calls **accumulate** behaviour unless the author calls **`clearRules`**.
 
 #### 3.2.2 Cleaning up session state and invalidating inject behaviour
 
@@ -158,24 +186,58 @@ export class Softprobe {
     throw new Error('implement');
   }
 
-  /** No extra HTTP — bind an existing `sessionId` for more `mockOutbound` / `replayOutbound` calls. */
+  /** No extra HTTP — bind an existing `sessionId` for more `findInCase` / `mockOutbound` calls. */
   attach(sessionId: string): SoftprobeSession {
     throw new Error('implement');
   }
+}
+
+export interface CapturedResponse {
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+}
+
+export interface CapturedHit {
+  response: CapturedResponse;
+  span: unknown; // the raw OTLP span, exposed for advanced assertions
+}
+
+export interface CaseSpanPredicate {
+  method?: string;
+  path?: string;
+  pathPrefix?: string;
+  host?: string;
+  hostSuffix?: string;
+  direction?: 'inbound' | 'outbound';
+  service?: string;
 }
 
 export class SoftprobeSession {
   /** From `POST /v1/sessions` response (`sessionId`). */
   constructor(readonly id: string, private readonly _baseUrl: string) {}
 
-  /** POST /v1/sessions/{id}/load-case with file bytes */
+  /** POST /v1/sessions/{id}/load-case; also keeps a parsed copy for `findInCase`. */
   async loadCaseFromFile(casePath: string): Promise<void> {
+    throw new Error('implement');
+  }
+
+  /**
+   * Pure, synchronous, in-memory lookup against the case most recently loaded
+   * via `loadCaseFromFile`. Returns the materialized captured response and the
+   * raw OTLP span. Throws when zero or more than one span matches, so authors
+   * disambiguate at authoring time rather than seeing a silent runtime miss.
+   */
+  findInCase(predicate: CaseSpanPredicate): CapturedHit {
     throw new Error('implement');
   }
 
   /**
    * POST /v1/sessions/{id}/rules — builds one mock rule, **merges** with rules
    * already applied on this handle, then sends the **full** rules document (§3.2.1).
+   *
+   * Typical replay authoring: grab a `CapturedHit` via `findInCase`, mutate
+   * `hit.response` as needed, then pass it here.
    */
   async mockOutbound(spec: {
     method?: string;
@@ -187,29 +249,11 @@ export class SoftprobeSession {
     response: { status: number; body?: unknown; headers?: Record<string, string> };
     id?: string;
     priority?: number;
-    consume?: 'once' | 'many';
   }): Promise<void> {
     throw new Error('implement');
   }
 
-  /**
-   * Same merge-then-**replace** semantics as `mockOutbound`, but `then.action: replay`.
-   */
-  async replayOutbound(spec: {
-    method?: string;
-    path?: string;
-    pathPrefix?: string;
-    host?: string;
-    hostSuffix?: string;
-    direction?: 'inbound' | 'outbound';
-    consume?: 'once' | 'many';
-    id?: string;
-    priority?: number;
-  }): Promise<void> {
-    throw new Error('implement');
-  }
-
-  /** POST …/rules with empty `rules` array — clears session-local mocks/replay rules (§3.2.2). */
+  /** POST …/rules with empty `rules` array — clears session-local mock rules (§3.2.2). */
   async clearRules(): Promise<void> {
     throw new Error('implement');
   }
@@ -221,7 +265,7 @@ export class SoftprobeSession {
 }
 ```
 
-**Step 4 — Generated file** (committed or regenerated in CI): **only** imports `@softprobe/sdk` and strings together `startSession` → `loadCaseFromFile` → **`mockOutbound` / `replayOutbound`** → return `{ sessionId, close }`. Generator fills **arguments** from capture metadata; it does **not** emit HTTP.
+**Step 4 — Generated file** (committed or regenerated in CI): **only** imports `@softprobe/sdk` and strings together `startSession` → `loadCaseFromFile` → **`findInCase` + `mockOutbound`** → return `{ sessionId, close }`. Generator fills **arguments** from capture metadata; it does **not** emit HTTP.
 
 ```typescript
 // test/generated/checkout.replay.session.ts
@@ -248,11 +292,17 @@ export async function startCheckoutReplaySession(): Promise<{
     response: { status: 200, body: { id: 'pi_test', status: 'succeeded' } },
   });
 
-  await session.replayOutbound({
+  const fragmentHit = session.findInCase({
     method: 'GET',
-    pathPrefix: '/fragment',
+    path: '/fragment',
     direction: 'outbound',
-    consume: 'many',
+  });
+
+  await session.mockOutbound({
+    method: 'GET',
+    path: '/fragment',
+    direction: 'outbound',
+    response: fragmentHit.response,
   });
 
   return {
@@ -493,7 +543,7 @@ sequenceDiagram
 1. **Envoy + WASM** sends **`POST /v1/inject`** to **`softprobe-runtime`** with OTLP-shaped span data (per [proxy-otel-api.md](../spec/protocol/proxy-otel-api.md)).
 2. The **OTLP handler** reads **only** session-scoped material already stored via the **control API** (`load-case`, `rules`, `policy`, …) and performs **lookup and composition** (precedence per §8.3) over that stored data.
 
-**Materialization model:** **`@softprobe/sdk`** exposes **`SoftprobeSession.mockOutbound`**, **`replayOutbound`**, **`loadCaseFromFile`**, **`clearRules`**, **`close`**, and so on; those methods are the **only** supported way to turn **author intent** into **`POST …/rules` / `load-case`** payloads. **`mockOutbound` / `replayOutbound` push rule documents into the runtime session store**; the **next** matching **`/v1/inject`** from the proxy **reads** that store and returns OTLP **hit** attributes (it does **not** mean “the upstream once responded and was cached at TCP layer”). **Generated Jest modules** and **tests** call only these methods—**not** raw `fetch` to `/v1/sessions`. The runtime remains a **small, deterministic interpreter** over stored JSON (plus replay cursor semantics), not a host for user-supplied script engines.
+**Materialization model:** **`@softprobe/sdk`** exposes **`SoftprobeSession.loadCaseFromFile`**, **`findInCase`**, **`mockOutbound`**, **`clearRules`**, **`close`**, and so on; those methods are the **only** supported way to turn **author intent** into **`POST …/rules` / `load-case`** payloads. **`mockOutbound` pushes rule documents into the runtime session store**; the **next** matching **`/v1/inject`** from the proxy **reads** that store and returns OTLP **hit** attributes (it does **not** mean “the upstream once responded and was cached at TCP layer”). **Case-based replay is performed client-side** by `findInCase` and then materialized as an explicit `mock` rule, so the runtime never walks OTLP case traces on the hot path. **Generated Jest modules** and **tests** call only these SDK methods—**not** raw `fetch` to `/v1/sessions`. The runtime remains a **small, deterministic interpreter** over stored JSON, not a host for user-supplied script engines.
 
 ---
 
@@ -571,7 +621,7 @@ Tests do **not** call Envoy directly. They:
 
 1. **Start or attach to** a **Softprobe Runtime** process (local sidecar, testcontainer, or cluster service for advanced setups).
 2. **Create a session** with desired `mode` (`capture` | `replay` | `generate`) and **policy**.
-3. **Load a case** and/or **register mocks/replay** through **`@softprobe/sdk`** (`SoftprobeSession.loadCaseFromFile`, **`mockOutbound`**, **`replayOutbound`**, …), which is the **only** supported way to hit the [HTTP control API](../spec/protocol/http-control-api.md) from TypeScript tests; do not duplicate `fetch` in app or generated code.
+3. **Load a case** and/or **register mocks** through **`@softprobe/sdk`** (`SoftprobeSession.loadCaseFromFile`, **`findInCase`**, **`mockOutbound`**, …), which is the **only** supported way to hit the [HTTP control API](../spec/protocol/http-control-api.md) from TypeScript tests; do not duplicate `fetch` in app or generated code.
 4. Ensure **every HTTP request** that should participate carries:
 
    - `x-softprobe-session-id: <sessionId>` (required per [session-headers.md](../spec/protocol/session-headers.md))
@@ -583,7 +633,7 @@ Tests do **not** call Envoy directly. They:
 
 ### 7.2 Jest — default is generated session + SDK (see §3.2)
 
-The **normative Jest story** is **§3.2**: `softprobe generate jest-session` emits **`Softprobe` + `mockOutbound` / `replayOutbound`** only; tests import it and set **`x-softprobe-session-id`**.
+The **normative Jest story** is **§3.2**: `softprobe generate jest-session` emits **`Softprobe` + `findInCase` + `mockOutbound`** only; tests import it and set **`x-softprobe-session-id`**.
 
 **Ad-hoc** (no generator): same **`mockOutbound`** surface—no raw `/v1/sessions` in the test file.
 

@@ -3,3 +3,4 @@
  */
 export * from './api';
 export * from './runtime-client';
+export * from './softprobe';

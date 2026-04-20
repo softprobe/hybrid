@@ -30,6 +30,10 @@ public final class Client {
       return postJson("/v1/sessions/" + sessionId + "/load-case", caseJson);
     }
 
+    public Map<String, Object> updateRules(String sessionId, String rulesJson) {
+      return postJson("/v1/sessions/" + sessionId + "/rules", rulesJson);
+    }
+
     public Map<String, Object> close(String sessionId) {
       return postJson("/v1/sessions/" + sessionId + "/close", "{}");
     }

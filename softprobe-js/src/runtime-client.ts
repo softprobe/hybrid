@@ -79,6 +79,10 @@ export class SoftprobeRuntimeClient {
     return this.postJson<SessionCloseResponse>(`/v1/sessions/${sessionId}/close`, {});
   }
 
+  async updateRules(sessionId: string, rulesDocument: unknown): Promise<SessionCreateResponse> {
+    return this.postJson<SessionCreateResponse>(`/v1/sessions/${sessionId}/rules`, rulesDocument);
+  }
+
   private async postJson<T>(path: string, body: unknown): Promise<T> {
     const response = await this.fetchImpl(this.url(path), {
       method: 'POST',
