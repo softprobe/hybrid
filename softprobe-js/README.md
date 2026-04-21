@@ -102,3 +102,7 @@ npm run build
 
 The in-repo harnesses under [`e2e/jest-replay/`](../e2e/jest-replay/) import
 this package by relative path rather than from npm.
+
+## License
+
+Apache-2.0. See [`LICENSE`](./LICENSE) and the monorepo [`LICENSING.md`](../LICENSING.md) for the full dual-license map (server components are under the Softprobe Source License 1.0).

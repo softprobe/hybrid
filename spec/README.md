@@ -65,3 +65,7 @@ spec/
 The initial content in this repo establishes the target architecture and contract boundaries. It is intentionally small. The next step is to harden these docs into versioned schemas, OpenAPI definitions, and golden compatibility fixtures.
 
 To validate the current spec set locally, run `bash spec/scripts/validate-spec.sh`.
+
+## License
+
+Apache-2.0. See [`LICENSE`](./LICENSE) and the monorepo [`LICENSING.md`](../LICENSING.md) for the full dual-license map (server components are under the Softprobe Source License 1.0).

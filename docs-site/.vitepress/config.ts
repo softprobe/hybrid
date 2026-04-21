@@ -134,7 +134,8 @@ export default defineConfig({
     },
 
     footer: {
-      message: 'Released under the Apache-2.0 license.',
+      message:
+        'Server components under the <a href="https://github.com/softprobe/softprobe/blob/main/LICENSE">Softprobe Source License 1.0</a>; SDKs and schemas under Apache-2.0. See <a href="https://github.com/softprobe/softprobe/blob/main/LICENSING.md">LICENSING.md</a>.',
       copyright: 'Copyright © 2026 Softprobe Inc.',
     },
   },

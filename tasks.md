@@ -56,11 +56,12 @@ Keep users from copy-pasting broken snippets while we ship the backing features.
 - [x] **PD6.0c — Banner on `docs-site/guides/run-a-suite-at-scale.md`.** Replaced with a `::: tip Ships in this build` pointer (including a link to the `e2e/cli-suite-run/` harness) now that PD1.7g is done.
   **Verify:** guide no longer carries a "Not shipped yet" banner; intro tip references the e2e harness.
 
-- [ ] **PD6.0d — K8s deployment footnotes.** In `docs-site/deployment/kubernetes.md`, mark `/metrics`, `SOFTPROBE_LOG_LEVEL`, `{sessionId}` template, and object-storage URLs as _planned_.
+- [x] **PD6.0d — K8s deployment footnotes.** `docs-site/deployment/kubernetes.md` now carries `::: warning Not shipped yet` banners on the `/metrics`, `SOFTPROBE_LOG_LEVEL`, `{sessionId}` template, and object-storage URL subsections, each linking to the relevant PD4 task (`PD4.1a`, `PD4.2a`, `PD4.3a`, `PD4.4a`).
   **Verify:** each affected subsection carries a planned-note linking to its PD4 task.
 
-- [ ] **PD6.0e — FAQ license claim.** Either land PD5.1 first or rewrite the Apache-2.0 paragraph in `docs-site/faq.md` to reflect actual LICENSE coverage.
-  **Verify:** FAQ claim matches `find . -maxdepth 3 -iname LICENSE`.
+- [x] **PD6.0e — FAQ license claim.** Resolved by adopting a dual-license split:
+  **Softprobe Source License 1.0** (SPDX `LicenseRef-Softprobe-Source-License-1.0` — an FSL-1.1-derived license with a materially broader Competing Use clause covering on-premises, bundled, and rebranded redistribution in addition to hosted-service redistribution) for `softprobe-runtime/`, `softprobe-proxy/`, and the CLI; **Apache-2.0** for the four SDKs and `spec/`. Root `LICENSE`, per-package `LICENSE`s, `LICENSING.md` path map, rewritten FAQ (with "Can I build a commercial product that uses captured traffic?" guidance), roadmap, VitePress footer, and package manifests (`softprobe-js/package.json`, `softprobe-java/pom.xml`) all landed together.
+  **Verify:** `find . -maxdepth 3 -iname LICENSE -not -path '*/node_modules/*'` lists root + all six packages + `spec/`; `head -1 LICENSE` matches `# Softprobe Source License, Version 1.0`; `grep -R "Apache 2.0 for all OSS components" docs-site/` returns no matches.
 
 - [ ] **PD6.0f — TS SDK reference banner.** Until PD3 completes, add a `::: warning` at the top of `docs-site/reference/sdk-typescript.md` noting that the error class names and `/hooks` + `/suite` subpaths are a **planned** surface; link to PD3 and to the actual class names in `softprobe-js/src/`.
   **Verify:** banner present; existing reader won't hit a "module not found" surprise without warning.
@@ -73,8 +74,8 @@ One-time cleanup so every downstream feature has somewhere to publish.
 
 **Depends on:** none (can parallelize all items).
 
-- [ ] **PD5.1a — Apache-2.0 LICENSE across the repo.** Add `LICENSE` to repo root, `softprobe-runtime/`, `softprobe-python/`, `softprobe-java/`, `softprobe-go/`. Existing `softprobe-proxy/LICENSE` and `softprobe-js/LICENSE` stay.
-  **Verify:** `find . -maxdepth 3 -iname LICENSE -not -path '*/node_modules/*'` lists all seven (root + six packages).
+- [x] **PD5.1a — LICENSE coverage across the repo.** Superseded by the dual-license change in PD6.0e: root `LICENSE` (Softprobe Source License 1.0), `softprobe-runtime/LICENSE` and `softprobe-proxy/LICENSE` (same), `softprobe-js/LICENSE` (migrated from MIT → Apache-2.0), `softprobe-python/`, `softprobe-java/`, `softprobe-go/`, and `spec/` (all Apache-2.0). `LICENSING.md` maps every path. `softprobe-js/package.json` and `softprobe-java/pom.xml` now declare Apache-2.0.
+  **Verify:** `find . -maxdepth 3 -iname LICENSE -not -path '*/node_modules/*' -not -path '*/target/*'` lists root + `softprobe-{runtime,proxy,js,python,java,go}/LICENSE` + `spec/LICENSE` (8 files total).
 
 - [ ] **PD5.2a — CLI version string.** Replace `const version = "0.0.0-dev"` in `cmd/softprobe/main.go` with a build-time `-ldflags -X` injection from a single source (`internal/version/version.go`). `main_test.go` asserts the injected value.
   **Verify:** `go build -ldflags "-X .../version.Version=v0.5.0"` produces `softprobe --version` → `softprobe v0.5.0 (spec http-control-api@v1)`.
@@ -301,6 +302,62 @@ The TS SDK reference (`docs-site/reference/sdk-typescript.md`) imports symbols t
 
 - [ ] **PD6.4 — Refresh `roadmap.md`.** Move items from _In progress_ to _Shipped_ as phases complete.
   **Verify:** roadmap entries match `git tag` + `docs-site/changelog.md`.
+
+---
+
+## Phase PD7 — Dogfood `softprobe` against itself
+
+Use our own capture-and-replay engine to pin the CLI + SDK control-plane contract against a recorded runtime. Cases become both tests and living protocol documentation. Design note and rationale: [`docs/dogfooding.md`](docs/dogfooding.md).
+
+**Depends on:** PD2 (auth headers must land before capture so cases reflect the real contract). PD1.7 is recommended for PD7.5 only.
+
+### PD7.1 Reference build + capture driver
+
+- [ ] **PD7.1a — `DOGFOOD_REF` policy.** Add `spec/dogfood/REFERENCE.md` defining the reference build used to record cases: initially `main@<sha>` promoted via a protected-branch check; post-PD5.3a switch to released tags (`ghcr.io/softprobe/softprobe-runtime:v<tag>`). Document the invariant: a case refresh MUST land in a PR that contains no runtime or SDK code changes (per `docs/dogfooding.md` §5 best practice 9).
+  **Verify:** `rg 'DOGFOOD_REF' spec/dogfood/REFERENCE.md` matches; CI doc lint passes; PD5.3a graduation note present.
+
+- [ ] **PD7.1b — Deterministic capture driver.** Land `cmd/softprobe-dogfood-capture/` (Go) and `spec/dogfood/capture.sh` that: (1) starts `e2e/docker-compose.yaml`, (2) runs the canonical CLI flow from `docs/dogfooding.md` §7 (`doctor` → `session start` → `load-case` → `rules apply` → `policy set --strict` → `session stats` → `session close`) with egress proxy on `:8084` and `SOFTPROBE_API_TOKEN=sp_dogfood`, (3) post-processes the captured case to canonicalize session ids, timestamps, and trace ids to stable placeholders, (4) writes `spec/examples/cases/control-plane-v1.case.json`. Use `spec/examples/cases/fragment-happy-path.case.json` as the inner case the CLI loads.
+  **Verify:** running the driver twice produces byte-identical output; golden test in `cmd/softprobe-dogfood-capture/` pins the canonicalization.
+
+- [ ] **PD7.1c — `make capture-refresh` target.** Root `Makefile` target (and `softprobe-runtime/Makefile` counterpart) runs the driver and prints `git diff -- spec/examples/cases/control-plane-v1.case.json`. Refuses to run if the working tree has uncommitted runtime or SDK changes (per `docs/dogfooding.md` §5.9).
+  **Verify:** unit test invokes the target on a clean tree and asserts no-op diff on the second invocation; dirty-tree test asserts non-zero exit.
+
+### PD7.2 CLI replay test (additive, not replacement)
+
+- [ ] **PD7.2a — `cmd/softprobe/dogfood_replay_test.go`.** Start a real `softprobe-runtime` (via the existing in-process harness used by `auth_test.go`), load `spec/examples/cases/control-plane-v1.case.json` into a session, run each CLI subcommand through the canonical flow, assert every outbound HTTP request matched a recorded rule. Existing `main_test.go` and `auth_test.go` stay untouched (per `docs/dogfooding.md` §5.2).
+  **Verify:** `go test ./cmd/softprobe/... -run Dogfood` green; mutating the committed case to expect a different `Authorization` value fails the test with a clear message.
+
+- [ ] **PD7.2b — Failure taxonomy.** Replay errors distinguish *code regression*, *case staleness*, and *transport failure* (per `docs/dogfooding.md` §5.6), each mapping to a documented CLI exit code (`3` runtime unreachable, `5` schema/validation) from `docs-site/reference/cli.md`.
+  **Verify:** three negative tests, one per class; each asserts the exit code and a substring of the error message.
+
+### PD7.3 Cross-SDK parity using the same case
+
+- [ ] **PD7.3a — TS SDK parity test.** `softprobe-js/src/__tests__/parity-dogfood.test.ts` loads `spec/examples/cases/control-plane-v1.case.json` into a fake runtime and drives the full facade (`loadCaseFromFile`, `mockOutbound`, `setPolicy`, `setAuthFixtures`, `close`) through the recorded conversation. Asserts every outbound HTTP hits a recorded rule (`docs/dogfooding.md` §3 in-scope item 2).
+  **Verify:** removing auth header support from `postJson` regresses this test.
+
+- [ ] **PD7.3b — Python SDK parity test.** `softprobe-python/tests/test_parity_dogfood.py` — same semantics as PD7.3a.
+  **Verify:** as PD7.3a, against the Python `Client`.
+
+- [ ] **PD7.3c — Java SDK parity test.** `softprobe-java/src/test/java/.../ParityDogfoodTest.java` — same semantics as PD7.3a.
+  **Verify:** as PD7.3a, against the Java `Client`.
+
+- [ ] **PD7.3d — Go SDK parity test.** `softprobe-go/softprobe/parity_dogfood_test.go` — same semantics as PD7.3a.
+  **Verify:** as PD7.3a, against the Go `Client`.
+
+### PD7.4 CI refresh workflow
+
+- [ ] **PD7.4a — Nightly refresh job.** `.github/workflows/dogfood-refresh.yml` runs on a schedule and on manual dispatch. If `make capture-refresh` produces a diff, it opens a PR titled `chore(dogfood): refresh control-plane-v1.case.json` with the diff embedded in the body. Never auto-merges; never runs on PRs that modify runtime or SDK code (per `docs/dogfooding.md` §5.5, §5.9).
+  **Verify:** workflow green on a seeded manual dispatch; verify the PR-open path by temporarily perturbing the recorded case.
+
+- [ ] **PD7.4b — Refresh playbook.** `docs-site/guides/contribute-dogfood.md` documents: when a dogfood test fails locally, run `make capture-refresh`, inspect the diff, and either fix the code regression or land the protocol change as a standalone refresh PR. Links from `AGENTS.md` section 12 and from `docs/dogfooding.md` §5.5.
+  **Verify:** guide renders on the docs site; cross-links present.
+
+### PD7.5 Docs-as-suite (optional)
+
+**Depends on:** PD1.7 (suite runner), PD7.2a (proves the replay shape).
+
+- [ ] **PD7.5a — `docs/snippets.suite.yaml`.** Extract every copy-paste CLI flow from `docs-site/guides/` into a suite. CI runs `softprobe suite run docs/snippets.suite.yaml` and fails if a documented snippet no longer matches the real CLI behavior (per `docs/dogfooding.md` §3 in-scope item 3).
+  **Verify:** intentionally breaking one snippet fails the suite with a line-accurate error; reverting it returns green.
 
 ---
 

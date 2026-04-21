@@ -18,7 +18,7 @@ The tradeoff is that you run an Envoy sidecar (locally via Docker, in production
 
 | Aspect | Softprobe | Hoverfly | Speedscale |
 |---|---|---|---|
-| License | Apache 2.0 OSS | Apache 2.0 OSS | Commercial |
+| License | Softprobe Source License 1.0 (server) + Apache-2.0 (SDKs) | Apache 2.0 OSS | Commercial |
 | Interception | Envoy + WASM sidecar | Dedicated reverse proxy | Sidecar or agent |
 | Case format | OTLP JSON (standard) | Custom JSON | Custom |
 | SDKs | 4 languages | 1 (Go client) | No first-party SDK |
@@ -149,11 +149,39 @@ In v1 OSS, no — sessions are in-process. In hosted, yes — the storage layer 
 
 ### Under what license is Softprobe released?
 
-**Apache-2.0** for all OSS components: runtime, SDKs, proxy WASM, CLI, and this documentation. Commercial-friendly. No CLA required for contributions up to 500 lines; larger contributions require a DCO sign-off.
+Softprobe uses a **dual-license split** — see [`LICENSING.md`](https://github.com/softprobe/softprobe/blob/main/LICENSING.md) for the full path map.
+
+- **Server-side** (`softprobe-runtime`, `softprobe-proxy`, the `softprobe` CLI): [**Softprobe Source License 1.0**](https://github.com/softprobe/softprobe/blob/main/LICENSE) (SPDX: `LicenseRef-Softprobe-Source-License-1.0`). This is a source-available license derived from the [Functional Source License 1.1](https://fsl.software) with a broader non-compete clause — it restricts any competing use (hosted, on-premises, bundled, or rebranded), not just hosted-service redistribution. Free to use for your own internal business, research, and consulting. Every release auto-re-licenses to Apache-2.0 two years after its publication date and the non-compete restriction lifts completely at that point.
+- **Client SDKs and protocol schemas** (`softprobe-js`, `-python`, `-java`, `-go`, `spec/`): plain [**Apache License, Version 2.0**](https://www.apache.org/licenses/LICENSE-2.0). Embed them in proprietary commercial products with no additional restrictions.
+
+No CLA required for contributions up to 500 lines; larger contributions require a DCO sign-off.
 
 ### Can I use Softprobe in a commercial product?
 
-Yes. Apache-2.0 permits commercial use, distribution, modification, and private/public use. Trademark use (logo, name) requires written permission for non-incidental use.
+**Yes, for the SDKs** — they're Apache-2.0, so embedding them in commercial products is unrestricted.
+
+**For the server-side, it depends on what kind of commercial product.** The Softprobe Source License permits commercial internal use, commercial consulting, and redistribution — but it prohibits using the server components in a product or service offered to third parties that competes with Softprobe (HTTP/RPC capture, replay, session-based mocking, service virtualization, or record-and-replay regression testing). That restriction applies whether the competing product is a hosted service, an on-premises appliance, a bundled component inside a larger product, or a rebranded fork. If your use case falls in that category, contact `sales@softprobe.io` for commercial licensing.
+
+### Can I run Softprobe on my own infrastructure in production?
+
+Yes, unreservedly. Running Softprobe internally — including in production CI, for your own company's workloads, at any scale, across any commercial domain — is a Permitted Purpose under the Softprobe Source License. The non-compete restriction only engages when the server components are redistributed or offered to third parties as a replay-testing product or service.
+
+### Can I build a commercial product that uses captured traffic?
+
+Yes, in general — as long as the product isn't *itself* a replay-testing / traffic-mocking / service-virtualization competitor. Concretely:
+
+- Building an observability product that consumes Softprobe case files for analytics: **fine** (not a Competing Use).
+- Building a CI tool that embeds the `softprobe` CLI to run your customers' tests: **also generally fine** if your product's primary value is CI orchestration rather than replay testing itself; the CLI binary is distributed only as a supporting component. Contact us if you want certainty.
+- Building a "managed replay testing service" where customers upload cases and you replay them: **Competing Use** — you need a commercial license.
+- Building an on-premises appliance that wraps Softprobe and sells replay testing as its headline feature: **Competing Use**.
+
+When in doubt, email `legal@softprobe.io` before shipping.
+
+### Why not stock FSL 1.1 or Apache-2.0 for the server?
+
+Apache-2.0 on the server side means a larger cloud provider or an on-prem vendor can take the code, rebrand it, out-spend us on marketing, and never contribute back. Stock FSL 1.1 only plugs the *hosted-service* version of that loophole — it still permits on-premises rebranding and product bundling, which is also a problem for a company whose product is installable software.
+
+The Softprobe Source License plugs both loopholes with a broader Competing Use definition while preserving FSL's other features verbatim: the 2-year Apache-2.0 conversion, the explicit internal-use / research / consulting permissions, and the patent grant structure. Older releases always grow more permissive over time — nothing is retroactively clawed back.
 
 ### Does the hosted service require attribution?
 

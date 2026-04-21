@@ -112,3 +112,9 @@ Older Softprobe materials sometimes described this proxy as an analytics or
 dashboard-oriented "agent". That is no longer the canonical product story for
 this repo. The proxy's current role is test-time HTTP interception for the
 hybrid capture/replay platform.
+
+## License
+
+Softprobe Source License 1.0 (SPDX `LicenseRef-Softprobe-Source-License-1.0`) — a source-available license derived from the [Functional Source License 1.1](https://fsl.software) with a broader Competing Use clause. You may use, modify, and redistribute this code for your own internal, research, and consulting purposes at any scale. You may **not** use it in any product or service — hosted, on-premises, bundled, or rebranded — that competes with Softprobe's commercial offerings (replay testing, traffic capture, service virtualization, etc.). Each release automatically converts to Apache-2.0 two years after publication, at which point the Competing Use restriction lifts. See [`LICENSE`](./LICENSE), the repo's [`LICENSING.md`](../LICENSING.md), and the [FAQ licensing section](https://softprobe.dev/faq#licensing).
+
+For commercial licensing outside the Softprobe Source License grant: `sales@softprobe.io`.

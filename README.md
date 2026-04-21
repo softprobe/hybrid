@@ -79,3 +79,26 @@ is the source of truth.
 Follow [`AGENTS.md`](./AGENTS.md) and [`tasks.md`](./tasks.md). Prefer extending
 or correcting the contracts in `spec/` before making incompatible runtime,
 proxy, or SDK changes.
+
+## License
+
+Softprobe uses a **dual-license split** — see [`LICENSING.md`](./LICENSING.md)
+for the full path map and plain-English summary.
+
+- **Server-side** (`softprobe-runtime/`, `softprobe-proxy/`, the `softprobe`
+  CLI): [Softprobe Source License 1.0](./LICENSE) (SPDX
+  `LicenseRef-Softprobe-Source-License-1.0`), a source-available license
+  derived from the [Functional Source License 1.1](https://fsl.software)
+  with a broader Competing Use clause. Free for your own internal,
+  research, and consulting use at any scale; restricted from being used
+  in any product or service — hosted, on-premises, bundled, or rebranded
+  — that competes with Softprobe. Every release auto-re-licenses to
+  Apache-2.0 two years after its publication date and the Competing Use
+  restriction lifts at that point.
+- **Client SDKs and schemas** (`softprobe-js/`, `softprobe-python/`,
+  `softprobe-java/`, `softprobe-go/`, `spec/`): plain
+  [Apache License, Version 2.0](./softprobe-js/LICENSE). Embed them in
+  proprietary commercial products with no additional restrictions.
+
+For commercial licensing (hosting, OEM, redistribution outside the
+Softprobe Source License grant): `sales@softprobe.io`.
