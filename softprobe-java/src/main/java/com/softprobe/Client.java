@@ -52,15 +52,34 @@ public final class Client {
 
   private final URI baseUri;
   private final Transport transport;
+  private final String apiToken;
   private final Sessions sessions = new Sessions();
 
   public Client(String baseUrl) {
-    this(baseUrl, Client::sendWithHttpClient);
+    this(baseUrl, Client::sendWithHttpClient, null);
   }
 
   public Client(String baseUrl, Transport transport) {
+    this(baseUrl, transport, null);
+  }
+
+  /** Convenience factory: default HTTP transport with an explicit bearer token. */
+  public static Client withApiToken(String baseUrl, String apiToken) {
+    return new Client(baseUrl, Client::sendWithHttpClient, apiToken);
+  }
+
+  /**
+   * Creates a client that attaches {@code Authorization: Bearer <token>} on every
+   * control-plane request when a bearer token is configured. Token resolution:
+   * the explicit {@code apiToken} argument wins; otherwise we read the
+   * {@code SOFTPROBE_API_TOKEN} environment variable. Blank / whitespace-only
+   * tokens are treated as "no token" — matching the runtime's
+   * {@code withOptionalBearerAuth} contract.
+   */
+  public Client(String baseUrl, Transport transport, String apiToken) {
     this.baseUri = URI.create(baseUrl.endsWith("/") ? baseUrl : baseUrl + "/");
     this.transport = transport;
+    this.apiToken = apiToken;
   }
 
   public Sessions sessions() {
@@ -68,6 +87,13 @@ public final class Client {
   }
 
   private Map<String, Object> postJson(String path, String body) {
+    Map<String, String> headers = new LinkedHashMap<>();
+    headers.put("content-type", "application/json");
+    String token = resolveBearerToken(apiToken);
+    if (token != null) {
+      headers.put("authorization", "Bearer " + token);
+    }
+
     Response response;
     try {
       response =
@@ -75,7 +101,7 @@ public final class Client {
               new Request(
                   "POST",
                   baseUri.resolve(path),
-                  Map.of("content-type", "application/json"),
+                  Map.copyOf(headers),
                   body));
     } catch (IOException e) {
       throw new SoftprobeRuntimeUnreachableException(
@@ -90,6 +116,15 @@ public final class Client {
     return parseFlatJsonObject(response.body());
   }
 
+  private static String resolveBearerToken(String explicit) {
+    String candidate = explicit != null ? explicit : System.getenv("SOFTPROBE_API_TOKEN");
+    if (candidate == null) {
+      return null;
+    }
+    String trimmed = candidate.trim();
+    return trimmed.isEmpty() ? null : trimmed;
+  }
+
   private static SoftprobeRuntimeException classifyRuntimeException(int status, String body) {
     // Recognize the stable `{"error":{"code":"unknown_session",...}}` envelope
     // without pulling in a JSON dependency here (the thin Client keeps its
@@ -102,12 +137,14 @@ public final class Client {
 
   private static Response sendWithHttpClient(Request request) throws IOException {
     HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-    HttpRequest httpRequest =
+    HttpRequest.Builder builder =
         HttpRequest.newBuilder(request.uri())
             .timeout(Duration.ofSeconds(5))
-            .method(request.method(), HttpRequest.BodyPublishers.ofString(request.body()))
-            .header("content-type", request.headers().get("content-type"))
-            .build();
+            .method(request.method(), HttpRequest.BodyPublishers.ofString(request.body()));
+    for (Map.Entry<String, String> header : request.headers().entrySet()) {
+      builder.header(header.getKey(), header.getValue());
+    }
+    HttpRequest httpRequest = builder.build();
 
     try {
       HttpResponse<String> httpResponse =

@@ -59,4 +59,60 @@ class ClientTest {
     assertEquals(404, error.statusCode());
     assertEquals("{\"error\":\"unknown session\"}", error.body());
   }
+
+  @Test
+  void attachesBearerFromExplicitApiTokenOverload() {
+    List<Client.Request> calls = new ArrayList<>();
+    Client.Transport transport = request -> {
+      calls.add(request);
+      return new Client.Response(200, "{\"sessionId\":\"s\",\"sessionRevision\":0}");
+    };
+    Client client = new Client("http://runtime.test", transport, "sp_explicit_token");
+
+    client.sessions().create("replay");
+
+    assertEquals("Bearer sp_explicit_token", calls.get(0).headers().get("authorization"));
+  }
+
+  @Test
+  void doesNotAttachAuthorizationHeaderWhenTokenIsNull() {
+    List<Client.Request> calls = new ArrayList<>();
+    Client.Transport transport = request -> {
+      calls.add(request);
+      return new Client.Response(200, "{\"sessionId\":\"s\",\"sessionRevision\":0}");
+    };
+    // Three-arg overload with null explicit token; the env var is not under
+    // our control here, so we only assert that the *explicit* null path does
+    // not inject a header when the env var resolves to empty/unset on CI.
+    Client client = new Client("http://runtime.test", transport, null);
+
+    client.sessions().create("replay");
+
+    String envToken = System.getenv("SOFTPROBE_API_TOKEN");
+    if (envToken == null || envToken.isBlank()) {
+      if (calls.get(0).headers().containsKey("authorization")) {
+        throw new AssertionError(
+            "expected no Authorization header when neither explicit token nor env var is set");
+      }
+    }
+  }
+
+  @Test
+  void explicitTokenIsTrimmedAndEmptyTokenIsNoOp() {
+    List<Client.Request> calls = new ArrayList<>();
+    Client.Transport transport = request -> {
+      calls.add(request);
+      return new Client.Response(200, "{\"sessionId\":\"s\",\"sessionRevision\":0}");
+    };
+    Client client = new Client("http://runtime.test", transport, "   ");
+
+    client.sessions().create("replay");
+
+    String envToken = System.getenv("SOFTPROBE_API_TOKEN");
+    if (envToken == null || envToken.isBlank()) {
+      if (calls.get(0).headers().containsKey("authorization")) {
+        throw new AssertionError("whitespace-only explicit token should not send Authorization");
+      }
+    }
+  }
 }

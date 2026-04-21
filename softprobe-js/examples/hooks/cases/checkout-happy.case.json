@@ -1,0 +1,80 @@
+{
+  "version": "1.0.0",
+  "caseId": "checkout-happy",
+  "suite": "checkout",
+  "mode": "replay",
+  "createdAt": "2026-04-05T12:00:00Z",
+  "traces": [
+    {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              { "key": "service.name", "value": { "stringValue": "checkout-api" } }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "spans": [
+                {
+                  "traceId": "b1c2d3e4f5a6978869aabbccddee1122",
+                  "spanId": "00aabbccddeeff01",
+                  "name": "POST /v1/tokens",
+                  "kind": 3,
+                  "attributes": [
+                    { "key": "sp.session.id", "value": { "stringValue": "sess_hooks_demo" } },
+                    { "key": "sp.traffic.direction", "value": { "stringValue": "outbound" } },
+                    { "key": "sp.span.type", "value": { "stringValue": "extract" } },
+                    { "key": "url.host", "value": { "stringValue": "api.stripe.com" } },
+                    { "key": "url.path", "value": { "stringValue": "/v1/tokens" } },
+                    { "key": "http.request.method", "value": { "stringValue": "POST" } },
+                    { "key": "http.request.body", "value": { "stringValue": "" } },
+                    { "key": "http.response.status_code", "value": { "intValue": 200 } },
+                    { "key": "http.response.header.content-type", "value": { "stringValue": "application/json" } },
+                    {
+                      "key": "http.response.body",
+                      "value": {
+                        "stringValue": "{\"id\":\"tok_auto_abc123\",\"object\":\"token\",\"source\":{\"card\":{\"number\":\"**** **** **** 4242\",\"brand\":\"visa\"}}}"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "traceId": "b1c2d3e4f5a6978869aabbccddee1122",
+                  "spanId": "00aabbccddeeff02",
+                  "name": "POST /checkout",
+                  "kind": 2,
+                  "attributes": [
+                    { "key": "sp.session.id", "value": { "stringValue": "sess_hooks_demo" } },
+                    { "key": "sp.traffic.direction", "value": { "stringValue": "inbound" } },
+                    { "key": "sp.span.type", "value": { "stringValue": "inject" } },
+                    { "key": "url.host", "value": { "stringValue": "checkout-api.local" } },
+                    { "key": "url.path", "value": { "stringValue": "/checkout" } },
+                    { "key": "http.request.method", "value": { "stringValue": "POST" } },
+                    {
+                      "key": "http.request.body",
+                      "value": {
+                        "stringValue": "{\"card\":{\"number\":\"**** **** **** 4242\"},\"items\":[{\"price\":10.0},{\"price\":5.5}]}"
+                      }
+                    },
+                    { "key": "http.response.status_code", "value": { "intValue": 200 } },
+                    { "key": "http.response.header.content-type", "value": { "stringValue": "application/json; charset=utf-8" } },
+                    { "key": "http.response.header.x-request-id", "value": { "stringValue": "req_abcdef" } },
+                    {
+                      "key": "http.response.body",
+                      "value": {
+                        "stringValue": "{\"total\":15.5,\"items\":[{\"price\":10.0},{\"price\":5.5}]}"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "rules": [],
+  "fixtures": []
+}

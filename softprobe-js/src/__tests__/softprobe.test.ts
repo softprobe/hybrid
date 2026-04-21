@@ -396,6 +396,34 @@ describe('Softprobe', () => {
 
     await rm(tmpDir, { recursive: true, force: true });
   });
+
+  it('threads apiToken through to every runtime call via the facade', async () => {
+    const calls: Array<{ headers?: Record<string, string> }> = [];
+    const softprobe = new Softprobe({
+      baseUrl: 'http://runtime.test',
+      apiToken: 'sp_facade_token',
+      fetchImpl: async (_input, init) => {
+        calls.push({ headers: init?.headers });
+        return jsonResponse({ sessionId: 'sess_auth', sessionRevision: 0 });
+      },
+    });
+
+    const session = await softprobe.startSession({ mode: 'replay' });
+    await session.mockOutbound({
+      direction: 'outbound',
+      host: 'api.stripe.com',
+      path: '/v1/payment_intents',
+      response: { status: 200, body: { ok: true } },
+    });
+    await session.close();
+
+    expect(calls.length).toBeGreaterThanOrEqual(3);
+    for (const [index, call] of calls.entries()) {
+      expect(call.headers?.authorization).toBe(`Bearer sp_facade_token`);
+      expect(call.headers?.['content-type']).toBe('application/json');
+      expect(index).toBeGreaterThanOrEqual(0);
+    }
+  });
 });
 
 function jsonResponse(body: unknown) {

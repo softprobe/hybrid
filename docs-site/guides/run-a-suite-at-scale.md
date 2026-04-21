@@ -1,5 +1,9 @@
 # Run a suite at scale
 
+::: warning Not shipped yet
+The `softprobe suite` runner described on this page is **planned** for v0.6. Tracked as [PD1.7 in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd17-suite-subcommand-the-big-one). Until it lands, use your test framework's native parametrization to iterate over cases: Jest `describe.each`, pytest `@pytest.mark.parametrize`, JUnit `@ParameterizedTest`, or Go `t.Run`. The SDK primitives (`loadCaseFromFile`, `findInCase`, `mockOutbound`) work the same way against one case or thousands; only the scheduler, hooks, and JUnit reporter are missing.
+:::
+
 Hand-written tests are great for a handful of scenarios. But when you capture production sessions in bulk — hundreds, thousands, maybe tens of thousands of `*.case.json` files — writing one Jest test per case doesn't scale.
 
 `softprobe suite run` reads one YAML file and executes every case deterministically, in parallel, emitting JUnit XML for your CI. It's the recommended path for **regression-sweeping captured production traffic**.

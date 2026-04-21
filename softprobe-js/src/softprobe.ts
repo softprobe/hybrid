@@ -11,9 +11,13 @@ import {
   createSoftprobeRuntimeClient,
   SoftprobeRuntimeClient,
   SoftprobeRuntimeClientOptions,
+} from './runtime-client';
+import {
+  CaseLoadError,
+  CaseLookupError,
   SoftprobeRuntimeUnreachableError,
   SoftprobeUnknownSessionError,
-} from './runtime-client';
+} from './errors';
 
 export interface SoftprobeOptions extends Omit<SoftprobeRuntimeClientOptions, 'baseUrl'> {
   baseUrl?: string;
@@ -48,23 +52,19 @@ export interface SoftprobeMockRuleSpec extends SoftprobeRuleSpec {
 export type SoftprobeFindInCaseSpec = CaseSpanPredicate;
 
 export type { CapturedHit } from './core/case/find-span';
-export { SoftprobeRuntimeError, SoftprobeRuntimeUnreachableError, SoftprobeUnknownSessionError } from './runtime-client';
+export {
+  SoftprobeError,
+  RuntimeError,
+  CaseLookupError,
+  CaseLoadError,
+  SoftprobeRuntimeError,
+  SoftprobeRuntimeUnreachableError,
+  SoftprobeUnknownSessionError,
+  SoftprobeCaseLoadError,
+  SoftprobeCaseLookupAmbiguityError,
+} from './errors';
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8080';
-
-export class SoftprobeCaseLoadError extends Error {
-  constructor(message: string, public readonly cause?: unknown) {
-    super(message);
-    this.name = 'SoftprobeCaseLoadError';
-  }
-}
-
-export class SoftprobeCaseLookupAmbiguityError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'SoftprobeCaseLookupAmbiguityError';
-  }
-}
 
 /**
  * Ergonomic SDK facade for the Softprobe control runtime (see `docs/design.md` §3.2).
@@ -77,6 +77,7 @@ export class Softprobe {
     this.client = createSoftprobeRuntimeClient({
       baseUrl,
       fetchImpl: opts.fetchImpl,
+      apiToken: opts.apiToken,
     });
   }
 
@@ -106,20 +107,20 @@ export class SoftprobeSession {
   async loadCaseFromFile(casePath: string): Promise<void> {
     try {
       const caseDocument = JSON.parse(await readFile(casePath, 'utf8'));
-      await this.loadCase(caseDocument);
+      await this.loadCase(caseDocument, casePath);
     } catch (error) {
       if (
-        error instanceof SoftprobeCaseLoadError ||
+        error instanceof CaseLoadError ||
         error instanceof SoftprobeUnknownSessionError ||
         error instanceof SoftprobeRuntimeUnreachableError
       ) {
         throw error;
       }
-      throw new SoftprobeCaseLoadError(`failed to load case from ${casePath}`, error);
+      throw new CaseLoadError(`failed to load case from ${casePath}`, casePath, error);
     }
   }
 
-  async loadCase(caseDocument: unknown): Promise<void> {
+  async loadCase(caseDocument: unknown, sourcePath: string = ''): Promise<void> {
     try {
       await this.client.loadCase(this.id, caseDocument);
       this.loadedCase = caseDocument;
@@ -127,7 +128,7 @@ export class SoftprobeSession {
       if (error instanceof SoftprobeUnknownSessionError || error instanceof SoftprobeRuntimeUnreachableError) {
         throw error;
       }
-      throw new SoftprobeCaseLoadError('failed to load case into the runtime', error);
+      throw new CaseLoadError('failed to load case into the runtime', sourcePath, error);
     }
   }
 
@@ -142,18 +143,20 @@ export class SoftprobeSession {
   findInCase(spec: SoftprobeFindInCaseSpec): CapturedHit {
     const matches = this.findAllInCase(spec);
     if (matches.length === 0) {
-      throw new Error(
+      throw new CaseLookupError(
         `findInCase: no span in the loaded case matches ${formatPredicate(spec)}. ` +
-          'Check the predicate (direction / method / path / host) or re-capture the case.'
+          'Check the predicate (direction / method / path / host) or re-capture the case.',
+        []
       );
     }
     if (matches.length > 1) {
       const ids = matches
         .map((m) => m.span.spanId ?? '<unknown>')
         .join(', ');
-      throw new SoftprobeCaseLookupAmbiguityError(
+      throw new CaseLookupError(
         `findInCase: ${matches.length} spans match ${formatPredicate(spec)}. ` +
-          `Disambiguate the predicate — candidate span ids: ${ids}.`
+          `Disambiguate the predicate — candidate span ids: ${ids}.`,
+        matches
       );
     }
 
@@ -162,7 +165,7 @@ export class SoftprobeSession {
 
   findAllInCase(spec: SoftprobeFindInCaseSpec): CapturedHit[] {
     if (this.loadedCase === null) {
-      throw new SoftprobeCaseLoadError(
+      throw new CaseLoadError(
         'findInCase requires a case: call `await session.loadCaseFromFile(path)` before `findInCase`.'
       );
     }

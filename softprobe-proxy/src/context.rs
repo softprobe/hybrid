@@ -155,18 +155,19 @@ impl SpHttpContext {
             return;
         }
 
-        // Check if session_id was parsed
+        // Skip extract upload when we have no session id: the runtime keys
+        // captured traces by session id, so an extract without one is
+        // guaranteed to 400 at the backend. The proxy must NOT fabricate a
+        // session id here either — doing so would leak a synthetic id into
+        // the session-id namespace the SDK owns.
         let has_session_id = self.span_builder.has_session_id();
         crate::sp_debug!("Session ID present: {}", has_session_id);
-
-        // If no session_id found, force trace upload for isolation
         if !has_session_id {
-            crate::sp_debug!("No session ID found, forcing trace upload for isolation");
-        } else {
-            // Check collection rules
-            if !self.should_collect_by_rules(&self.config, &self.request_headers) {
-                crate::sp_debug!("Data extraction skipped based on collection rules");
-            }
+            crate::sp_debug!("No session id on this request; skipping extract upload");
+            return;
+        }
+        if !self.should_collect_by_rules(&self.config, &self.request_headers) {
+            crate::sp_debug!("Data extraction skipped based on collection rules");
         }
 
         crate::sp_debug!("Storing agent data asynchronously (backend={})", self.config.sp_backend_url);
@@ -444,8 +445,15 @@ impl HttpContext for SpHttpContext {
         // Inject trace context headers
         self.inject_trace_context_headers();
 
-        // If no body, perform injection lookup now
-        if end_of_stream && self.should_collect_by_rules(&self.config, &self.request_headers) {
+        // If no body, perform injection lookup now. We skip when there is
+        // no session id: the runtime keys inject lookups by session id, so
+        // a request with no session context can never match a registered
+        // mock. Sending the call anyway wastes a round trip and forces a
+        // 400 on the runtime side.
+        if end_of_stream
+            && self.span_builder.has_session_id()
+            && self.should_collect_by_rules(&self.config, &self.request_headers)
+        {
             match self.dispatch_injection_lookup() {
                 Ok(call_id) => {
                     self.pending_inject_call_token = Some(call_id);
@@ -470,7 +478,10 @@ impl HttpContext for SpHttpContext {
             self.request_body.extend_from_slice(&body);
         }
 
-        if end_of_stream && self.should_collect_by_rules(&self.config, &self.request_headers) {
+        if end_of_stream
+            && self.span_builder.has_session_id()
+            && self.should_collect_by_rules(&self.config, &self.request_headers)
+        {
             match self.dispatch_injection_lookup() {
                 Ok(call_id) => {
                     self.pending_inject_call_token = Some(call_id);

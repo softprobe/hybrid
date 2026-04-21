@@ -1,0 +1,21 @@
+# End-to-end suite: mutate the captured /fragment response via a
+# MockResponseHook and assert the SUT's /hello body carries the mutated
+# value. Runs against the docker-compose stack (see e2e/README.md).
+name: fragment-hooks-demo
+version: 1
+
+cases:
+  - path: ../../../spec/examples/cases/fragment-happy-path.case.json
+    name: happy-path
+
+mocks:
+  # The Jest runSuite adapter reads this, resolves hook: rewriteDep in the
+  # registry passed to runSuite({ hooks }), applies it to the captured
+  # /fragment response, then posts the result to the runtime as a mock
+  # rule via session.mockOutbound().
+  - name: fragment
+    match:
+      direction: outbound
+      method: GET
+      path: /fragment
+    hook: rewriteDep

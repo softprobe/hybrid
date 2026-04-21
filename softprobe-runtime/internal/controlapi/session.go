@@ -68,6 +68,12 @@ func handleSessionCommand(st *store.Store) http.HandlerFunc {
 				return
 			}
 			handleSessionStats(st, strings.TrimSuffix(path, "/stats"))(w, r)
+		case strings.HasSuffix(path, "/state"):
+			if r.Method != http.MethodGet {
+				writeMethodNotAllowedError(w)
+				return
+			}
+			handleSessionState(st, strings.TrimSuffix(path, "/state"))(w, r)
 		case strings.HasSuffix(path, "/close"):
 			if r.Method != http.MethodPost {
 				writeMethodNotAllowedError(w)
@@ -102,6 +108,71 @@ func handleSessionCommand(st *store.Store) http.HandlerFunc {
 			http.NotFound(w, r)
 		}
 	}
+}
+
+// handleSessionState returns the composite session snapshot consumed by
+// `softprobe inspect session`. The payload intentionally mirrors what a CI
+// operator needs at a glance: mode, revision, policy, rules, case summary,
+// and live counters. No persistent state is stored to a disk — the store is
+// the source of truth.
+func handleSessionState(st *store.Store, sessionID string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID = strings.TrimSuffix(sessionID, "/")
+		if sessionID == "" {
+			writeUnknownSessionError(w)
+			return
+		}
+
+		session, ok := st.Get(sessionID)
+		if !ok {
+			writeUnknownSessionError(w)
+			return
+		}
+
+		out := map[string]any{
+			"sessionId":       session.ID,
+			"sessionRevision": session.Revision,
+			"mode":            session.Mode,
+			"caseSummary":     summarizeLoadedCase(session.LoadedCase),
+			"stats": map[string]int{
+				"injectedSpans":  session.Stats.InjectedSpans,
+				"extractedSpans": session.Stats.ExtractedSpans,
+				"strictMisses":   session.Stats.StrictMisses,
+			},
+		}
+		if len(session.Policy) > 0 {
+			out["policy"] = json.RawMessage(session.Policy)
+		}
+		if len(session.Rules) > 0 {
+			out["rules"] = json.RawMessage(session.Rules)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(out)
+	}
+}
+
+// summarizeLoadedCase returns a cheap summary of a stored case payload so
+// that `inspect session` can render a caseId + trace count without pulling
+// the whole document across the wire.
+func summarizeLoadedCase(loadedCase []byte) map[string]any {
+	summary := map[string]any{"traceCount": 0}
+	if len(loadedCase) == 0 {
+		return summary
+	}
+	var doc struct {
+		CaseID string        `json:"caseId"`
+		Traces []interface{} `json:"traces"`
+	}
+	if err := json.Unmarshal(loadedCase, &doc); err != nil {
+		return summary
+	}
+	if doc.CaseID != "" {
+		summary["caseId"] = doc.CaseID
+	}
+	summary["traceCount"] = len(doc.Traces)
+	return summary
 }
 
 func handleSessionStats(st *store.Store, sessionID string) http.HandlerFunc {
@@ -146,11 +217,15 @@ func handleCloseSession(st *store.Store, sessionID string) http.HandlerFunc {
 			return
 		}
 
+		var capturePath string
 		if session.Mode == "capture" {
-			if err := proxybackend.WriteCapturedCase(session.ID, session.Extracts); err != nil {
+			override := strings.TrimSpace(r.URL.Query().Get("out"))
+			path, err := proxybackend.WriteCapturedCaseTo(session.ID, session.Extracts, override)
+			if err != nil {
 				writeAPIError(w, http.StatusInternalServerError, "internal_error", "write captured case failed")
 				return
 			}
+			capturePath = path
 		}
 
 		if !st.Close(sessionID) {
@@ -158,12 +233,16 @@ func handleCloseSession(st *store.Store, sessionID string) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		resp := map[string]any{
 			"sessionId": sessionID,
 			"closed":    true,
-		})
+		}
+		if capturePath != "" {
+			resp["capturePath"] = capturePath
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(resp)
 	}
 }
 

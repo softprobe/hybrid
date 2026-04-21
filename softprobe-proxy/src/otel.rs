@@ -130,7 +130,12 @@ impl SpanBuilder {
             }
         }
 
-        // Get session ID from headers directly
+        // Look for a session id that was already set upstream. We must treat the
+        // value as OPAQUE: the SDK can choose any format (e.g. `sess_<base64>`,
+        // a UUID, an integer, …). The proxy never invents a session id of its
+        // own — doing so would collide with the SDK's session-id namespace and
+        // cause inject lookups to always miss. If no session id is present, we
+        // leave it empty and skip both inject and extract dispatch downstream.
         crate::sp_debug!("Looking for session_id in headers");
         let session_id_found = header_get_ci(headers, "x-softprobe-session-id")
             .or_else(|| header_get_ci(headers, "x-sp-session-id"))
@@ -141,8 +146,10 @@ impl SpanBuilder {
             let masked = if session_id.len() > 4 { "****" } else { "" };
             crate::sp_debug!("Found session_id in headers: {}", masked);
             self.session_id = session_id.clone();
-        } else {
-            // If not found in headers, try tracestate.
+        } else if self.session_id.is_empty() {
+            // Fall back to tracestate only when the tracestate branch above
+            // didn't already populate it (it only did so if tracestate was
+            // present). This keeps the reader format-agnostic.
             if let Some(tracestate) = header_get_ci(headers, "tracestate") {
                 for entry in tracestate.split(',') {
                     let entry = entry.trim();
@@ -158,12 +165,11 @@ impl SpanBuilder {
                     }
                 }
             }
-            // If still missing, generate a new one and propagate it downstream.
-            if self.session_id.is_empty() {
-                crate::sp_debug!("No session_id found in headers or tracestate, generating new one");
-                self.session_id = generate_session_id();
-                crate::sp_debug!("Generated session_id: sp-session-**** (will be added into tracestate during injection)");
-            }
+        }
+        if self.session_id.is_empty() {
+            crate::sp_debug!(
+                "No session_id found in headers or tracestate; leaving empty (inject/extract will be skipped)"
+            );
         }
 
         // If no valid trace context found, generate new one
@@ -707,28 +713,90 @@ fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-fn generate_session_id() -> String {
-    // Generate a UUID-like session ID in the format: sp-session-f43fdfa5-3ab8-4548-895e-26a0c28ec54a
-    let mut uuid_bytes = vec![0u8; 16];
-    
-    // Use current timestamp as source of randomness
-    let now_nanos = get_current_timestamp_nanos();
-    let secs = (now_nanos / 1_000_000_000) as u64;
-    let nanos = (now_nanos % 1_000_000_000) as u64;
-    
-    // Fill first 8 bytes with seconds
-    uuid_bytes[0..8].copy_from_slice(&secs.to_be_bytes());
-    // Fill last 8 bytes with nanoseconds + some variation
-    let varied_nanos = nanos ^ 0xDEADBEEF;
-    uuid_bytes[8..16].copy_from_slice(&varied_nanos.to_be_bytes());
-    
-    // Format as UUID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-    format!(
-        "sp-session-{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-        uuid_bytes[0], uuid_bytes[1], uuid_bytes[2], uuid_bytes[3],
-        uuid_bytes[4], uuid_bytes[5],
-        uuid_bytes[6], uuid_bytes[7],
-        uuid_bytes[8], uuid_bytes[9],
-        uuid_bytes[10], uuid_bytes[11], uuid_bytes[12], uuid_bytes[13], uuid_bytes[14], uuid_bytes[15]
-    )
+#[cfg(test)]
+mod session_id_tests {
+    //! Contract tests for session-id parsing.
+    //!
+    //! The proxy must treat the session id as an OPAQUE string — the SDK
+    //! owns the format (today `sess_<base64url>`, tomorrow anything else).
+    //! The proxy never synthesizes a session id when none is present:
+    //! doing so would pollute the SDK's namespace and cause inject lookups
+    //! to miss against the runtime. These tests pin that contract.
+    //!
+    //! Note: `SpanBuilder::new()` calls proxy-wasm host functions for
+    //! timestamps/span-ids, so these tests exercise `with_context` on
+    //! pre-constructed `SpanBuilder` values. They compile-check the
+    //! reader logic and (when the crate is ever made native-testable)
+    //! will also execute.
+    use super::*;
+    use std::collections::HashMap;
+
+    fn builder_with_session(existing: &str) -> SpanBuilder {
+        SpanBuilder {
+            trace_id: vec![0u8; 16],
+            parent_span_id: None,
+            current_span_id: vec![0u8; 8],
+            service_name: "svc".into(),
+            traffic_direction: "outbound".into(),
+            public_key: "pk".into(),
+            session_id: existing.to_string(),
+        }
+    }
+
+    #[test]
+    fn session_id_from_header_is_opaque_regardless_of_format() {
+        // Any format the SDK chooses must be accepted verbatim.
+        for sid in ["sess_abcdef", "sp-session-123", "uuid-like-1234", "42", "hello/world=="] {
+            let mut headers = HashMap::new();
+            headers.insert("x-softprobe-session-id".to_string(), sid.to_string());
+            let sb = builder_with_session("").with_context(&headers);
+            assert_eq!(sb.get_session_id(), sid, "must preserve opaque session id {sid:?}");
+            assert!(sb.has_session_id());
+        }
+    }
+
+    #[test]
+    fn session_id_from_tracestate_is_opaque() {
+        let mut headers = HashMap::new();
+        headers.insert(
+            "tracestate".to_string(),
+            "vendor1=value1,x-softprobe-session-id=sess_xYz==,vendor2=value2".to_string(),
+        );
+        let sb = builder_with_session("").with_context(&headers);
+        assert_eq!(sb.get_session_id(), "sess_xYz==");
+    }
+
+    #[test]
+    fn header_takes_precedence_over_tracestate() {
+        let mut headers = HashMap::new();
+        headers.insert("x-softprobe-session-id".to_string(), "sess_from_header".into());
+        headers.insert(
+            "tracestate".to_string(),
+            "x-softprobe-session-id=sess_from_tracestate".into(),
+        );
+        let sb = builder_with_session("").with_context(&headers);
+        assert_eq!(sb.get_session_id(), "sess_from_header");
+    }
+
+    #[test]
+    fn proxy_does_not_synthesize_when_absent() {
+        // The critical regression: the proxy used to fabricate a
+        // `sp-session-...` id here, which then leaked into tracestate
+        // and caused `/v1/inject` lookups to miss the SDK's session.
+        let headers = HashMap::new();
+        let sb = builder_with_session("").with_context(&headers);
+        assert!(!sb.has_session_id(), "must NOT invent a session id");
+        assert_eq!(sb.get_session_id(), "");
+    }
+
+    #[test]
+    fn proxy_does_not_synthesize_even_with_traceparent_but_no_session() {
+        let mut headers = HashMap::new();
+        headers.insert(
+            "traceparent".into(),
+            "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01".into(),
+        );
+        let sb = builder_with_session("").with_context(&headers);
+        assert!(!sb.has_session_id());
+    }
 }

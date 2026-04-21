@@ -313,4 +313,20 @@ class SoftprobeSessionTest {
     Map<String, Object> created = Map.of("sessionId", session.id());
     assertEquals(session.id(), created.get("sessionId"));
   }
+
+  @Test
+  void facadeThreadsApiTokenThroughEveryCall() {
+    RecordingTransport transport = new RecordingTransport();
+    Softprobe softprobe = new Softprobe("http://runtime.test", transport, "sp_facade_token");
+    SoftprobeSession session = softprobe.startSession("replay");
+    session.close();
+
+    assertTrue(transport.calls.size() >= 2);
+    for (Client.Request call : transport.calls) {
+      assertEquals(
+          "Bearer sp_facade_token",
+          call.headers().get("authorization"),
+          "missing bearer header on call to " + call.uri().getPath());
+    }
+  }
 }

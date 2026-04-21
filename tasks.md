@@ -1,567 +1,316 @@
 # Tasks
 
-> **Execution:** Work in **document order** (top to bottom). The **first** unchecked `[ ]` item is the active task unless a dependency line says otherwise.  
-> **Process:** Follow `AGENTS.md` (TDD for code, no scope beyond `docs/design.md`).  
+> **Execution:** Work in **document order** (top to bottom). The **first** unchecked `[ ]` item is the active task unless a `Depends on:` line says otherwise.
+> **Process:** Follow `AGENTS.md` (TDD for code, no scope beyond `docs/design.md`).
 > **When done:** Change `[ ]` → `[x]` and append a short commit-style note on the same line.
 
-### Architecture (read before coding)
+## Architecture (load-bearing context — read before coding)
 
-- **`softprobe-runtime` (OSS, unified)** — Serves **both** the HTTP control API ([http-control-api.md](spec/protocol/http-control-api.md)) **and** the proxy OTLP API ([proxy-otel-api.md](spec/protocol/proxy-otel-api.md)) from **one process** with a **shared in-memory session store**. No external sync needed. **v1: no database required.** Add Redis/Postgres only for HA ([docs/platform-architecture.md](docs/platform-architecture.md) §10.2).  
-- **Internal package layout:** `internal/store/` (shared session/case/rules state), `internal/controlapi/` (JSON control handlers), `internal/proxybackend/` (OTLP inject/extract handlers — `POST /v1/inject`, `POST /v1/traces`).  
-- **Deployment:** `SOFTPROBE_RUNTIME_URL` (CLI/SDKs) and proxy WASM `sp_backend_url` both point to the **same** `softprobe-runtime` base URL. No second service needed locally.  
-- **Canonical language:** **Go**. **Proxy** calls `softprobe-runtime` OTLP endpoints over HTTP; it does not link the runtime as a library.
-
----
+- **`softprobe-runtime` (OSS, unified)** — serves **both** the HTTP control API ([`spec/protocol/http-control-api.md`](spec/protocol/http-control-api.md)) **and** the proxy OTLP API ([`spec/protocol/proxy-otel-api.md`](spec/protocol/proxy-otel-api.md)) from **one Go process** with a shared in-memory session store. v1: no database required; Redis/Postgres only for HA (see [`docs/platform-architecture.md`](docs/platform-architecture.md) §10.2).
+- **Internal package layout:** `internal/store/` (shared session/case/rules state), `internal/controlapi/` (JSON control handlers), `internal/proxybackend/` (OTLP inject/extract handlers — `POST /v1/inject`, `POST /v1/traces`).
+- **Deployment:** `SOFTPROBE_RUNTIME_URL` (CLI/SDKs) and proxy WASM `sp_backend_url` both point at the **same** `softprobe-runtime` base URL. No second service needed locally.
+- **Canonical language:** Go. Proxy calls `softprobe-runtime` OTLP endpoints over HTTP; it does not link the runtime as a library.
 
 ## Legend
 
 | Mark | Meaning |
 |------|---------|
 | `[ ]` | Not started |
+| `[~]` | In progress |
 | `[x]` | Done (note appended) |
 
-**Depends on** — complete those `[x]` before starting this item. If none, order alone defines readiness.
+`Depends on:` — complete those `[x]` before starting this item. If none, order alone defines readiness.
+
+## Shipped to date (summary)
+
+The capture-and-replay **core** is live and covered by e2e tests:
+
+- Unified `softprobe-runtime` with shared in-memory store, `/health`, `/v1/meta`, full session lifecycle (`/v1/sessions`, `/v1/sessions/{id}/{load-case,rules,policy,fixtures/auth,stats,close}`), and OTLP handlers (`/v1/inject`, `/v1/traces`).
+- Envoy + Softprobe WASM proxy with ingress (8082) + egress (8084) topology; Docker Compose harness for local dev.
+- Strict policy end-to-end (proxy returns a documented error for unmocked outbound).
+- Four SDKs (TypeScript, Python, Java, Go) with the minimal parity surface (`loadCaseFromFile`, `loadCase`, `findInCase`, `findAllInCase`, `mockOutbound`, `clearRules`, `setPolicy`, `setAuthFixtures`, `close`) and typed errors (`*RuntimeError`, `*RuntimeUnreachableError`, `*UnknownSessionError`, `*CaseLoadError`, `*CaseLookupAmbiguityError`).
+- `softprobe doctor`, `softprobe session {start,load-case,rules apply,policy set --strict,stats,close}`, `softprobe inspect case`, `softprobe generate jest-session`.
+- Docs site (`docs-site/`) with concepts, reference, deployment, and guides pages; package-level READMEs for all four SDKs with publication-status disclosure.
+- End-to-end acceptance tests: `e2e/go/go-capture/`, `e2e/go/go-replay/`, `e2e/jest-replay/`, `e2e/pytest-replay/`, `e2e/junit-replay/` — all green on the same compose stack using `spec/examples/cases/fragment-happy-path.case.json`.
+
+Full history: see `git log` and [`docs-site/changelog.md`](docs-site/changelog.md).
 
 ---
 
-## Phase P0.0 — Control runtime project bootstrap
+# Delivery phases (in progress)
 
-Establishes **`softprobe-runtime`** for **P0.4–P0.5** (JSON control API only). **Language:** Go or Rust per [docs/platform-architecture.md](docs/platform-architecture.md#10-softprobe-runtime-implementation-and-deployment).
+We promised more in `docs-site/` than `cmd/softprobe`, the runtime, and the SDKs ship today. These phases close the gap. Ordering prefers **truth-in-docs first** (PD6.0), then horizontal plumbing (PD2 auth, PD5 release hygiene) that unblocks everything else, then CLI surface (PD1), observability (PD4), and TS SDK reference alignment (PD3).
 
-- [x] **P0.0a — Repository or package layout.** Create `softprobe-runtime/` (separate clone or monorepo directory) with README stating: **HTTP control API only**; default listen address/port; link to [http-control-api.md](spec/protocol/http-control-api.md); note that **inject/extract** are **not** served here (proxy backend, e.g. `https://o.softprobe.ai`). Add minimal **health** route (e.g. `GET /health` — not part of spec). `go test ./...` green.  
-  **Verify:** Project builds in CI; README matches [docs/repo-layout.md](docs/repo-layout.md).
+## Phase PD6.0 — Immediate doc truth-sync (banners only)
 
-- [x] **P0.0b — K8s example (informative).** Add **Deployment + Service** for the **control** runtime only. Document separately: WasmPlugin **`sp_backend_url`** (or equivalent) = **proxy backend** base URL (**not** control runtime). Cross-link [softprobe-proxy/docs/deployment.md](softprobe-proxy/docs/deployment.md) or [docs/platform-architecture.md](docs/platform-architecture.md) §10.5. `deploy/kubernetes.yaml` validated with `kubectl --context kind-softprobe-runtime apply --dry-run=client`.  
-  **Verify:** `kubectl apply --dry-run=client -f …` succeeds for control runtime manifest (or doc reviewed).
+Keep users from copy-pasting broken snippets while we ship the backing features. **Docs-only**; zero code risk; do first.
 
-- [x] **P0.0c — CLI placeholder (optional but recommended).** Same repo: `softprobe` binary that can print version and call `GET /health` against `--runtime-url` (control API base; no session commands required until P3.1). `go test ./...` covers `cmd/softprobe` against the runtime handler.  
-  **Verify:** Single integration test or script: start server, run CLI doctor/health.
+**Depends on:** none.
 
----
+- [x] **PD6.0a — Remove `softprobe suite run` from _Shipped_ in `docs-site/roadmap.md`.** Move it to _In progress_ tied to PD1.7. done: rewrote `roadmap.md` — Shipped v0.5 no longer claims the suite runner; it's now called out under _Delivering what's already documented_ → CLI surface parity, linking back to PD1.7.
+  **Verify:** `rg "softprobe suite run" docs-site/roadmap.md` only appears under _In progress_.
 
-## Phase P0 — Spec, schemas, and golden fixtures
+- [x] **PD6.0b — "Not shipped yet" banners in `docs-site/reference/cli.md`.** Add `::: warning Not shipped yet` to the sections for `capture run`, `replay run`, `suite {run,validate,diff}`, `validate {case,rules,suite}`, `inspect session`, `generate test`, `export otlp`, `scrub`, and `completion`. Each banner links to its PD task in this file. done: 9 banners added (one per command group), each linking to the matching PD task and pointing at the current workaround.
+  **Verify:** `rg "Not shipped yet" docs-site/reference/cli.md` returns one match per affected section.
 
-Contract work first so runtime and proxy implement the same shapes.
+- [ ] **PD6.0c — Banner on `docs-site/guides/run-a-suite-at-scale.md`.** Same warning until PD1.7 lands.
+  **Verify:** banner present at top of file.
 
-### P0.1 Case OTLP JSON profile (normative)
+- [ ] **PD6.0d — K8s deployment footnotes.** In `docs-site/deployment/kubernetes.md`, mark `/metrics`, `SOFTPROBE_LOG_LEVEL`, `{sessionId}` template, and object-storage URLs as _planned_.
+  **Verify:** each affected subsection carries a planned-note linking to its PD4 task.
 
-- [x] **P0.1a — Profile document.** Add a spec doc (e.g. `spec/protocol/case-otlp-json.md`) that defines the **minimal OTLP JSON subset** for each element of `case.traces[]`: envelope shape, required span/resource attributes for HTTP identity, naming alignment with `proxy-otel-api.md`, and recommended **size limits** (max spans per case, max attribute size). `docs/design.md` §14 now points at the profile doc.  
-  **Verify:** Design open question in `docs/design.md` §14 (OTLP JSON profile) can be checked off or explicitly deferred with a one-line pointer to this spec.
+- [ ] **PD6.0e — FAQ license claim.** Either land PD5.1 first or rewrite the Apache-2.0 paragraph in `docs-site/faq.md` to reflect actual LICENSE coverage.
+  **Verify:** FAQ claim matches `find . -maxdepth 3 -iname LICENSE`.
 
-- [x] **P0.1b — Cross-links.** Link the new profile from `spec/README.md`, `spec/schemas/case.schema.json` (`traces` description), and `docs/design.md` §6. `rg` confirms the profile filename is referenced in all three files.  
-  **Verify:** No broken relative links; `grep` for `case-otlp-json` / profile filename hits all intended files.
-
-### P0.2 JSON Schemas
-
-- [x] **P0.2a — Trace item schema.** Add a dedicated JSON Schema for **one** OTLP-compatible trace document (e.g. `spec/schemas/case-trace.schema.json`) and reference it from `case.schema.json` via `items.$ref` (or equivalent draft-2020-12 pattern). `ajv-cli` validates `spec/examples/cases/minimal.case.json` and `spec/examples/cases/minimal-trace.json`.  
-  **Verify:** `spec/examples/cases/*.case.json` validate; empty `traces` array still valid.
-
-- [x] **P0.2b — Rule `when` / `then`.** Extend `rule.schema.json` so `when` and `then` include the **documented** decision actions and matcher fields from `docs/design.md` §8.2 (use `enum` / `oneOf` where appropriate; allow extension via `additionalProperties` only if design says so). `ajv-cli` validates `spec/examples/rules/strict-block.rule.json` and rejects an unsupported `action: redirect`.  
-  **Verify:** At least one example rule JSON under `spec/examples/rules/` validates; invalid rules fail validation in a documented way.
-
-- [x] **P0.2c — Session API payloads.** Add JSON Schemas for **request/response bodies** of every endpoint listed in `spec/protocol/http-control-api.md` (sessions create, load-case, policy, rules, fixtures/auth, close). Reuse `session.schema.json` where it fits. `ajv-cli` validates representative payloads for all endpoint schemas.  
-  **Verify:** Each endpoint has a matching schema file and a one-line pointer from `http-control-api.md`.
-
-### P0.3 Golden examples and automated validation
-
-- [x] **P0.3a — Non-empty golden case.** Add `spec/examples/cases/` example with **at least one** trace document in `traces` that satisfies the P0.1 profile and P0.2a schema. done: added `checkout-happy-path.case.json`  
-  **Verify:** File is named and listed in `spec/README.md` or examples index; documents a realistic outbound HTTP span.
-
-- [x] **P0.3b — Schema validation in CI.** Add a small script (language by team choice) plus CI step that validates all `spec/examples/**` and `spec/schemas/*.json` (meta-validation) according to `AGENTS.md` repo conventions. done: added `spec/scripts/validate-spec.sh` and CI workflow  
-  **Verify:** CI fails if a hand-edited example breaks the schema; README or `spec/README.md` documents how to run locally.
+- [ ] **PD6.0f — TS SDK reference banner.** Until PD3 completes, add a `::: warning` at the top of `docs-site/reference/sdk-typescript.md` noting that the error class names and `/hooks` + `/suite` subpaths are a **planned** surface; link to PD3 and to the actual class names in `softprobe-js/src/`.
+  **Verify:** banner present; existing reader won't hit a "module not found" surprise without warning.
 
 ---
 
-## Phase P0 — Reference control runtime (`softprobe-runtime`)
+## Phase PD5 — Release hygiene
 
-Implement in **`softprobe-runtime`** (from P0.0). **JSON control API only** — no `/v1/inject` or `/v1/traces` in this codebase.
+One-time cleanup so every downstream feature has somewhere to publish.
 
-### P0.4 Sessions lifecycle
+**Depends on:** none (can parallelize all items).
 
-- [x] **P0.4a — Create session.** `POST /v1/sessions` persists a session with `mode`, returns `sessionId` and `sessionRevision` (initial `0` or `1`, document choice in schema + code). `softprobe-runtime/internal/runtimeapp/session_test.go` covers persistence and `sessionRevision = 0`.  
-  **Verify:** Contract test or integration test asserts response shape per P0.2c schema.
+- [ ] **PD5.1a — Apache-2.0 LICENSE across the repo.** Add `LICENSE` to repo root, `softprobe-runtime/`, `softprobe-python/`, `softprobe-java/`, `softprobe-go/`. Existing `softprobe-proxy/LICENSE` and `softprobe-js/LICENSE` stay.
+  **Verify:** `find . -maxdepth 3 -iname LICENSE -not -path '*/node_modules/*'` lists all seven (root + six packages).
 
-- [x] **P0.4b — Close session.** `POST /v1/sessions/{sessionId}/close` removes or invalidates the session; subsequent **control** operations return a **documented** error. done: close invalidates session and load-case returns 404  
-  **Verify:** Test creates → closes → asserts `load-case` or `rules` fails.
+- [ ] **PD5.2a — CLI version string.** Replace `const version = "0.0.0-dev"` in `cmd/softprobe/main.go` with a build-time `-ldflags -X` injection from a single source (`internal/version/version.go`). `main_test.go` asserts the injected value.
+  **Verify:** `go build -ldflags "-X .../version.Version=v0.5.0"` produces `softprobe --version` → `softprobe v0.5.0 (spec http-control-api@v1)`.
 
-- [x] **P0.4c — Unknown session errors.** Any **control** operation with an unknown `sessionId` returns a stable HTTP status and machine-readable error body agreed in schema. done: documented JSON error schema and handler  
-  **Verify:** Single test covers one mutating control endpoint (not inject).
+- [ ] **PD5.3a — Runtime container image on ghcr.** CI workflow in `.github/workflows/` builds + pushes `ghcr.io/softprobe/softprobe-runtime:<sha>` + `:v<tag>` from `softprobe-runtime/Dockerfile`. Write the workflow with a smoke-step that pulls the image and runs `docker run ghcr.io/softprobe/softprobe-runtime:<sha> --version`.
+  **Verify:** workflow green on a PR; image pullable post-tag.
 
-### P0.5 Session revision monotonicity
+- [ ] **PD5.3b — Proxy WASM OCI bundle on ghcr.** Same pattern for `ghcr.io/softprobe/softprobe-proxy:<tag>` — OCI image containing `sp_istio_agent.wasm`. Validate via Istio `WasmPlugin` URL in a smoke job.
+  **Verify:** `oras pull` surfaces the wasm blob; documented `WasmPlugin.url` resolves.
 
-- [x] **P0.5a — Bump on load-case.** `POST /v1/sessions/{id}/load-case` increases `sessionRevision` by one and replaces loaded case content atomically. `softprobe-runtime/internal/runtimeapp/session_test.go` covers revision 1 then 2 and replacement of loaded case bytes.  
-  **Verify:** Two successive loads yield revisions strictly increasing.
+- [ ] **PD5.4a — softprobe-js npm publish workflow.** Tag-triggered CI job runs `npm publish`. Align `package.json#version` with release tag.
+  **Verify:** dry-run succeeds; next release tag lands on npm.
 
-- [x] **P0.5b — Bump on rules, policy, fixtures.** Same behavior for `rules`, `policy`, and `fixtures/auth` per `http-control-api.md`. `softprobe-runtime/internal/runtimeapp/session_test.go` parameterizes all three mutating endpoints and asserts revisions 1 then 2.  
-  **Verify:** One test per endpoint type OR parameterized test.
+- [ ] **PD5.4b — softprobe-python PyPI publish workflow.** Tag-triggered; publishes to TestPyPI first, then PyPI.
+  **Verify:** dry-run succeeds against TestPyPI.
 
----
+- [ ] **PD5.4c — softprobe-java Maven Central publish workflow.** Tag-triggered; signs + publishes to OSSRH; auto-promote.
+  **Verify:** Sonatype staging validation green.
 
-## Phase P0.6 — Unified service: store extraction and OTLP route stubs
-
-Refactor `softprobe-runtime` so that a **single in-memory store** is shared by both the control API handler group and the new OTLP handler group. This is the prerequisite for implementing real inject/extract resolution in P1.
-
-**Depends on:** P0.5b complete (all control endpoints tested).
-
-### P0.6 Store extraction and OTLP stubs
-
-- [x] **P0.6a — Extract `Store` to `internal/store/`.** Move `Store`, `Session`, and all mutation methods from `internal/runtimeapp/session.go` to a new package `softprobe-runtime/internal/store/store.go`. Rename `internal/runtimeapp/` to `internal/controlapi/` (update all imports in `mux.go`, `main.go`, `cmd/softprobe/main.go`, and tests). No logic changes — all existing tests must stay green. done: extracted shared session state into `internal/store` and renamed handlers to `internal/controlapi`  
-  **Verify:** `go test ./...` passes; `internal/store/` is the sole definition of `Store` and `Session`; no circular imports.
-
-- [x] **P0.6b — OTLP route stubs in `mux.go`.** Register `POST /v1/inject` and `POST /v1/traces` stubs (returning `501 Not Implemented` with a JSON body `{"error":"not implemented"}`) that accept the shared `*store.Store`. Tests confirm both routes exist and return `501` before P1 fills them in. done: added OTLP stub routes and route tests  
-  **Verify:** Integration test asserts both OTLP routes are registered and return `501`.
-
-- [x] **P0.6c — Align proxy config: `sp_backend_url` default.** In `softprobe-proxy/config/development.yaml` (and any deploy manifests), document that `sp_backend_url` defaults to the same base URL as `SOFTPROBE_RUNTIME_URL` (e.g. `http://localhost:8080`). Update `softprobe-runtime/README.md` and `softprobe-proxy/docs/deployment.md` to show the single-URL local setup. done: aligned local docs/config to the unified runtime URL  
-  **Verify:** README / deployment doc shows `sp_backend_url = http://localhost:<runtime-port>` matching the control runtime URL.
+- [ ] **PD5.4d — softprobe-go module path.** Rename module to `github.com/softprobe/softprobe-go`, update in-repo `replace` directives to reference the external path as a fallback, tag `v0.5.0`.
+  **Verify:** `go get github.com/softprobe/softprobe-go@v0.5.0` from a clean GOPATH succeeds.
 
 ---
 
-## Phase P1 — OTLP handlers in `softprobe-runtime`
+## Phase PD2 — Runtime auth plumbing in SDKs and CLI
 
-Implement inject/extract OTLP endpoints inside **`softprobe-runtime`** (package `internal/proxybackend/`), backed by the **shared session store** from `internal/store/`. The proxy WASM calls `POST /v1/inject` and `POST /v1/traces` on this same service. The logic designed in P1.0–P1.3 (originally scoped to a conceptually separate proxy backend and prototyped in Rust inside `softprobe-proxy`) is now ported to Go inside the unified runtime.
+`docs-site/reference/http-control-api.md` promises: _"the CLI and SDKs read `SOFTPROBE_API_TOKEN` from the environment and attach the header automatically."_ Today none of them do. Users enabling auth are locked out.
 
-**Depends on:** P0.6b (OTLP route stubs registered and store extracted).
+**Depends on:** none.
 
-### P1.0 Inject resolution (logic)
+- [x] **PD2.1a — CLI attaches `Authorization: Bearer`.** Every HTTP call in `cmd/softprobe/main.go` (and `generate_jest_session.go`) reads `SOFTPROBE_API_TOKEN` and attaches the header. Failing tests first: fake runtime asserts the header. done: added `newRuntimeRequest` helper that attaches `Authorization: Bearer $SOFTPROBE_API_TOKEN` when set; migrated all 7 call sites (doctor health + meta, session start/stats/close/load-case/rules apply/policy set). New `cmd/softprobe/auth_test.go` runs the full CLI surface through a capturing fake server with the token set, asserts every request carries the expected header, and also covers the env-unset case. `go test ./...` green.
+  **Verify:** all existing CLI commands work with and without the env var; `main_test.go` covers both cases.
 
-> **Note:** P1.0–P1.3 were prototyped in Rust inside `softprobe-proxy`. These tasks must be re-implemented in **Go** inside `softprobe-runtime/internal/proxybackend/` backed by `internal/store/`. The Rust work is the reference; a task is not truly `[x]` until the Go unit tests pass in the unified runtime.
+- [x] **PD2.1b — softprobe-js honors `SOFTPROBE_API_TOKEN`.** `new Softprobe({ apiToken })` option overrides the env. `RuntimeClient` attaches the header on every request. done: added `apiToken` to `SoftprobeRuntimeClientOptions`, threaded through the `Softprobe` facade; `postJson` attaches `Authorization: Bearer …` when `apiToken ?? process.env.SOFTPROBE_API_TOKEN` is non-empty (trimmed). Added 5 auth tests in `runtime-client.test.ts` + 1 facade test in `softprobe.test.ts`. Full `npm test` green (329 tests).
+  **Verify:** `src/__tests__/runtime-auth.test.ts` asserts the header value and constructor override.
 
-- [x] **P1.0a — Composition order.** Port resolver to Go: applies **session policy → case-embedded rules → session rules** per `docs/design.md` §8.3; higher `priority` wins; later layer wins on tie. Rust reference: `softprobe-proxy/src/resolver.rs`. done: added `internal/proxybackend` resolver and precedence tests  
-  **Verify:** Go unit tests in `internal/proxybackend/resolver_test.go` cover conflicting priorities — mirror cases from `resolver_composition_test.rs`.
+- [x] **PD2.1c — softprobe-python honors `SOFTPROBE_API_TOKEN`.** `Softprobe(api_token=…)` overrides env. done: `Client(api_token=…)` keyword, threaded through the `Softprobe` facade; `_post_json` attaches `Authorization: Bearer …` when `api_token ?? os.environ["SOFTPROBE_API_TOKEN"]` is non-empty (whitespace-trimmed). Added 5 transport-level tests in `tests/test_client.py` + 1 facade test in `tests/test_softprobe.py`. Full `python3 -m unittest discover tests` green (29 tests).
+  **Verify:** `tests/test_auth.py` covers both paths.
 
-- [x] **P1.0b — Mock action.** `then.action = mock` yields `http.response.*` attributes per `proxy-otel-api.md`. Rust reference: `softprobe-proxy/src/injection.rs`. done: added mock response attribute encoder and test  
-  **Verify:** Go unit test with fixed rule and expected attributes.
+- [x] **PD2.1d — softprobe-java honors `SOFTPROBE_API_TOKEN`.** `Softprobe(baseUrl, apiToken)` constructor; builder overrides env. done: added `Client(String, Transport, String)` ctor + `Client.withApiToken(baseUrl, apiToken)` factory + `Softprobe(String, Transport, String)` facade ctor + `Softprobe.withApiToken`. `postJson` now builds a mutable headers map and attaches `authorization: Bearer …` when resolved token is non-empty (after trim); `sendWithHttpClient` iterates all headers so the bearer survives the real HTTP path. Added 3 transport-level tests in `ClientTest` + 1 facade test in `SoftprobeSessionTest`. `mvn test` green (27 tests).
+  **Verify:** JUnit test covers both paths.
 
-- [x] **P1.0c — Replay from case.** `then.action = replay` with `consume: once` / `many`. Rust reference: `softprobe-proxy/src/inject_ingest.rs`. done: added replay queue semantics and tests  
-  **Verify:** Go unit tests for queue exhaustion vs repeat.
+- [x] **PD2.1e — softprobe-go honors `SOFTPROBE_API_TOKEN`.** `softprobe.Options{APIToken}` overrides env. done: added `WithAPIToken` client option + `Options.APIToken`/`APITokenSet` fields; `postJSON` attaches `Authorization: Bearer …` when the resolved token is non-empty (trim). Resolution picks the explicit option first (so an explicit empty string can disable the env fallback); otherwise reads `SOFTPROBE_API_TOKEN` at request time so `t.Setenv` works without reconstruction. Added 6 tests in a new `auth_test.go` (explicit option, env fallback, override, unset, whitespace, facade wiring). `go test ./softprobe/` green.
+  **Verify:** `auth_test.go` asserts header; `errors.As` still recovers typed errors when auth is on.
 
-- [x] **P1.0d — Passthrough and error.** `passthrough` and `error` per `docs/design.md` §8.1; strict-miss fallback to `error` when policy requires. done: added explicit decision helpers and tests  
-  **Verify:** Go unit tests for strict miss → error.
-
-### P1.1 Wire `POST /v1/inject`
-
-- [x] **P1.1a — OTLP JSON ingest.** Replace the `501` stub from P0.6b: parse OTLP JSON `TracesData` per `proxy-otel-api.md`; extract `sp.session.id` and HTTP identity from span attributes; look up session in shared store; run resolver. done: added JSON inject parser and wired `/v1/inject` to the shared store  
-  **Verify:** Go integration test: create session via control API → call `/v1/inject` with golden JSON payload → resolver runs.
-
-- [x] **P1.1b — Hit / miss responses.** `200` + OTLP response attributes on hit; `404` on miss per spec. done: inject handler now returns OTLP JSON hit responses and 404 misses  
-  **Verify:** Go contract test asserts both branches; shapes match what `softprobe-proxy` parser expects.
-
-### P1.2 Extract path
-
-- [x] **P1.2a — Accept `POST /v1/traces`.** Replace the `501` stub: parse OTLP `TracesData` JSON; look up session in shared store; buffer spans per capture mode. Return `2xx`. done: added trace upload handler and capture buffering in the shared store  
-  **Verify:** Go integration test sends sample `TracesData`; `2xx`; session store updated.
-
-### P1.3 Capture → case file
-
-- [x] **P1.3a — Writer.** In capture mode, aggregate buffered extract spans into **one** JSON case file per session compatible with `case.schema.json`. Trigger on session close or explicit flush. Rust reference: `softprobe-proxy/src/case_writer.rs`. done: close now flushes buffered capture payloads into `e2e/captured.case.json`  
-  **Verify:** Go integration test: create capture session → POST several `/v1/traces` payloads → close session → written file passes `spec/scripts/validate-spec.sh`.
+- [ ] **PD2.1f — e2e auth path.** Compose override sets `SOFTPROBE_API_TOKEN=sp_test` on the runtime; each of `e2e/go`, `jest-replay`, `pytest-replay`, `junit-replay` runs green picking up the token from env.
+  **Verify:** `SOFTPROBE_API_TOKEN=sp_test docker compose … up --wait` + all four harnesses green.
 
 ---
 
-## Phase P2 — `softprobe-proxy` ↔ `softprobe-runtime` OTLP integration
+## Phase PD1 — CLI contract completeness
 
-Work in `softprobe-proxy`. The proxy WASM calls `softprobe-runtime` OTLP endpoints; `sp_backend_url` defaults to the same URL as `SOFTPROBE_RUNTIME_URL` in local/OSS setups.
+The CLI reference (`docs-site/reference/cli.md`) and `index.md` ("All CLI commands support `--json` output and stable exit codes") describe a much larger surface than `cmd/softprobe` implements today.
 
-### P2.0 Inject path (proxy extension)
+**Depends on:** PD2 (auth) for multi-command orchestration; PD5.2 (version string) for `--version` correctness.
 
-- [x] **P2.0a — Config.** OTLP backend URL for inject/extract is configurable (`sp_backend_url` or env); for local/OSS deployment this defaults to the **same URL as `SOFTPROBE_RUNTIME_URL`** (unified service). done: config default and startup log point at proxy backend URL  
-  **Verify:** Log or doctor shows effective backend URL at startup; `config/development.yaml` and deployment docs show `sp_backend_url` = `SOFTPROBE_RUNTIME_URL` for local setup.
+### PD1.1 Global CLI contract
 
-- [x] **P2.0b — Tagged traffic.** For requests carrying `x-softprobe-session-id`, proxy builds inject span set and `POST /v1/inject` to **`softprobe-runtime`** (`sp_backend_url`); **200** injects; **404** forwards upstream. done: inject dispatch uses OTLP request builder and backend request helper  
-  **Verify:** Docker Compose or integration test with mock upstream + backend.
+- [ ] **PD1.1a — Stable exit codes.** Map the documented codes in `cmd/softprobe`: `2` invalid args, `3` runtime unreachable, `4` session not found, `5` schema/validation error, `10` doctor fail, `20` suite fail. Failing tests first.
+  **Verify:** one test per documented code.
 
-- [x] **P2.0c — Strict / error mapping.** Proxy behavior for backend errors (5xx, timeout) per `docs/design.md` / `proxy-otel-api.md`. done: backend response classifier maps non-200 to local fallback  
-  **Verify:** Integration test with backend returning 500 or unreachable.
+- [x] **PD1.1b — Global flags.** `--verbose/-v` (stderr diagnostics), `--quiet/-q`, `--help/-h`, honor `NO_COLOR`. Consistent across subcommands.
+  **Verify:** CLI tests parse help output and verbose stderr.
 
-### P2.1 Extract path (proxy extension)
+- [ ] **PD1.1c — Universal `--json`.** Add the common `status/exitCode/error?` envelope (per `cli.md` stability table) to every mutating subcommand: `session load-case`, `session rules apply`, `session policy set`, `inspect case`, `generate jest-session`.
+  **Verify:** one JSON-parsing test per subcommand covers `status` + `exitCode` + at least one command-specific field.
 
-- [x] **P2.1a — Async upload.** After upstream response (passthrough path), proxy sends `POST /v1/traces` to **`softprobe-runtime`** (`sp_backend_url`) without blocking longer than configured deadline. done: async extract upload builder posts to `/v1/traces` with bounded timeout  
-  **Verify:** Integration test asserts backend received extract.
+### PD1.2 `doctor` expansion
 
----
+- [x] **PD1.2a — Proxy WASM binary check.** Try `$WASM_PATH`, `/etc/envoy/sp_istio_agent.wasm` and similar. Missing → warning only (non-fatal).
+  **Verify:** test with file present vs absent.
 
-## Phase PE — End-to-end golden path acceptance test
+- [x] **PD1.2b — Header-echo smoke test.** Optional POST through a configured proxy URL; assert `x-softprobe-session-id` round-trip. Missing → warning.
+  **Verify:** in-process fake proxy test.
 
-Validates the **complete capture → replay loop** using real components: `softprobe-runtime` (Go, unified), `softprobe-proxy` (Envoy+WASM), a minimal **app workload** stand-in, and Go tests driving the control API. This is the acceptance gate for the entire P0.6 + P1 + P2 work.
+- [x] **PD1.2c — `--verbose` mode.** Log HTTP request/response details to stderr.
+  **Verify:** verbose test asserts URL + status in stderr.
 
-**Depends on:** P0.6c + P1.3a (case writer done) + P1.1b (inject hit/miss working) + P2.0b and P2.1a (proxy wired to unified runtime).
+### PD1.3 `session` subcommand completeness
 
-**Test harness:** `e2e/docker-compose.yaml` with five services:
+- [ ] **PD1.3a — `session start --policy FILE --case FILE`.** Chain session-create → apply-policy → load-case atomically.
+  **Verify:** test asserts all three HTTP calls fire in order.
 
-| Service | Role |
-|---------|------|
-| `softprobe-runtime` | Unified Go service (control API + OTLP handler) |
-| `softprobe-proxy` | Envoy + WASM; `sp_backend_url` = runtime URL |
-| `app` | Tiny **SUT** (`e2e/app/main.go`): ingress via proxy **8082**, egress to dependency via proxy **8084** |
-| `upstream` | Tiny **dependency** (`e2e/upstream/main.go`); reached only **app → proxy → upstream** |
-| `test-runner` | Smoke client: health checks and one `GET` **through ingress** (not the SUT) |
+- [ ] **PD1.3b — `session policy set --file PATH`.** Accept a policy file alongside the existing `--strict` shortcut.
+  **Verify:** CLI test parses YAML/JSON and posts the expected body.
 
-**Product topology:** `client → proxy → app → proxy → upstream`. The test-runner is the **client**; Envoy intercepts **ingress and egress**; see [e2e/README.md](e2e/README.md) and [docs/design.md](docs/design.md) §3.4.
+- [ ] **PD1.3c — `session close --out PATH`.** For capture sessions, override the capture file output path (used with PD4.3 template substitution).
+  **Verify:** capture e2e test writes to a custom path.
 
-### PE.1 Capture flow
+- [ ] **PD1.3d — `inspect session`.** Read-only: dump policy, rules, loaded-case summary, stats for a live session. Human + `--json`.
+  **Verify:** integration test applies policy + rules, then asserts inspect output shape.
 
-- [x] **PE.1a — Docker Compose harness.** Add `e2e/docker-compose.yaml` with the five services above. `app` (`e2e/app/main.go`) serves `/hello` using a dependency reached **via proxy egress**; `upstream` (`e2e/upstream/main.go`) is that dependency. Verify all services start and pass health checks. done: added compose harness, proxy/app/upstream/test-runner, and validated `docker compose up --wait`  
-  **Verify:** `docker compose -f e2e/docker-compose.yaml up --wait` exits `0`; runtime `/health` reachable.
+### PD1.4 `validate` subcommand
 
-- [x] **PE.1b — Capture session test.** Script or Go test in `e2e/`:
-  1. `softprobe session start --mode capture` → capture `SESSION_ID`.
-  2. `curl` (or Go `http.Client`) sends `GET http://<proxy>:8082/hello` (forwarded to **app**) with header `x-softprobe-session-id: $SESSION_ID`.
-  3. App responds; proxy sends `POST /v1/traces` to runtime.
-  4. `softprobe session close --session $SESSION_ID` → runtime writes `e2e/captured.case.json`.
-  5. Assert: `e2e/captured.case.json` exists and passes `spec/scripts/validate-spec.sh`.
-  6. Assert: case file contains exactly one trace with `url.full` matching the exercised path and `http.response.status_code = 200`.  
-  **Verify:** Script exits `0`; case file is schema-valid. done: added `e2e/capture_flow_test.go` and validated against the compose stack
+- [ ] **PD1.4a — `validate case FILE`.** Schema-validate against `spec/schemas/case.schema.json`. Exit `5` on invalid.
+  **Verify:** tests cover valid + invalid fixtures.
 
-### PE.2 Replay flow
+- [ ] **PD1.4b — `validate rules FILE`.** Same for `rule.schema.json`.
+  **Verify:** tests cover valid + invalid.
 
-- [x] **PE.2a — Replay session test.** Continues from PE.1b (uses `captured.case.json`): done: replay now matches captured extract spans and keeps app workload at zero
-  1. Reset app `/hello` hit counter to `0` (or use a fresh `app` container).
-  2. `softprobe session start --mode replay` → capture `REPLAY_SESSION_ID`.
-  3. `softprobe session load-case --session $REPLAY_SESSION_ID --file e2e/captured.case.json`.
-  4. `curl` sends `GET http://<proxy>:8082/hello` with `x-softprobe-session-id: $REPLAY_SESSION_ID`.
-  5. Assert: response status = `200` and body = `{"message":"hello"}` — matching the captured case.
-  6. Assert: **app** received **0 new** `/hello` hits (inject was used, not passthrough to live workload).
-  7. Assert: a second identical request (same session) also returns the captured response (`consume: many` semantics).  
-  **Verify:** Script exits `0`; app call count remains `0`.
+- [ ] **PD1.4c — `validate suite FILE`.** Same for `suite.schema.json` (ships in PD1.7a).
+  **Verify:** tests cover valid + invalid.
 
-### PE.3 Strict miss
+### PD1.5 `capture` subcommand
 
-- [x] **PE.3a — Strict policy blocks unmocked traffic.** With a replay session loaded from `captured.case.json` and policy `externalHttp: strict`: done: validated the end-to-end strict-miss path against the live compose stack
-  1. Send a request to a **different path** (e.g. `GET /unknown`) through the proxy.
-  2. Assert: proxy returns a `5xx` or configured error response (not forwarded to the app workload).
-  3. Assert: app received `0` `/hello` hits.  
-  **Verify:** Confirms the strict-miss → error path of P1.0d is exercised end-to-end.
+- [ ] **PD1.5a — `capture run --driver CMD --out PATH`.** Orchestrate: start capture session → export `SOFTPROBE_SESSION_ID` → run driver → close session → write case.
+  **Verify:** e2e test with a trivial driver (`sh -c 'curl …'`).
 
----
+- [ ] **PD1.5b — `capture run --timeout DURATION`.** Enforce wall-clock timeout on driver.
+  **Verify:** fake slow driver → timeout exit.
 
-## Phase PH — Hybrid convergence and core contract completion
+- [ ] **PD1.5c — `capture run --redact-file PATH`.** Apply redaction rules during capture.
+  **Verify:** captured bytes omit redacted values.
 
-Bring repo docs, runtime/CLI contracts, and the four SDKs back in line with the unified hybrid design before moving on to later codegen/export work.
+### PD1.6 `replay run` diagnostic
 
-### PH.0 Repo and docs convergence
+- [ ] **PD1.6a — `replay run --session ID`.** Report inject hit/miss stats for a live session (wraps `session stats`).
+  **Verify:** test against a session with known injects.
 
-- [x] **PH.0a — Canonical top-level docs.** Rewrite `README.md`, `docs/repo-layout.md`, `softprobe-runtime/README.md`, `softprobe-proxy/README.md`, and `softprobe-js/README.md` so they all describe the unified proxy-first hybrid product. Move older NDJSON/framework-patching and analytics-agent positioning into clearly-labeled legacy or migration sections instead of presenting them as the product. done: converged the five top-level docs on the unified runtime/proxy-first story and pushed older product language into explicit legacy notes  
-  **Verify:** `rg "control API only|NDJSON|framework patch|business-level tracing|analytics" README.md docs/repo-layout.md softprobe-runtime/README.md softprobe-proxy/README.md softprobe-js/README.md` returns only intentional legacy/migration references.
+### PD1.7 `suite` subcommand (the big one)
 
-- [x] **PH.0b — Docs-site scope honesty.** Update `docs-site/` pages that currently present not-yet-built OSS features as current GA behavior so they are marked preview/planned or trimmed to the shipped surface, without contradicting `docs/design.md` or `spec/`. done: rewrote the control API and CLI references around the current OSS surface, downgraded future/runtime-auth claims to planned, and removed suite-run overstatement from the main overview pages  
-  **Verify:** `docs-site/reference/http-control-api.md` and `docs-site/reference/cli.md` stop claiming unimplemented OSS endpoints/commands as current behavior.
+**Depends on:** PD1.4 (`validate suite`).
 
-### PH.1 Runtime machine contract
+- [ ] **PD1.7a — Suite YAML schema + parser.** Land `spec/schemas/suite.schema.json` and `softprobe-runtime/internal/suite/`.
+  **Verify:** unit tests validate examples; invalid suites fail.
 
-- [x] **PH.1a — `GET /v1/meta`.** Add a machine-readable metadata endpoint on `softprobe-runtime` returning runtime version, `specVersion`, `schemaVersion`, and the minimal compatibility fields the CLI/SDKs need for drift detection. Write handler and contract tests first. done: added `/v1/meta` with runtime/spec/schema metadata and handler coverage  
-  **Verify:** `go test ./...` in `softprobe-runtime/` covers success + method guard + field presence.
+- [ ] **PD1.7b — `suite run` (sequential).** Read case globs, start one session per case, load + run, collect results. No parallelism yet.
+  **Verify:** e2e test runs a 2-case suite against the compose stack.
 
-- [x] **PH.1b — Session stats endpoint + counters.** Add `GET /v1/sessions/{sessionId}/stats` backed by real inject/extract/strict-miss counters in the shared session store. Write failing tests first for at least one inject hit, one extract upload, and one strict miss. done: added session stats handler plus inject/extract/strict-miss counter wiring  
-  **Verify:** runtime tests assert counter increments and unknown-session error shape.
+- [ ] **PD1.7c — `suite run --parallel N`.** Bounded worker pool; per-case session isolation.
+  **Verify:** e2e test with N=4.
 
-- [x] **PH.1c — Runtime auth + stable errors.** Gate control and OTLP handlers behind optional bearer auth via `SOFTPROBE_API_TOKEN`, keep `/health` unauthenticated, and normalize control-plane JSON errors/status codes so SDKs and CLI can rely on them. Write auth/error tests first. done: added optional bearer auth middleware and stable JSON control error envelopes  
-  **Verify:** tests cover missing token → `401`, wrong token → `403`, valid token → success, and unknown-session/malformed-body envelopes.
+- [ ] **PD1.7d — `--junit PATH` / `--report PATH`.** JUnit XML + HTML report writers.
+  **Verify:** XML validates against the JUnit XSD; HTML opens.
 
-### PH.2 CLI contract completion
+- [ ] **PD1.7e — `suite validate`.** Parse YAML, resolve globs, check hook references.
+  **Verify:** tests cover missing-file and missing-hook errors.
 
-- [x] **PH.2a — `generate` dispatch + fragment fixture alignment.** Wire `generate` into `cmd/softprobe/main.go`, then align the fragment golden case/example expectations with the live e2e app response shape so `softprobe-js` generated-session and quickstart tests stop drifting. Write or tighten failing tests first. done: dispatched `generate`, switched the fragment golden case to replayable extract data, and realigned generated/README test expectations  
-  **Verify:** `go test ./...` in `softprobe-runtime/` and `npm test -- --runInBand` in `softprobe-js/` are green for the generator and fragment replay examples.
+- [ ] **PD1.7f — `suite diff --baseline --current`.** Compare two case sets for drift (status codes, body shape).
+  **Verify:** test with known drift.
 
-- [x] **PH.2b — `session close`, `session stats`, and explicit `--shell`.** Add CLI subcommands for close/stats, keep shell export as an explicit `--shell` mode, and cover both human-readable and `--json` output with tests first. done: added CLI stats/close commands, explicit `--shell`, and nil-safe CLI writer handling  
-  **Verify:** CLI tests parse JSON for `session start --json` / `session stats --json` / `session close --json`; `--shell` prints only the export line.
+### PD1.8 Auxiliary: `generate test`, `export otlp`, `scrub`, `completion`
 
-- [x] **PH.2c — Common JSON envelope + doctor drift detection.** Standardize shipped CLI `--json` commands on a top-level envelope (`status`, `exitCode`, command-specific fields) and expand `doctor` to compare runtime metadata from `/v1/meta` rather than only pinging `/health`. Write failing tests first for drift and unreachable runtime cases. done: added common CLI JSON envelopes and `doctor` health+meta drift detection with JSON failure output  
-  **Verify:** CLI tests cover healthy runtime, spec/schema drift, unreachable runtime, and stable JSON field presence.
+- [x] **PD1.8a — `generate test --framework {jest,vitest,pytest,junit}`.** Full test-file generator (not just the session helper). Share traversal with `generate jest-session`.
+  **Verify:** one golden-output test per framework.
+
+- [ ] **PD1.8b — `export otlp --case … --endpoint …`.** Stream case traces to an OTLP HTTP endpoint.
+  **Verify:** e2e test hits a mock OTel collector.
+
+- [ ] **PD1.8c — `scrub FILE [--rules PATH]`.** Apply redaction rules to a case file in place.
+  **Verify:** before/after diff test.
+
+- [ ] **PD1.8d — `completion {bash,zsh,fish}`.** Emit shell-completion scripts.
+  **Verify:** golden-output test per shell.
 
 ---
 
-## Phase P3 — Canonical CLI
+## Phase PD4 — Runtime observability and capture operations
 
-Single language-agnostic binary; HTTP only to **`softprobe-runtime`** (`--runtime-url`) for JSON control API operations.
+`docs-site/deployment/kubernetes.md` and `reference/cli.md` describe operational features the runtime doesn't implement.
 
-### P3.1 CLI core
+**Depends on:** none.
 
-- [x] **P3.1a — `softprobe doctor`.** Checks **control** runtime reachability, reports **spec/schema version** field, exits non-zero on failure. done: explicit spec/schema fields and unhealthy-runtime failure test  
-  **Verify:** Scriptable test against local control runtime; documented exit codes.
+- [ ] **PD4.1a — Prometheus `/metrics` endpoint.** Emit `softprobe_sessions_total{mode=…}`, `softprobe_inject_requests_total{result=hit|miss|error}`, `softprobe_inject_latency_seconds` histogram, `softprobe_extract_spans_total`. Failing tests scrape the endpoint and parse the exposition format.
+  **Verify:** tests assert counter + histogram increments under load.
 
-- [x] **P3.1b — `softprobe session start`.** Creates session; supports `--json` with `schemaVersion`/`specVersion`; supports shell-friendly line (`export SOFTPROBE_SESSION_ID=…`). done: added explicit mode flag, JSON fields, and shell export output  
-  **Verify:** Parse stdout JSON in test; `eval` line in test optional.
+- [ ] **PD4.2a — `SOFTPROBE_LOG_LEVEL` honored.** Wire into the runtime's logger; values `debug|info|warn|error`.
+  **Verify:** test per level captures expected output.
 
-- [x] **P3.1c — `softprobe session load-case`.** Loads file path; maps to control API; errors on HTTP/API errors. done: added golden case fixture load test and API error coverage  
-  **Verify:** Integration test loads P0.3a golden case.
+- [ ] **PD4.3a — `{sessionId}` template in `SOFTPROBE_CAPTURE_CASE_PATH`.** Interpolate `{sessionId}`, `{ts}`, `{mode}` before writing. Back-compat: plain path still works.
+  **Verify:** capture e2e test writes to interpolated path; baseline test (no placeholder) still green.
 
-- [x] **P3.1d — Docs.** Document exit codes and `--json` fields in CLI README or `docs/design.md` §9 cross-link. done: runtime README now documents JSON output fields and exit codes  
-  **Verify:** `docs/design.md` acceptance §12.6 items satisfied.
-
-### P3.2 CLI advanced (optional after P3.1c)
-
-- [x] **P3.2a — `session rules apply` / `session policy set`.** Thin wrappers over control API. **Verify:** integration tests. done: CLI now forwards both wrappers to the control runtime
-
-- [x] **P3.2b — `inspect case` / `export otlp` / `capture run` / `replay run`.** Per `docs/design.md` §9.1 table, implement in priority order stakeholders choose. done: added `inspect case` summary command and golden-output test
-  **Verify:** each command has at least one integration or golden-output test.
+- [ ] **PD4.4a — Object-storage case writers.** Add schemes `file://` (default), `s3://`, `gs://`, `azblob://` to `internal/proxybackend/case_writer.go`. Credentials via standard workload identity paths.
+  **Verify:** unit tests against minio / fake-gcs-server / azurite emulators; local `file://` stays the default.
 
 ---
 
-## Phase P4 — Language SDKs and reference tests
+## Phase PD3 — TypeScript SDK reference reality alignment
 
-Can parallelize after P0.4a and P0.2c (client needs stable shapes).
+The TS SDK reference (`docs-site/reference/sdk-typescript.md`) imports symbols that don't exist: `SoftprobeError`, `RuntimeError`, `CaseLookupError`, `CaseLoadError`, `@softprobe/softprobe-js/hooks`, `@softprobe/softprobe-js/suite`, `runSuite`, `setLogger`.
 
-### P4.0 TypeScript + Jest first (materialization path)
+**Depends on:** PD1.7 (for `runSuite` to have a backing format).
 
-**Normative design:** `docs/design.md` §5.3 (inject resolved in/near data plane; control API materialization). **First-stage SDK:** `softprobe-js` + Jest before expanding ergonomic APIs to Python/Java.
+- [x] **PD3.1a — Error aliases + unified base.** Introduce `SoftprobeError` base class; export `RuntimeError` (alias for `SoftprobeRuntimeError`), `CaseLookupError` (alias for `SoftprobeCaseLookupAmbiguityError`), `CaseLoadError` (alias for `SoftprobeCaseLoadError`). Keep the long names as canonical.
+  **Verify:** Jest tests import each documented name.
 
-- [x] **P4.0a — Design + repo-layout alignment.** Document inject placement, materialization model, TS+Jest first tier (`docs/design.md` §5.3, §7.0, §8 intro); update `docs/repo-layout.md` §2 `softprobe-js` bullets. done: design §5.3/§7.0/§8 + repo-layout softprobe-js first-stage note  
-  **Verify:** Links in `docs/design.md` / `docs/repo-layout.md` resolve.
+- [x] **PD3.1b — `@softprobe/softprobe-js/hooks` subpath.** Add `RequestHook`, `MockResponseHook`, `BodyAssertHook`, `HeadersAssertHook`, `Issue` types in `src/hooks/index.ts`; wire into `package.json#exports`.
+  **Verify:** TS test imports from the subpath.
 
-- [x] **P4.0b — TS SDK `Softprobe` / `SoftprobeSession`.** Implement **`startSession`**, **`attach`**, **`loadCaseFromFile`**, **`findInCase`**, **`mockOutbound`**, **`clearRules`**, **`close`** as the **only** HTTP callers to `/v1/sessions`, `/load-case`, `/rules`, `/close` per **`docs/design.md` §3.2** (no `fetch` in generated Jest modules). **`mockOutbound`** must **merge** then **replace** full rules document per store semantics (`ApplyRules`). Optional: **`setPolicy`**, **`setAuthFixtures`**. done: Softprobe/SoftprobeSession shipped with findInCase + mockOutbound; replayOutbound removed per P4.5 refactor  
-  **Verify:** unit tests assert outbound `POST` bodies validate against `session-rules.request.schema.json` / `rule.schema.json`; two `mockOutbound` calls in a row preserve both rules; `clearRules` sends empty `rules`.
+- [x] **PD3.1c — `@softprobe/softprobe-js/suite` subpath + `runSuite`.** After PD1.7b lands, expose a Node-side `runSuite(suiteYamlPath, { hooks, baseUrl, appUrl, filter, parallel })` that registers `describe`/`it`.
+  **Verify:** in-repo Jest test runs a 2-case suite through `runSuite`.
 
-- [x] **P4.0c — Jest canonical quickstart.** `softprobe-js/README.md` (or `examples/jest-golden-path/`) documents **one** copy-paste flow: `doctor` → session → load-case/rules via SDK → Jest test with `x-softprobe-session-id`; links `docs/design.md` §5.3. done: updated the Jest replay quickstart with `doctor`, the §5.3 materialization link, and verified the documented `npm test` path against compose  
-  **Verify:** documented `npm test` (or CI job) passes.
+- [x] **PD3.1d — `setLogger` + `SOFTPROBE_LOG`.** Module-level logger hook; default no-op; env var turns debug on.
+  **Verify:** test captures debug output when enabled, nothing when disabled.
 
-### P4.6 SDK parity and packaging truth
+- [x] **PD3.1e — Version string alignment.** Reconcile `softprobe-js/package.json#version = 2.0.10` with the docs' v0.5.x narrative. Pick a single source of truth and align docs + SDK + runtime version tables.
+  **Verify:** version table in `sdk-typescript.md` matches `package.json` and `softprobe --version`.
 
-- [x] **P4.6a — TypeScript parity surface + typed errors.** Add the missing minimal SDK surface in `softprobe-js` (`loadCase`, `findAllInCase`, `setPolicy`, `setAuthFixtures`) plus stable typed errors for runtime unreachable, unknown session, case-load failure, and case-lookup ambiguity. Write failing unit tests first. done: added the missing session APIs plus typed runtime/case error classes and verified the full TS suite  
-  **Verify:** `npm test -- --runInBand` covers each new method and error type.
+- [x] **PD3.1f — Hook runtime (TS) + end-to-end proof.** PD3.1b/c only shipped types; nothing actually *ran* a hook. Land `src/hook-runner.ts` (`applyRequestHook`, `applyMockResponseHook`, `runBodyAssert`, `runHeadersAssert`, `HookExecutionError`), wire MockResponseHook invocation into `runSuite` so hooks reach `session.mockOutbound()` on the wire, ship `examples/hooks/` (README + suite.yaml + one hook file per kind + captured case), and add `src/__tests__/hooks-e2e.test.ts` covering all four hook kinds plus a full `runSuite()` → fake runtime round-trip.
+  **Verify:** the e2e test suite decodes the `/v1/sessions/{id}/rules` request body and asserts the `unmaskCard` transform reaches the runtime; 12 new tests green.
 
-- [x] **P4.6b — Python parity surface + typed errors.** Extend `softprobe-python` with the same minimal parity surface and stable typed errors on top of the thin client. Write failing tests first. done: added `load_case`, `find_all_in_case`, `set_policy`, `set_auth_fixtures`, plus `SoftprobeRuntimeUnreachableError`, `SoftprobeUnknownSessionError`, `SoftprobeCaseLoadError`, and `SoftprobeCaseLookupAmbiguityError` with unit coverage in `tests/test_softprobe.py`  
-  **Verify:** Python unit tests cover new methods and error classes/messages.
+- [x] **PD3.1g — Docker-compose e2e harness for hooks + suite.yaml.** Add `e2e/jest-hooks/` (package.json, jest config, tsconfig, `suites/fragment.suite.yaml`, `hooks/rewrite-dep.ts` + `hooks/assert-hello.ts`, `fragment.hooks.test.ts`) that drives `runSuite()` from `@softprobe/softprobe-js/suite` against the real `e2e/docker-compose.yaml` stack. The test registers a MockResponseHook via suite.yaml, fetches `GET /v1/sessions/{id}/state` on the live `softprobe-runtime` container, and asserts the mock rule carries the hook-transformed body. Also exercises a BodyAssertHook on the live SUT response via the `onCase` handle.
+  **Verify:** `docker compose -f e2e/docker-compose.yaml up -d --wait && cd e2e/jest-hooks && npm install && npm test` is green.
 
-- [x] **P4.6c — Java parity surface + typed errors.** Extend `softprobe-java` with the same minimal parity surface and stable typed errors. Write failing tests first. done: added `loadCase(String)`, `findAllInCase`, `setPolicy`, `setAuthFixtures`, and the `SoftprobeRuntimeUnreachableException` / `SoftprobeUnknownSessionException` / `SoftprobeCaseLoadException` / `SoftprobeCaseLookupAmbiguityException` hierarchy with JUnit coverage in `ParitySurfaceTest`  
-  **Verify:** `mvn test -q` covers new methods and exception classes.
-
-- [x] **P4.6d — Go parity surface + typed errors.** Align `softprobe-go` with the documented minimal parity surface and typed errors, or trim any remaining mismatched docs in the same task scope if the feature is intentionally absent. Write failing tests first. done: added `LoadCase([]byte)`, `FindAllInCase`, `SetAuthFixtures`, plus `UnreachableError`, `UnknownSessionError`, `CaseLoadError`, and `CaseLookupAmbiguityError`, with `errors.As` recoverability covered in `parity_surface_test.go`  
-  **Verify:** `go test ./...` in `softprobe-go/` covers new methods and error recovery via `errors.As`.
-
-- [x] **P4.6e — Package READMEs and publication truth.** Add or refresh package-level READMEs for Go, Python, and Java and correct any docs that imply public registry publication which this repo does not currently automate or release. done: added `softprobe-python/README.md`, `softprobe-java/README.md`, and `softprobe-go/README.md` with source-based usage; refreshed `softprobe-js/README.md` publish note; annotated `docs-site/installation.md`, `reference/sdk-python.md`, `reference/sdk-java.md`, `reference/sdk-go.md`, `guides/replay-in-pytest.md`, `guides/replay-in-junit.md`, and `guides/replay-in-go.md` with explicit "not yet published" warnings  
-  **Verify:** each SDK repo has a README with source/local usage that matches the current release reality.
-
-### P4.1 JavaScript / TypeScript
-
-- [x] **P4.1a — Thin client.** HTTP client for session create, load-case, close; no duplicate CLI verbs. done: added `SoftprobeRuntimeClient` with mocked HTTP unit test and build verification  
-  **Verify:** Unit tests with mocked HTTP.
-
-- [x] **P4.1b — Jest example.** Reference test: create session, set `x-softprobe-session-id` on SUT request. done: added local Jest reference test using the runtime client  
-  **Verify:** CI job or documented `npm test` path.
-
-### P4.2 Python
-
-**Follows** P4.0 ergonomic patterns where applicable (same control API contract).
-
-- [x] **P4.2a — Thin client.** Same surface as P4.1a. done: added Python `Client` with session create/load-case/close transport test  
-  **Verify:** mocked HTTP tests.
-
-- [x] **P4.2b — pytest example.** Same as P4.1b. done: added pytest-style header propagation example with local HTTP fixtures  
-  **Verify:** CI or `pytest` target.
-
-### P4.3 Java
-
-**Follows** P4.0 ergonomic patterns where applicable (same control API contract).
-
-- [x] **P4.3a — Thin client.** Same surface as P4.1a. **Verify:** mocked HTTP tests. done: Java control client already exposes create/load-case/close with mocked HTTP tests
-
-- [x] **P4.3b — JUnit 5 example.** Same as P4.1b. done: added JUnit 5 header propagation reference test using the Java client  
-  **Verify:** CI or `mvn test` target.
-
-### P4.4 Cross-cutting SDK quality
-
-- [x] **P4.4a — Actionable errors.** Unknown session, control runtime down, strict miss: each SDK surfaces stable error type or message contract. done: added stable runtime error types in JS, Python, and Java with failure tests
-  **Verify:** Contract tests per SDK or shared test vectors doc.
-
-### P4.5 Replace `replayOutbound` with `findInCase` + `mockOutbound` (SDK-side case lookup)
-
-**Normative design:** `docs/design.md` §3.2 — runtime only evaluates explicit `mock`/`error` rules; OTLP case walking and response materialization move into each SDK so test authors can mutate captured data before mocking.
-
-- [x] **P4.5a — Design + schema update.** Remove `replay` action + `consume` field from `spec/schemas/rule.schema.json`; update `docs/design.md` §3.2 with `findInCase` + `mockOutbound` flow and the Division of Labour table; realign `spec/examples/rules/strict-block.rule.json`. done: design + rule schema updated, examples realigned  
-  **Verify:** `spec/examples/**` validates against `spec/schemas/rule.schema.json`.
-
-- [x] **P4.5b — TS SDK `findInCase`.** New pure in-memory lookup against the loaded case (`softprobe-js/src/core/case/find-span.ts`). Returns a mutable `CapturedHit { response, span }`; throws on zero/multi matches with span-ids in the message. done: find-span helper + unit tests (single/zero/multi, pathPrefix/host, pseudo-headers)  
-  **Verify:** `softprobe-js` unit tests green.
-
-- [x] **P4.5c — TS SDK drop `replayOutbound`.** Remove `replayOutbound` + `SoftprobeReplayRuleSpec`; simplify rule builder to `buildMockRule`; add `updateRules` on the runtime client. done: SDK surface now only has `findInCase` + `mockOutbound`  
-  **Verify:** `softprobe-js` unit tests green; no references to `replayOutbound` remain in TS package.
-
-- [x] **P4.5d — Jest e2e migration.** Port `e2e/jest-replay/fragment.replay.test.ts` to `findInCase` + `mockOutbound`. done: jest-replay passes through compose stack using SDK-side lookup  
-  **Verify:** `cd e2e/jest-replay && npx jest` passes.
-
-- [x] **P4.5e — Runtime: delete `replay` action.** Remove `replayResponseFromCase` and the replay branch in `softprobe-runtime/internal/proxybackend/inject.go`; runtime now only honors `mock`/`error`/`passthrough`/`capture_only`. Strict policy still returns error for injects with no matching explicit rule. done: inject handler rewritten around `selectInjectRule`; controlapi + inject tests updated  
-  **Verify:** `go test ./...` in `softprobe-runtime/` green.
-
-- [x] **P4.5f — Runtime session store audit (LoadedCase).** Verify `LoadedCase` is still only used for `case.rules[]` (rule extraction) and OTLP proxy export, not for inject materialization. done: no remaining case-trace walks on the inject hot path  
-  **Verify:** `rg replayResponseFromCase softprobe-runtime/` returns no matches.
-
-- [x] **P4.5g — Codegen update.** `softprobe generate jest-session` emits `session.findInCase(...)` + `session.mockOutbound(..., response: hit.response)` instead of `replayOutbound`. done: generator + golden + integration tests updated  
-  **Verify:** `go test ./...` and generated module compiles/runs.
-
-- [x] **P4.5h — Doc sweep.** Refresh `docs/design.md` and nearby docs to describe the new client-side lookup flow. done: §3.2 rewritten with concrete examples and Division of Labour table  
-  **Verify:** no references to `replayOutbound` or `replay` action remain in `docs/design.md`.
-
-#### Python SDK parity (new ergonomic layer)
-
-- [x] **P4.5i — Python SDK: `Softprobe` + `SoftprobeSession` ergonomic classes.** Mirror the TS surface on top of the existing thin `Client`. Expose `start_session`, `attach`, `load_case_from_file`, `find_in_case`, `mock_outbound`, `clear_rules`, `close`. done: `softprobe/softprobe.py` + `softprobe/core/case_lookup.py`, 13 unit tests green  
-  **Verify:** `python3 -m unittest discover -s tests` in `softprobe-python/` green.
-
-- [x] **P4.5j — Python SDK: `find_in_case` + `mock_outbound`.** Case lookup mirrors the TS helper (traces → resourceSpans → scopeSpans → spans; pseudo-header fallbacks); `mock_outbound` builds schema-conformant rules via the thin `Client`. done: covered by P4.5i test suite  
-  **Verify:** unit tests assert rule payloads and ambiguous/missing-match error messages.
-
-- [x] **P4.5k — e2e/pytest-replay/: fragment happy path.** New harness `e2e/pytest-replay/` drives the same compose stack as `e2e/jest-replay/`. done: `test_fragment_replay.py` green against the existing stack  
-  **Verify:** `python3 -m pytest e2e/pytest-replay/` green.
-
-#### Java SDK parity (new ergonomic layer)
-
-- [x] **P4.5l — Java SDK: `Softprobe` + `SoftprobeSession` ergonomic classes.** Mirror the TS surface on top of the existing thin `Client`. Add Jackson `databind` dependency for OTLP tree parsing; keep the regex parser in `Client` for flat control-plane responses. done: `Softprobe.java`, `SoftprobeSession.java`, `CaseLookup.java`, `CapturedResponse`, `CapturedHit`, `CaseSpanPredicate`, `MockRuleSpec`; 12 unit tests green  
-  **Verify:** `mvn test` in `softprobe-java/` green.
-
-- [x] **P4.5m — Java SDK: `findInCase` + `mockOutbound`.** Case lookup + rule serialization covered by `SoftprobeSessionTest` (single/zero/multi match, pseudo-headers, rule payload shape). done: covered by P4.5l test suite  
-  **Verify:** rule payloads validate against `rule.schema.json`.
-
-- [x] **P4.5n — e2e/junit-replay/: fragment happy path.** New Maven project `e2e/junit-replay/` runs the fragment replay through the SDK against the compose stack. done: `FragmentReplayTest` green  
-  **Verify:** `mvn test` in `e2e/junit-replay/` green.
-
-- [x] **P4.5o — Full e2e validation across three SDKs.** Jest, pytest, and JUnit harnesses all pass against the same compose stack. done: all three run green sequentially in the same session  
-  **Verify:** `npx jest` + `pytest e2e/pytest-replay/` + `mvn -q test` (e2e/junit-replay) all green.
-
-- [x] **P4.5p — softprobe-go SDK.** New module `softprobe-go/` with `Softprobe` facade, `SoftprobeSession` (`LoadCaseFromFile`, `FindInCase`, `MockOutbound`, `ClearRules`, `Close`), thin HTTP `Client`, and shared `CaseLookup` helpers (`FindSpans`, `ResponseFromSpan`, `FormatPredicate`, HTTP/2 pseudo-header fallback). 12 unit tests via an in-process `Transport` seam, mirroring softprobe-js / softprobe-python / softprobe-java. done: `go test ./...` green in `softprobe-go/`  
-  **Verify:** `cd softprobe-go && go test ./...` green.
-
-- [x] **P4.5q — e2e/go/go-replay/: fragment happy path.** Package under `e2e/go/go-replay/` drives the same `StartSession` → `LoadCaseFromFile` → `FindInCase` → `MockOutbound` → `GET APP_URL/hello` flow as the jest/pytest/junit harnesses (`softprobe-go` via `replace` in `e2e/go.mod`). done: `TestFragmentReplayThroughTheMesh` green against the compose stack  
-  **Verify:** `cd e2e && go test -count=1 ./go/go-replay/...` green.
-
-- [x] **P4.5r — Port TestReplayEgressInjectMocksUpstream to softprobe-go.** Rewrote the egress replay integration test in `e2e/replay_flow_test.go` around `softprobe-go`'s `Softprobe` / `SoftprobeSession` instead of raw HTTP POSTs; deleted the now-dead `TestReplayFlowUsesCapturedCase` which had been exercising the auto-ingress-replay path removed in P4.5e. Fixed shape-drift in the jest/pytest harnesses (which had been asserting a stale nested `dependency` body against an older app binary) so they match the live `{message, dep}` flat shape. done: full e2e suite (`TestCaptureFlowProducesValidCaseFile`, `TestReplayEgressInjectMocksUpstream`, `TestStrictPolicyBlocksUnmockedTraffic`) + all four SDK harnesses green  
-  **Verify:** `cd e2e && go test -count=1 ./...` green and all four SDK harnesses (`jest`, `pytest`, `mvn`, `go test -count=1 ./go/go-replay/...`) green. (Go e2e code consolidated under `e2e/go/`: `go-capture/`, `go-replay/`, `e2etestutil/`, runtime integration tests.)
+- [x] **PD3.1h — Proxy session-id propagation (was OPEN-1).** The Envoy + Softprobe WASM proxy used to derive its tracestate session id from the inbound `traceId` (`sp-session-00000000-…`) when no session id was present on the request, inventing a synthetic id in a proxy-specific format. That id polluted the SDK session-id namespace and caused `/v1/inject` to always miss against the runtime.
+  **Fix (landed):** `softprobe-proxy/src/otel.rs::SpanBuilder::with_context` now treats the session id as opaque — it reads `x-softprobe-session-id` (and `x-sp-session-id` / `tracestate`) verbatim regardless of format, and leaves `session_id` empty when none is present. `context.rs` skips both `/v1/inject` and `/v1/traces` dispatch when `session_id` is empty, avoiding useless round trips and 400s on the runtime. Unit tests in `session_id_tests` pin the opaque-format contract. `e2e/jest-hooks/fragment.hooks.test.ts` drives traffic through the ingress proxy on `:8082` and asserts `body.dep === 'mutated-by-hook'`, proving the SDK-issued `sess_…` id survives end-to-end through both WASM hops.
+  **Verify:** `cd softprobe-proxy && make build` rebuilds the WASM; `docker compose -f e2e/docker-compose.yaml up -d --wait && cd e2e/jest-hooks && npm test` is green.
 
 ---
 
-## Phase P5 — Codegen, export, performance
+## Phase PD6 — Doc truth sync (after each code phase lands)
 
-- [x] **P5.0 — `softprobe generate jest-session`.** CLI subcommand emits a TypeScript module per **`docs/design.md` §3.2** using **`@softprobe/sdk`** only (`Softprobe`, `SoftprobeSession`, `findInCase`, `mockOutbound`); **no emitted `fetch`**. Default output path documented. done: generator now emits findInCase + mockOutbound pairs, golden + integration tests green (P4.5g)  
-  **Verify:** golden file diff test; generated file compiles; one e2e or integration test imports it.
+- [ ] **PD6.1 — Remove CLI banners.** As each PD1 task lands, remove the corresponding "Not shipped yet" banner from `cli.md` and the guide pages.
+  **Verify:** `rg "Not shipped yet" docs-site/` returns matches only for still-pending work.
 
-- [ ] **P5.1 — Codegen MVP.** `generate test` (or equivalent) emits compiling tests using **only** public SDK APIs. **Verify:** generated project passes tests in CI.
+- [ ] **PD6.2 — Update `cli.md` field-stability table.** Keep the `--json` field table honest as PD1.1c expands coverage.
+  **Verify:** table rows match the subcommands that actually emit JSON.
 
-- [ ] **P5.2 — OTLP export from case files.** `export otlp` pushes golden case traces to a test collector. **Verify:** integration test with otel-collector or mock.
+- [ ] **PD6.3 — Refresh SDK references.** Update version tables, install snippets, and error catalogs as PD5.4 and PD3 land.
+  **Verify:** each reference page's import snippet compiles against the published SDK.
 
-- [ ] **P5.3 — Proxy inject cache.** If implemented: cache key `(sessionId, sessionRevision, requestFingerprint)` with invalidation on revision bump (proxy or backend). **Verify:** benchmark or test proves no stale inject after `load-case`.
-
----
-
-## Phase P6 — Optional deep instrumentation
-
-- [ ] **P6.1 — Package skeleton.** e.g. `@softprobe/js-http-hooks` behind feature flag; **no** default product dependency. **Verify:** README states non-default; tree-shaking or flag off by default.
+- [ ] **PD6.4 — Refresh `roadmap.md`.** Move items from _In progress_ to _Shipped_ as phases complete.
+  **Verify:** roadmap entries match `git tag` + `docs-site/changelog.md`.
 
 ---
 
-## Phase DG — User-facing documentation site (`docs.softprobe.dev`)
+## Parking lot (non-sequential)
 
-Close gaps between `docs/design.md` + `spec/` + `tasks.md` and the public VitePress site under `docs-site/` (deployed to `docs.softprobe.dev`). All changes are **docs-only**; no code, contract, or schema changes. **Invariants:** every new page must be reachable from `docs-site/.vitepress/config.ts` sidebar, must pass `npm run docs:build`, and must uphold `docs/design.md` §15 invariants (no contradiction with design/spec; code snippets use only documented SDK APIs; links to `spec/` for normative shapes).
-
-**Depends on:** `docs-site/` scaffolding committed (current `main`). No runtime code dependencies.
-
-### DG1 — Complete normative reference pages
-
-- [x] **DG1.1 — `docs-site/reference/proxy-otel-api.md`.** Mirror `spec/protocol/proxy-otel-api.md` for end users: `POST /v1/inject` and `POST /v1/traces` request/response shape, OTLP `TracesData` envelope, required span attributes, hit/`200` vs miss/`404` contract, extract-path semantics, error/timeout behavior. Link to the normative spec file at top of page. done: new user-facing reference page with worked OTLP request/response examples, SLO guidance, and session correlation explanation; added to sidebar.
-  **Verify:** page is reachable from sidebar under "Reference"; links in `concepts/architecture.md` and `concepts/capture-and-replay.md` that currently describe inject/extract point at this page; `npm run docs:build` succeeds.
-
-- [x] **DG1.2 — `docs-site/reference/rule-schema.md`.** Normative rule shape per `spec/schemas/rule.schema.json`: full enumeration of `when` matchers (`direction`, `service`, `host`, `hostSuffix`, `notHostSuffix`, `method`, `path`, `pathPrefix`, header predicates, body JSONPath predicates), `then` actions (`mock`, `error`, `passthrough`, `capture_only`) with payload shapes, `id`/`priority` semantics, `consume: once|many` **v1 caveat** ("may appear in documents; v1 inject does not dequeue from `traces[]`"). Show one YAML and one JSON example each. done: new normative reference covering all 5 actions (including `replay` as deprecated), SDK shorthand vs wire-schema distinction, replace-vs-merge semantics, validation workflow.
-  **Verify:** sidebar entry under "Reference"; cross-links from `concepts/rules-and-policy.md` and `guides/mock-external-dependency.md` resolve; rule examples validate against `spec/schemas/rule.schema.json`.
-
-- [x] **DG1.3 — Expand `docs-site/reference/case-schema.md` with OTLP attribute vocabulary.** Add a new "OTLP attribute vocabulary" section enumerating required and optional attributes from `spec/protocol/case-otlp-json.md`: `sp.session.id`, `sp.traffic.direction`, `url.full`, `http.request.method`, `http.request.header.*`, `http.request.body`, `http.response.status_code`, `http.response.header.*`, `http.response.body`, `service.name`, resource vs span placement. Include size-limit guidance. done: replaced old "Softprobe-specific attributes" with a structured vocabulary (identity / HTTP identity / payload / legacy aliases) plus v1 size guidance aligned with `case-otlp-json.md`.
-  **Verify:** `rg "sp.session.id" docs-site/reference/case-schema.md` returns a match; `rg "http.response.body" docs-site/reference/case-schema.md` returns a match.
-
-### DG2 — Surface the default codegen happy path
-
-- [x] **DG2.1 — `docs-site/guides/generate-jest-session.md`.** Walk-through of `softprobe generate jest-session --case … --out …` per `docs/design.md` §3.2: prerequisites, generated file anatomy (imports `@softprobe/sdk` only, strings together `startSession` → `loadCaseFromFile` → `findInCase` + `mockOutbound`), regeneration workflow after capture refresh, sidecar YAML for policy/fixtures, diff-review tips. done: new how-to guide modeled on the actual generator output (`cmd/softprobe/generate_jest_session.go`), with test wrapper, Makefile/npm regen snippet, and diff-review tips; sidebar updated.
-  **Verify:** generated module snippet in the guide matches the current golden output of `softprobe generate jest-session` (spot-check against `cmd/softprobe` golden file); sidebar entry under "How-to guides".
-
-- [x] **DG2.2 — Quickstart Path A / Path B split.** Update `docs-site/quickstart.md` to present the **generator flow as "Path A (recommended)"** and the ad-hoc `findInCase` + `mockOutbound` flow as "Path B (when you need full control)". Keep both paths copy-paste complete. done: section 5 now offers a "Path A — Codegen (recommended)" subsection using `generate jest-session` + a `startReplaySession()` wrapper, and "Path B — Ad-hoc `findInCase` + `mockOutbound`" keeping the original copy-paste example.
-  **Verify:** quickstart still runs end-to-end from either path against the e2e compose stack.
-
-- [x] **DG2.3 — CLI `generate` subcommands.** In `docs-site/reference/cli.md`, split the `generate` section into per-framework subsections (`generate jest-session`, `generate test`). Document flags (`--case`, `--out`, `--framework`), output file location conventions, and interaction with sidecar YAML. done: `generate jest-session` now has flag table, output conventions, exit codes, and link to the codegen guide; `generate test` lists per-framework status (jest beta, vitest/pytest preview, junit alpha).
-  **Verify:** `rg "generate jest-session" docs-site/reference/cli.md` returns at least one match; table of contents reflects new subsections.
-
-### DG3 — Concepts polish (load-bearing invariants)
-
-- [x] **DG3.1 — Author-time vs request-time callout.** In `docs-site/concepts/rules-and-policy.md` and `docs-site/concepts/capture-and-replay.md`, add a **callout block** (VitePress `::: tip` or `::: info`) stating the `docs/design.md` §8 preface invariant: **"The runtime never walks `traces[]` on the inject hot path."** Case-based lookup happens **only** in the SDK via `findInCase`; the runtime evaluates **explicit rules** only. done: `::: info Author-time vs request-time` callouts added to both concept pages with a link to design §5.3.
-  **Verify:** `rg "never walks" docs-site/concepts/` returns matches in both files.
-
-- [x] **DG3.2 — `capture_only` action in actions tables.** Add `capture_only` as a documented `then.action` value in: `docs-site/concepts/rules-and-policy.md`, `docs-site/guides/mock-external-dependency.md`, `docs-site/reference/rule-schema.md` (DG1.2). Explain: "matches the request for observability / extract purposes but still forwards to the real upstream". Note that `mockOutbound` does **not** emit `capture_only` rules — those are applied via raw `rules apply` or case-embedded rules. done: rule-schema.md and rules-and-policy.md already covered `capture_only`; added a dedicated "Observe-only: `capture_only` rules" section to `guides/mock-external-dependency.md` with YAML + CLI example.
-  **Verify:** `rg "capture_only" docs-site/` returns matches in all three files.
-
-- [x] **DG3.3 — Rule composition tie-break.** In `docs-site/concepts/rules-and-policy.md`, add explicit documentation of the tie-break rule from `docs/design.md` §8.3: **"when two rules share `priority`, the later composition layer wins (session rules > case-embedded rules > policy); within a single layer, later entries win."** Add a small worked example. done: precedence section now names the two tie-breakers explicitly and includes a case-rule-vs-session-rule worked example.
-  **Verify:** `rg "later layer wins|later composition layer" docs-site/concepts/rules-and-policy.md` returns a match.
-
-- [x] **DG3.4 — Proxy inject cache & `sessionRevision`.** Add a new subsection to `docs-site/concepts/architecture.md` documenting §4.4 / §8.4: proxy-side inject-decision caching is **optional**, and when enabled **must** be keyed on `(sessionId, sessionRevision, requestFingerprint)` and invalidated on every revision bump. Cross-link from `reference/http-control-api.md`. done: new "Proxy inject cache (optional, `sessionRevision`-keyed)" subsection in architecture.md with the four MUST requirements and a note that the OSS reference proxy does not cache.
-  **Verify:** section heading appears in architecture.md ToC; cross-link from HTTP control API page resolves.
-
-- [x] **DG3.5 — OpenTelemetry outbound propagation callout.** Reinforce the `docs/design.md` §3.3 integration risk — outbound calls from the app **must** propagate W3C `traceparent` / `tracestate` via OpenTelemetry. Add a diagram/callout in `docs-site/concepts/architecture.md` and a short troubleshooting entry in `docs-site/guides/troubleshooting.md` ("my egress mocks aren't hit" → check OTel propagation). done: added a "Trace context propagation (critical)" subsection with a warning callout in architecture.md and a "My egress mocks aren't hit" anchor target in troubleshooting with per-language fixes + debug steps.
-  **Verify:** diagram or callout present in architecture.md; troubleshooting entry resolvable by `rg "OTel propagation|traceparent" docs-site/guides/troubleshooting.md`.
-
-### DG4 — SDK surface completeness
-
-- [x] **DG4.1 — Errors section in each SDK reference.** Add a unified "Errors" section to `docs-site/reference/sdk-typescript.md`, `sdk-python.md`, `sdk-java.md`, `sdk-go.md` enumerating stable error types / codes for: (a) runtime unreachable, (b) unknown session, (c) strict miss (as surfaced to the test), (d) invalid rule payload, (e) `findInCase` zero matches, (f) `findInCase` multiple matches. Include idiomatic catch examples per language. This maps to task **P4.4a**. done: uniform "Error catalog" table + idiomatic catch example + class-hierarchy table added to all four SDK references.
-  **Verify:** `rg "## Errors" docs-site/reference/sdk-*.md` returns one match per SDK file.
-
-- [x] **DG4.2 — `mockOutbound` merge-vs-replace semantics.** Add an explicit note in all four SDK references and in `docs-site/concepts/rules-and-policy.md`: **runtime `POST …/rules` replaces the entire rules document; SDKs merge on the client so consecutive `mockOutbound` calls accumulate.** Document the `clearRules()` escape hatch. done: `::: info` callouts next to each SDK's `mockOutbound` plus a new "SDKs merge, the runtime replaces" section in `concepts/rules-and-policy.md` with a channel-by-channel table.
-  **Verify:** `rg "merge.*replace|replace.*merge|accumulate" docs-site/reference/sdk-*.md docs-site/concepts/rules-and-policy.md` returns matches in all five files.
-
-- [x] **DG4.3 — `findInCase` throw behavior.** Uniformly document that `findInCase` **throws / returns an error** when zero spans or more than one span match, surfacing the matching span ids in the message. This is authoring-time validation, not a runtime miss. Add to all four SDK references. done: `::: warning` callouts next to each SDK's `findInCase` / `find_in_case` / `FindInCase` spelling out zero / multi-match behavior, with `.matches` / `getMatches()` / `Matches` field.
-  **Verify:** `rg "zero|ambiguous|multi.*match" docs-site/reference/sdk-*.md` returns matches.
-
-### DG5 — Missing how-to guides
-
-- [x] **DG5.1 — `docs-site/guides/ship-rules-with-a-case.md`.** Explain `case.rules[]` and `case.fixtures[]` (case-embedded): when to ship rules with the case file vs apply them as session rules; precedence (per §8.3); how to author, validate (`spec/schemas/case.schema.json`), and diff. done: new guide covers embed-vs-apply decision matrix, authoring paths, precedence worked example, fixtures read-back, and a review checklist.
-  **Verify:** sidebar entry; links from `concepts/rules-and-policy.md` and `reference/case-schema.md` resolve.
-
-- [x] **DG5.2 — `docs-site/guides/auth-fixtures.md`.** Walk through `POST /v1/sessions/{id}/fixtures/auth` from `docs/design.md` §7.5: when HTTP-based auth is captured via case traces vs when to use fixtures (non-HTTP tokens, cookies, session material). Show the control-API shape and the SDK wrapper in each language. done: new guide with when-to-use decision, control-API payload, SDK wrappers in TS / Python / Java / Go, hook context usage, and CI example.
-  **Verify:** sidebar entry; links from `reference/http-control-api.md` and SDK references resolve.
-
-- [x] **DG5.3 — `docs-site/guides/debug-strict-miss.md`.** What the SUT sees when strict policy blocks an outbound (HTTP status, body, headers from `docs/design.md` §8.1), how to correlate with runtime logs, how to relax policy temporarily, how to add the missing rule. done: new guide documents the 599 + `x-softprobe-strict-miss: 1` contract, provides a symptom → diagnosis decision tree, and walks through the three fixes (mockOutbound / policy relaxation / passthrough). Troubleshooting page now cross-links it from the strict-miss entry.
-  **Verify:** sidebar entry; troubleshooting page cross-links the new guide for the "strict miss" symptom.
-
-### DG6 — Deployment & operations
-
-- [x] **DG6.1 — `docs-site/deployment/envoy-standalone.md`.** Standalone Envoy + WASM YAML (no Istio), including the listener pair for ingress (8082) and egress (8084), `sp_backend_url` pointing at the runtime, WASM plugin config, health-check routing. Mirror the shape of `e2e/docker-compose.yaml` but without Docker Compose-isms. done: new deployment page modeled on `e2e/envoy.yaml` with two-listener config, `pluginConfig` reference table, iptables routing notes, and a smoke-test procedure. Sidebar updated.
-  **Verify:** sidebar entry under "Deployment"; YAML validates with `envoy --mode validate` (optional) or at minimum `yamllint`.
-
-- [x] **DG6.2 — HA staging in `docs-site/deployment/kubernetes.md`.** Add a section mapping the design's staged HA story: **v1 in-memory single-replica → add Redis/Postgres for session-state HA → multi-process split (control vs OTLP) when scaling demands it.** Include example Helm values or manifest deltas for each stage. done: section 6 rewritten as "Stage 1 in-memory single-replica → Stage 2 Redis-backed multi-replica → Stage 3 multi-process split" with manifest deltas and a sizing table.
-  **Verify:** `rg "in-memory|single-replica|multi-process" docs-site/deployment/kubernetes.md` returns matches.
-
-- [x] **DG6.3 — Flesh out `docs-site/deployment/hosted.md`.** Add subsections: **Regions** (available regions, latency, data residency), **Retention** (how long cases live, export options), **SLA** (uptime, support tiers, status page URL), **Rate limits** (cross-link from `reference/http-control-api.md`). done: Regions table now includes cloud-provider + data-residency columns; Rate limits section documents 429 + Retry-After + quota headers; SLA section includes exclusions, credits, status-page subscription.
-  **Verify:** headings appear in page ToC; each subsection is at least a paragraph, not a placeholder.
-
-### DG7 — CLI machine contract
-
-- [x] **DG7.1 — `--json` fields table in `docs-site/reference/cli.md`.** For each command that supports `--json`, list the stable output fields (`sessionId`, `sessionRevision`, `specVersion`, `schemaVersion`, `caseId`, `status`, `error`, …). State the stability contract: breaking changes require a version bump visible via `softprobe doctor`. done: new "`--json` field stability" section with common envelope + per-command table + stability contract referencing `spec/schemas/cli-*.response.schema.json`.
-  **Verify:** table with at least `doctor`, `session start`, `session load-case`, `inspect case` rows; `rg "specVersion" docs-site/reference/cli.md` returns matches.
-
-- [x] **DG7.2 — Document `softprobe doctor` spec-drift detection.** Expand the `doctor` section in `docs-site/reference/cli.md` to describe: which version fields are compared, non-zero exit code on drift, JSON output on drift. Link to `docs/design.md` §9.2 indirectly via the normative spec. done: `doctor` now documents "What it checks" table, "Spec-drift detection" subsection comparing `cliVersion`/`runtimeVersion`/`specVersion`/`schemaVersion`, and sample `--json` output including drift mode.
-  **Verify:** `doctor` section documents exit codes for drift and unreachable runtime.
-
-### DG8 — Roadmap, versioning, changelog
-
-- [x] **DG8.1 — `docs-site/roadmap.md`.** User-facing roadmap translating `tasks.md` phases into shipped / in-progress / planned sections. Hide internal granularity (e.g. "P1.0a"); surface user-visible milestones ("Go SDK", "Jest codegen", "hosted service GA"). done: new page with Shipped (v0.5), In progress (Redis multi-replica, hosted GA, codegen expansion, hook runtime, suite parallelism), Planned (multi-process split, Ruby/.NET, diff UI, cloud rules, OTel exporter), Non-goals, Contribute sections.
-  **Verify:** sidebar entry; page renders clean tables per status; no mention of "P0.6b" style task ids.
-
-- [x] **DG8.2 — `docs-site/versioning.md`.** Short page: current version (v0.5), versioning policy (semver for protocol + SDK major version alignment), what counts as a breaking change per `docs/design.md` §9.2 contract. done: new page covers current version, release cadence, four-surface compatibility matrix (SDK/CLI/spec/schema), per-surface breaking-change rules, SDK↔platform pairing, and deprecation policy.
-  **Verify:** sidebar entry; links to changelog.
-
-- [x] **DG8.3 — `docs-site/changelog.md` seed.** Seed with entries for v0.1–v0.6 sourced from `docs/design.md` §16 history. Add a short maintainer note at the top explaining entry format. done: new page seeded with v0.1 through v0.5 entries mapped from `design.md` §16, using Keep-a-Changelog style grouping (Added/Changed/Deprecated/…) and an Unreleased placeholder at the bottom.
-  **Verify:** sidebar entry; entries for v0.5 and v0.6 present at minimum.
-
-### DG9 — Glossary, QA, sidebar, build
-
-- [x] **DG9.1 — `docs-site/glossary.md`.** Sourced from `docs/design.md` §4.1: Session, Case, Rule, Policy, Inject, Extract, Capture, Replay, Fixture, `sessionRevision`, `sp_backend_url`, `x-softprobe-session-id`. Cross-link each term to its primary concept page. done: new glossary page with 23 definitions, each cross-linking to its primary concept/reference page; anchors validated against the built site.
-  **Verify:** sidebar entry (probably under "Reference" or as a top-level singleton).
-
-- [x] **DG9.2 — Link-check sweep.** Add and run a link-checker (e.g. `lychee` or `markdown-link-check`) across `docs-site/`. Fix any dead internal anchors introduced by DG1–DG8. done: in-tree shell link-checker crawls every `](/...)` markdown link against built HTML. Fixed broken anchors: `#session-header-missing`, `#403-forbidden-…` (underscore prefix needed), `#post-v1sessionssessionidfixturesauth`, `#session-id-missing-from-egress-captures`, `#replay-deprecated`, `#mockoutbound`, and glossary author-time/SDK anchors. 257 internal links pass.
-  **Verify:** link-check script passes locally; add the command to `docs-site/README.md` under a new "QA" section; optionally add a GitHub Actions workflow stub (can be parked).
-
-- [x] **DG9.3 — Sidebar, nav, and build.** Update `docs-site/.vitepress/config.ts` to include every new page added in DG1–DG8 in the appropriate sidebar section. Run `npm run docs:build` clean; preview locally; run `docker compose up --wait` in `e2e/` and spot-check that documented snippets still work against the live stack. done: sidebar gained "About" section (Roadmap, Versioning, Changelog, Glossary, FAQ); top-nav version menu refreshed (Changelog, Roadmap, Versioning, GitHub releases). `npm run docs:build` exits 0 with no broken internal link anchors.
-  **Verify:** `npm run docs:build` exits `0` with no warnings; all new pages reachable via sidebar click-through; e2e smoke test still green.
-
----
-
-## Parking lot (not sequential — pull into phases when ready)
-
-- [ ] **OpenAPI bundle** for control API (optional; P0.2c may suffice for v1).
-- [ ] **v1 scope:** confirm request/response HTTP only (no full-duplex streaming) in spec; update `docs/design.md` §14.
-- [ ] **Multi-tenant session ids** strategy doc + schema updates if needed.
-- [x] **Rule tie-break:** same `priority` across case-embedded vs session rules — document single rule in `docs/design.md` §8.3 and enforce in resolver tests (P1.0a). done: later layer wins, later entry wins within layer
-- [ ] **Extract persistence:** where capture mode writes durable bytes (PVC, object store, sidecar volume) — product + deploy doc; may follow P1.3.
-- [ ] **HA / scaling:** multi-replica **control** runtime, sticky sessions, or `sessionId` sharding — architecture ADR when needed.
-- [x] **Control ↔ proxy backend sync:** Resolved in v0.5 design update — `softprobe-runtime` serves both API surfaces from one process with a shared in-memory store. No external sync required for v1. Multi-process HA split is a future parking lot item when scale demands it.
+- [ ] **OpenAPI bundle** for the control API (optional; `spec/schemas/session-*.schema.json` may suffice for v1).
+- [ ] **Multi-tenant session-id strategy** + schema updates.
+- [ ] **Redis / Postgres session store** for multi-replica HA (promised on the roadmap; architecture ADR when we pick up the work).
+- [ ] **Multi-process runtime split** (`softprobe-control` + `softprobe-otlp`) — promised on the roadmap; lands after Redis store.
+- [ ] **Hosted service GA on `o.softprobe.ai`** — commercial track; docs pages already carved out.
+- [ ] **Hook runtime v1** — Node sidecar executing TS/JS hooks from the Go CLI.
+- [ ] **Ruby and .NET SDKs** — after the four current SDKs reach v1 GA.
+- [ ] **Case diffing in the browser** — web UI to diff two case files or two replays.
+- [ ] **Cloud-managed rules** — version-controlled, shareable rule bundles in the hosted service.
+- [ ] **OpenTelemetry Collector exporter** — ship captured traces into existing observability pipelines without the `export otlp` shim.
+- [ ] **gRPC / WebSockets / long-running SSE** in the WASM filter — v1 ships HTTP/1.1 + HTTP/2 request-response only.

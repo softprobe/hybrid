@@ -1,5 +1,24 @@
 import { fetch as undiciFetch } from 'undici';
 
+import {
+  RuntimeError,
+  SoftprobeError,
+  SoftprobeRuntimeUnreachableError,
+  SoftprobeUnknownSessionError,
+} from './errors';
+
+export {
+  RuntimeError,
+  SoftprobeError,
+  SoftprobeRuntimeUnreachableError,
+  SoftprobeUnknownSessionError,
+} from './errors';
+
+// Legacy re-export kept for consumers that imported SoftprobeRuntimeError
+// directly from './runtime-client'; it is the same constructor as
+// RuntimeError.
+export { SoftprobeRuntimeError } from './errors';
+
 export interface SessionCreateInput {
   mode: string;
 }
@@ -17,30 +36,14 @@ export interface SessionCloseResponse {
 export interface SoftprobeRuntimeClientOptions {
   baseUrl: string;
   fetchImpl?: FetchLike;
-}
-
-export class SoftprobeRuntimeError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly body: string
-  ) {
-    super(`softprobe runtime request failed: status ${status}: ${body.trim()}`);
-    this.name = 'SoftprobeRuntimeError';
-  }
-}
-
-export class SoftprobeRuntimeUnreachableError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'SoftprobeRuntimeUnreachableError';
-  }
-}
-
-export class SoftprobeUnknownSessionError extends SoftprobeRuntimeError {
-  constructor(status: number, body: string) {
-    super(status, body);
-    this.name = 'SoftprobeUnknownSessionError';
-  }
+  /**
+   * Bearer token sent as `Authorization: Bearer <token>` on every control-plane
+   * and OTLP request. When omitted, falls back to the `SOFTPROBE_API_TOKEN`
+   * environment variable. When both are empty / whitespace, no Authorization
+   * header is sent — matching the runtime's "auth disabled by default" story
+   * (see `softprobe-runtime/internal/controlapi.withOptionalBearerAuth`).
+   */
+  apiToken?: string;
 }
 
 interface ResponseLike {
@@ -73,9 +76,15 @@ export class SoftprobeRuntimeClient {
   readonly sessions: SessionsClient;
 
   private readonly fetchImpl: FetchLike;
+  private readonly apiToken?: string;
 
-  constructor(private readonly baseUrl: string, fetchImpl: FetchLike = undiciFetch as unknown as FetchLike) {
+  constructor(
+    private readonly baseUrl: string,
+    fetchImpl: FetchLike = undiciFetch as unknown as FetchLike,
+    apiToken?: string
+  ) {
     this.fetchImpl = fetchImpl;
+    this.apiToken = apiToken;
     this.sessions = {
       create: (input) => this.createSession(input),
       loadCase: (sessionId, caseDocument) => this.loadCase(sessionId, caseDocument),
@@ -110,13 +119,20 @@ export class SoftprobeRuntimeClient {
   }
 
   private async postJson<T>(path: string, body: unknown): Promise<T> {
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+    };
+    const token = resolveBearerToken(this.apiToken);
+    if (token) {
+      headers.authorization = `Bearer ${token}`;
+    }
+
+    const url = this.url(path);
     let response: ResponseLike;
     try {
-      response = await this.fetchImpl(this.url(path), {
+      response = await this.fetchImpl(url, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(body),
       });
     } catch (error) {
@@ -126,7 +142,7 @@ export class SoftprobeRuntimeClient {
 
     const responseText = await response.text();
     if (!response.ok) {
-      throw classifyRuntimeError(response.status, responseText);
+      throw classifyRuntimeError(response.status, responseText, url);
     }
 
     return JSON.parse(responseText) as T;
@@ -138,18 +154,27 @@ export class SoftprobeRuntimeClient {
 }
 
 export function createSoftprobeRuntimeClient(options: SoftprobeRuntimeClientOptions): SoftprobeRuntimeClient {
-  return new SoftprobeRuntimeClient(options.baseUrl, options.fetchImpl);
+  return new SoftprobeRuntimeClient(options.baseUrl, options.fetchImpl, options.apiToken);
 }
 
-function classifyRuntimeError(status: number, body: string): SoftprobeRuntimeError {
+function resolveBearerToken(explicit?: string): string | undefined {
+  const candidate = explicit ?? process.env.SOFTPROBE_API_TOKEN;
+  if (candidate === undefined) {
+    return undefined;
+  }
+  const trimmed = candidate.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
+function classifyRuntimeError(status: number, body: string, url: string = ''): RuntimeError {
   try {
     const parsed = JSON.parse(body) as { error?: { code?: string } };
     if (parsed.error?.code === 'unknown_session') {
-      return new SoftprobeUnknownSessionError(status, body);
+      return new SoftprobeUnknownSessionError(status, body, url);
     }
   } catch {
     // Fall back to the generic runtime error when the body is not JSON.
   }
 
-  return new SoftprobeRuntimeError(status, body);
+  return new RuntimeError(status, body, url);
 }

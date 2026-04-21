@@ -21,6 +21,19 @@ public final class Softprobe {
     this(new Client(baseUrl, transport));
   }
 
+  /**
+   * Creates a facade that attaches {@code Authorization: Bearer <apiToken>} on every
+   * runtime call. When {@code apiToken} is {@code null} or blank the
+   * {@code SOFTPROBE_API_TOKEN} environment variable is used as a fallback.
+   */
+  public static Softprobe withApiToken(String baseUrl, String apiToken) {
+    return new Softprobe(Client.withApiToken(baseUrl, apiToken));
+  }
+
+  public Softprobe(String baseUrl, Client.Transport transport, String apiToken) {
+    this(new Client(baseUrl, transport, apiToken));
+  }
+
   /** Package-private constructor for tests that want to inject a pre-built Client. */
   Softprobe(Client client) {
     this.client = client;

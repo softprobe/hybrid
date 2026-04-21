@@ -221,6 +221,10 @@ Diagnostic: reports inject statistics for a live session. Usually more useful th
 
 ## `softprobe suite`
 
+::: warning Not shipped yet
+The `softprobe suite` subcommands (`run`, `validate`, `diff`) are **planned** for v0.6. Tracked as [PD1.7 in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd17-suite-subcommand-the-big-one). Until they land, drive suites from your test framework's native runner (Jest `describe.each`, pytest parametrize, JUnit `@ParameterizedTest`, Go `t.Run`) using the SDK's `loadCaseFromFile` + `findInCase` + `mockOutbound` primitives.
+:::
+
 Read one or more case files and run them as a test suite.
 
 ### `suite run`
@@ -283,6 +287,10 @@ Prints a table of spans: direction, method, URL, status, body size. Add `--json`
 
 ### `inspect session`
 
+::: warning Not shipped yet
+`softprobe inspect session` is **planned** for v0.6. Tracked as [PD1.3d in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd13-session-subcommand-completeness). Until it lands, call `softprobe session stats --session $SESSION_ID --json` for live counters; rules and policy are only visible in runtime logs.
+:::
+
 ```bash
 softprobe inspect session --session $SESSION_ID
 ```
@@ -292,6 +300,10 @@ Dumps the current session's policy, rules, loaded case summary, and statistics.
 ---
 
 ## `softprobe validate`
+
+::: warning Not shipped yet
+`softprobe validate {case,rules,suite}` is **planned** for v0.6. Tracked as [PD1.4 in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd14-validate-subcommand). Until it lands, run the schemas directly: `npx ajv -s spec/schemas/case.schema.json -d cases/checkout.case.json` (or equivalent for `rule.schema.json`). The `suite.schema.json` ships as part of [PD1.7a](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd17-suite-subcommand-the-big-one).
+:::
 
 Schema validation for any of the supported artifact types.
 
@@ -345,6 +357,10 @@ Emits a TypeScript module that creates a replay session, loads the case, and reg
 
 ### `generate test` (preview)
 
+::: warning Not shipped yet
+`softprobe generate test` is **planned** for v0.6. Tracked as [PD1.8a in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd18-auxiliary-generate-test-export-otlp-scrub-completion). The `jest-session` generator above is the only `generate` subcommand shipped in v0.5.
+:::
+
 ```bash
 softprobe generate test \
   --case cases/checkout.case.json \
@@ -367,6 +383,10 @@ For stable codegen, prefer `generate jest-session` and write the `describe` / `i
 
 ## `softprobe export`
 
+::: warning Not shipped yet
+`softprobe export otlp` is **planned** for v0.6. Tracked as [PD1.8b in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd18-auxiliary-generate-test-export-otlp-scrub-completion). Until it lands, the proxy's passthrough OTLP upload path already writes live traces to any collector you point `sp_backend_url` at — this command is only needed for streaming **captured** case files post-hoc.
+:::
+
 ### `export otlp`
 
 ```bash
@@ -380,6 +400,10 @@ Streams captured traces to an OpenTelemetry Collector (JSON protocol). Useful fo
 ---
 
 ## `softprobe scrub`
+
+::: warning Not shipped yet
+`softprobe scrub` is **planned** for v0.6. Tracked as [PD1.8c in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd18-auxiliary-generate-test-export-otlp-scrub-completion). Until it lands, redaction rules passed at capture time (via the SDK's `setAuthFixtures` or a future `capture run --redact-file`) are the only scrubbing path.
+:::
 
 Redact sensitive fields from an on-disk case file, producing an updated file with a changelog comment. Intended for post-capture review workflows.
 
@@ -447,6 +471,10 @@ The full schemas are published in `spec/schemas/cli-*.response.schema.json`.
 ---
 
 ## Shell integration
+
+::: warning `softprobe completion` not shipped yet
+Shell-completion script generation is **planned** for v0.6. Tracked as [PD1.8d in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd18-auxiliary-generate-test-export-otlp-scrub-completion). The session-in-subshell pattern below works today without completion; completion just adds tab-expansion on top.
+:::
 
 ### Bash / zsh completion
 

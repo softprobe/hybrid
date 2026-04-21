@@ -19,6 +19,8 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "jest-session":
 		return runGenerateJestSession(args[1:], stdout, stderr)
+	case "test":
+		return runGenerateTest(args[1:], stdout, stderr)
 	default:
 		printUsage(stderr)
 		return 2

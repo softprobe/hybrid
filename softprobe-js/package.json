@@ -34,8 +34,22 @@
     "softprobe": "./dist/cli.js"
   },
   "exports": {
-    ".": "./dist/index.js",
-    "./init": "./dist/init.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./init": {
+      "types": "./dist/init.d.ts",
+      "default": "./dist/init.js"
+    },
+    "./hooks": {
+      "types": "./dist/hooks.d.ts",
+      "default": "./dist/hooks.js"
+    },
+    "./suite": {
+      "types": "./dist/suite.d.ts",
+      "default": "./dist/suite.js"
+    }
   },
   "scripts": {
     "test": "jest",

@@ -86,6 +86,18 @@ Four parallel harnesses exercise the same **`findInCase` + `mockOutbound`** auth
 cd e2e/jest-replay && npm install && npm test
 ```
 
+#### TypeScript / Jest with hooks + `suite.yaml` — `e2e/jest-hooks/`
+
+Drives `runSuite()` from `@softprobe/softprobe-js/suite` against a real
+`suite.yaml` that references a `MockResponseHook` by name. Proves the
+hook actually runs, the transformed response reaches the runtime, the
+proxy serves it as a mock, and the SUT's response carries the
+hook-mutated payload (the `upstream` container sees zero hits).
+
+```bash
+cd e2e/jest-hooks && npm install && npm test
+```
+
 #### Python / pytest — `e2e/pytest-replay/`
 
 No install needed for the harness itself; `conftest.py` puts `softprobe-python/` on `sys.path`. Only `pytest` is required:

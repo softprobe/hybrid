@@ -1,0 +1,22 @@
+# Example suite.yaml exercising every hook kind.
+#
+# The `mocks:` block is consumed by the Jest `runSuite()` adapter and the
+# CLI alike: each entry is resolved against the case, optionally
+# transformed by a MockResponseHook, and posted to the runtime as a mock
+# rule. RequestHooks and BodyAssertHook / HeadersAssertHook are invoked
+# from the test body via the handle that `onCase` receives.
+
+name: checkout-hooks-demo
+version: 1
+
+cases:
+  - path: ../cases/checkout-happy.case.json
+    name: happy-path
+
+mocks:
+  - name: stripe-token
+    match:
+      direction: outbound
+      hostSuffix: stripe.com
+      pathPrefix: /v1/tokens
+    hook: mock-response.unmaskCard
