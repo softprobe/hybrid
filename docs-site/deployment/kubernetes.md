@@ -41,9 +41,13 @@ spec:
           env:
             - name: SOFTPROBE_LISTEN_ADDR
               value: "0.0.0.0:8080"
+            # Note: SOFTPROBE_LOG_LEVEL is accepted today but does not yet
+            # alter the logger's output — the runtime logs at info always.
+            # Honoring this env var lands in PD4.2a.
             - name: SOFTPROBE_LOG_LEVEL
               value: "info"
-            # Uncomment to persist captures
+            # Uncomment to persist captures. The `{sessionId}` / `{ts}` /
+            # `{mode}` templates are PLANNED (PD4.3a); plain paths work today.
             # - name: SOFTPROBE_CAPTURE_CASE_PATH
             #   value: "/cases/session-{sessionId}.case.json"
           # volumeMounts:
@@ -166,18 +170,22 @@ Or expose via an `Ingress` / `Gateway` — protect it with auth.
 
 ## 5. Capture to object storage
 
-For large-scale captures (thousands of sessions per night), write to S3/GCS instead of a local volume:
+::: warning Not shipped yet
+Object-storage case writers (`s3://`, `gs://`, `azblob://`) and the `{sessionId}` / `{ts}` / `{mode}` path templates are **planned** for v0.6. Tracked as [PD4.3a](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd4--runtime-observability-and-capture-operations) (templates) and [PD4.4a](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd4--runtime-observability-and-capture-operations) (object-storage schemes). Today only `file://` (the default) works; mount a `PersistentVolumeClaim` and point `SOFTPROBE_CAPTURE_CASE_PATH` at a plain path on that volume.
+:::
+
+For large-scale captures (thousands of sessions per night), once PD4 lands you'll be able to write straight to S3/GCS instead of a local volume:
 
 ```yaml
 env:
   - name: SOFTPROBE_CAPTURE_CASE_PATH
-    value: "s3://my-bucket/captures/{sessionId}.case.json"
+    value: "s3://my-bucket/captures/{sessionId}.case.json"   # PLANNED (PD4.3a + PD4.4a)
   - name: AWS_REGION
     value: "us-west-2"
   # Credentials via IRSA / workload identity preferred.
 ```
 
-The runtime streams each closed session's case file directly to object storage. Supported schemes: `s3://`, `gs://`, `azblob://`, `file://`.
+Planned supported schemes: `s3://`, `gs://`, `azblob://`, `file://` (default, shipped today).
 
 ## 6. HA and scaling — staged rollout
 
@@ -271,6 +279,10 @@ Tune `resources.requests` and `HorizontalPodAutoscaler` thresholds based on thes
 
 ### Metrics (Prometheus)
 
+::: warning Not shipped yet
+The Prometheus `/metrics` endpoint is **planned** for v0.6. Tracked as [PD4.1a](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd4--runtime-observability-and-capture-operations). Until it lands, instrument indirectly: readiness on `/health`, and count sessions via `softprobe session stats --json` polled out of your CI harness.
+:::
+
 ```yaml
 ports:
   - name: metrics
@@ -278,7 +290,7 @@ ports:
     targetPort: 9090
 ```
 
-Scrape `/metrics`. Exposed metrics:
+Planned metrics (stable once PD4.1a ships):
 
 - `softprobe_sessions_total{mode=…}`
 - `softprobe_inject_requests_total{result=hit|miss}`
@@ -287,7 +299,7 @@ Scrape `/metrics`. Exposed metrics:
 
 ### Logs
 
-JSON-formatted to stdout. Aggregate with Fluent Bit / Vector / Loki as usual.
+JSON-formatted to stdout. Aggregate with Fluent Bit / Vector / Loki as usual. Log level is `info` today — `SOFTPROBE_LOG_LEVEL` support is [PD4.2a](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd4--runtime-observability-and-capture-operations).
 
 ## Uninstall
 
