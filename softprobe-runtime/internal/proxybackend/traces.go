@@ -49,6 +49,7 @@ func HandleTraces(st *store.Store) http.HandlerFunc {
 
 		if session.Mode == "capture" {
 			_ = st.BufferExtract(req.SessionID, normalized)
+			_, _ = st.RecordExtractedSpans(req.SessionID, req.SpanCount)
 		}
 
 		w.WriteHeader(http.StatusNoContent)
@@ -57,6 +58,7 @@ func HandleTraces(st *store.Store) http.HandlerFunc {
 
 type extractUploadRequest struct {
 	SessionID string
+	SpanCount int
 }
 
 func parseExtractUploadRequest(payload []byte) (*extractUploadRequest, error) {
@@ -65,6 +67,7 @@ func parseExtractUploadRequest(payload []byte) (*extractUploadRequest, error) {
 		return nil, err
 	}
 
+	req := &extractUploadRequest{}
 	for _, resourceSpan := range data.ResourceSpans {
 		for _, scopeSpan := range resourceSpan.ScopeSpans {
 			for _, span := range scopeSpan.Spans {
@@ -72,12 +75,17 @@ func parseExtractUploadRequest(payload []byte) (*extractUploadRequest, error) {
 					continue
 				}
 
-				return &extractUploadRequest{
-					SessionID: spanAttrString(span, "sp.session.id"),
-				}, nil
+				req.SpanCount++
+				if req.SessionID == "" {
+					req.SessionID = spanAttrString(span, "sp.session.id")
+				}
 			}
 		}
 	}
 
-	return nil, errors.New("extract span not found")
+	if req.SpanCount == 0 {
+		return nil, errors.New("extract span not found")
+	}
+
+	return req, nil
 }

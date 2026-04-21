@@ -36,7 +36,9 @@ Think of Softprobe as **three moving parts** and **one artifact**:
       │             └──────────────┘
       │
       ▼
-  Your application under test ⟶ its HTTP dependencies
+┌────────────────────────────┐   ┌──────────────────────────┐
+| Your application under test|⟶ |its HTTP dependencies     |
+└────────────────────────────┘   └──────────────────────────┘
 ```
 
 1. **Proxy** — Envoy with the Softprobe WASM filter. Sits beside your app as a sidecar and sees every inbound and outbound HTTP hop.
@@ -51,8 +53,8 @@ The **artifact** is `*.case.json` — a plain JSON document containing an array 
 - **Replay** a captured case as a deterministic mock for every dependency the app talked to.
 - **Override selectively** — mock only `/fragment` while `/payments` still goes live.
 - **Mutate before replay** — bump a timestamp, rotate a token, swap a masked credit card for a test value.
-- **Run thousands of cases in parallel** with `softprobe suite run`, then get JUnit XML for CI.
-- **Plug in code** — custom assertions, PII unmasking, and request rewrites go in TypeScript hooks that the CLI or your test framework invokes.
+- **Build toward larger orchestration** — suite runners and hook execution are planned on top of the same runtime, proxy, and case artifacts.
+- **Keep one mental model** — even as more tooling lands, the core remains sessions, case files, and explicit SDK-authored mock rules.
 
 ## What it is not
 

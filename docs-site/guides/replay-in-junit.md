@@ -4,7 +4,16 @@ The Java flow mirrors [Replay in Jest](/guides/replay-in-jest). Same case file, 
 
 ## 1. Add the dependency
 
+::: warning Not yet on Maven Central
+`dev.softprobe:softprobe-java` has no public release yet. Today, build the
+SDK from source in the
+[softprobe monorepo](https://github.com/softprobe/softprobe) (`softprobe-java/`)
+and `mvn install` it into your local Maven cache — see that package's
+`README.md` for details.
+:::
+
 ```xml
+<!-- Planned Maven Central release — not yet published. -->
 <dependency>
   <groupId>dev.softprobe</groupId>
   <artifactId>softprobe-java</artifactId>

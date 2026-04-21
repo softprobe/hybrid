@@ -19,11 +19,15 @@ describe('Task 4.0c Jest replay example', () => {
       expect(content).toContain('/hello');
       expect(content).toContain('fragment-happy-path.case.json');
       expect(content).toContain('await response.json()');
-      expect(content).toContain("{ message: 'hello', dependency: { dep: 'ok' } }");
+      expect(content).toContain("{ message: 'hello', dep: 'ok' }");
       expect(content).not.toMatch(/\bcheckout\b/);
       expect(content).not.toMatch(/\bstripe\b/);
       expect(content).not.toMatch(/\bpayment_intents\b/);
     }
+    expect(readme).toContain('softprobe doctor');
+    expect(readme).toContain('docs/design.md §5.3');
+    expect(readme).toContain('x-softprobe-session-id');
+    expect(readme).toContain('npm test');
 
     expect(examplePackage.private).toBe(true);
     expect(examplePackage.dependencies).toEqual({

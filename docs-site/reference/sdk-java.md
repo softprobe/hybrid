@@ -2,11 +2,20 @@
 
 The `dev.softprobe:softprobe-java` Maven artifact. Targets Java 17+.
 
+::: warning Not yet on Maven Central
+The Maven / Gradle coordinates below refer to a **planned** release. This
+monorepo does not yet publish `dev.softprobe:softprobe-java`. To use the SDK
+today, build it from source in the
+[softprobe monorepo](https://github.com/softprobe/softprobe) (`softprobe-java/`)
+and install it to your local Maven cache — see its `README.md` for details.
+:::
+
 ## Install
 
 ### Maven
 
 ```xml
+<!-- Planned Maven Central release — not yet published. -->
 <dependency>
   <groupId>dev.softprobe</groupId>
   <artifactId>softprobe-java</artifactId>
@@ -18,6 +27,7 @@ The `dev.softprobe:softprobe-java` Maven artifact. Targets Java 17+.
 ### Gradle
 
 ```kotlin
+// Planned — not yet published.
 testImplementation("dev.softprobe:softprobe-java:0.5.0")
 ```
 

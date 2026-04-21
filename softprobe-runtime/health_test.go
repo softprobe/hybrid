@@ -36,3 +36,43 @@ func TestHealthHandlerReturnsOK(t *testing.T) {
 		t.Fatal("schemaVersion is empty")
 	}
 }
+
+func TestMetaHandlerReturnsCompatibilityFields(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/v1/meta", nil)
+	rec := httptest.NewRecorder()
+
+	controlapi.NewMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var body struct {
+		RuntimeVersion string `json:"runtimeVersion"`
+		SpecVersion    string `json:"specVersion"`
+		SchemaVersion  string `json:"schemaVersion"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal meta body: %v", err)
+	}
+	if body.RuntimeVersion == "" {
+		t.Fatal("runtimeVersion is empty")
+	}
+	if body.SpecVersion == "" {
+		t.Fatal("specVersion is empty")
+	}
+	if body.SchemaVersion == "" {
+		t.Fatal("schemaVersion is empty")
+	}
+}
+
+func TestMetaHandlerRejectsNonGet(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/v1/meta", nil)
+	rec := httptest.NewRecorder()
+
+	controlapi.NewMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+	}
+}

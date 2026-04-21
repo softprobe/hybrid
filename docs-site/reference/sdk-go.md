@@ -1,10 +1,18 @@
 # Go SDK reference
 
-The `github.com/softprobe/softprobe-go` Go module. Requires Go 1.22+.
+The `softprobe-go` Go module. Requires Go 1.22+.
+
+::: warning Not yet released at a public import path
+The `go get github.com/softprobe/softprobe-go@v0.5.0` command below refers to
+a **planned** release. The module in this monorepo currently has the local
+module name `softprobe-go` and is consumed from source via a `replace`
+directive (see `softprobe-go/README.md` and the in-repo `e2e/go/` harness).
+:::
 
 ## Install
 
 ```bash
+# Planned — not yet published.
 go get github.com/softprobe/softprobe-go@v0.5.0
 ```
 

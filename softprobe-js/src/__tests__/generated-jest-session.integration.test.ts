@@ -95,7 +95,7 @@ describe('generated jest session module', () => {
         action: 'mock',
         response: {
           status: 200,
-          body: '{"dependency":{"dep":"ok"},"message":"hello"}\n',
+          body: '{"dep":"ok","message":"hello"}\n',
         },
       },
     });

@@ -300,7 +300,7 @@ Traffic returns to normal immediately.
 
 ## Security checklist
 
-- **Runtime is unauthenticated by default.** Set `SOFTPROBE_API_TOKEN` before exposing beyond the mesh.
+- **Runtime is unauthenticated by default today.** Network-restrict it inside the cluster; bearer-token auth for the OSS runtime is planned follow-up work.
 - **Session ids are capabilities.** Treat them as secrets in shared environments.
 - **Capture PII with intent.** Apply redaction rules before driving production traffic into capture mode.
 - **Network-restrict the runtime** to the namespaces that need it via `NetworkPolicy`.

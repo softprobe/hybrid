@@ -1,8 +1,16 @@
 # Python SDK reference
 
-The `softprobe` PyPI package. Works with Python 3.9+.
+The `softprobe` package. Works with Python 3.9+.
+
+::: warning Not yet on PyPI
+The `pip install softprobe` command below refers to a **planned** PyPI
+release and is not wired to this repository today. Consume the package from
+source via the [softprobe monorepo](https://github.com/softprobe/softprobe)
+(`softprobe-python/`) — see its `README.md` for details.
+:::
 
 ```bash
+# Planned — not yet published.
 pip install softprobe
 ```
 

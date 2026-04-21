@@ -6,7 +6,10 @@ import (
 	"strings"
 )
 
-const strictPolicyErrorMessage = "strict policy requires a mock rule match"
+const (
+	strictPolicyRuleID       = "policy-strict-miss"
+	strictPolicyErrorMessage = "strict policy requires a mock rule match"
+)
 
 type injectRuleDocument struct {
 	Version int          `json:"version"`
@@ -132,7 +135,7 @@ func policyRulesForInject(strict bool) []injectRule {
 	}
 
 	return []injectRule{{
-		ID:       "policy-strict-miss",
+		ID:       strictPolicyRuleID,
 		Priority: 0,
 		Then: injectRuleThen{
 			Action: "error",

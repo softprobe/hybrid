@@ -7,7 +7,13 @@ import {
   formatPredicate,
   responseFromSpan,
 } from './core/case/find-span';
-import { createSoftprobeRuntimeClient, SoftprobeRuntimeClient, SoftprobeRuntimeClientOptions } from './runtime-client';
+import {
+  createSoftprobeRuntimeClient,
+  SoftprobeRuntimeClient,
+  SoftprobeRuntimeClientOptions,
+  SoftprobeRuntimeUnreachableError,
+  SoftprobeUnknownSessionError,
+} from './runtime-client';
 
 export interface SoftprobeOptions extends Omit<SoftprobeRuntimeClientOptions, 'baseUrl'> {
   baseUrl?: string;
@@ -42,8 +48,23 @@ export interface SoftprobeMockRuleSpec extends SoftprobeRuleSpec {
 export type SoftprobeFindInCaseSpec = CaseSpanPredicate;
 
 export type { CapturedHit } from './core/case/find-span';
+export { SoftprobeRuntimeError, SoftprobeRuntimeUnreachableError, SoftprobeUnknownSessionError } from './runtime-client';
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8080';
+
+export class SoftprobeCaseLoadError extends Error {
+  constructor(message: string, public readonly cause?: unknown) {
+    super(message);
+    this.name = 'SoftprobeCaseLoadError';
+  }
+}
+
+export class SoftprobeCaseLookupAmbiguityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SoftprobeCaseLookupAmbiguityError';
+  }
+}
 
 /**
  * Ergonomic SDK facade for the Softprobe control runtime (see `docs/design.md` §3.2).
@@ -83,9 +104,31 @@ export class SoftprobeSession {
   ) {}
 
   async loadCaseFromFile(casePath: string): Promise<void> {
-    const caseDocument = JSON.parse(await readFile(casePath, 'utf8'));
-    this.loadedCase = caseDocument;
-    await this.client.loadCase(this.id, caseDocument);
+    try {
+      const caseDocument = JSON.parse(await readFile(casePath, 'utf8'));
+      await this.loadCase(caseDocument);
+    } catch (error) {
+      if (
+        error instanceof SoftprobeCaseLoadError ||
+        error instanceof SoftprobeUnknownSessionError ||
+        error instanceof SoftprobeRuntimeUnreachableError
+      ) {
+        throw error;
+      }
+      throw new SoftprobeCaseLoadError(`failed to load case from ${casePath}`, error);
+    }
+  }
+
+  async loadCase(caseDocument: unknown): Promise<void> {
+    try {
+      await this.client.loadCase(this.id, caseDocument);
+      this.loadedCase = caseDocument;
+    } catch (error) {
+      if (error instanceof SoftprobeUnknownSessionError || error instanceof SoftprobeRuntimeUnreachableError) {
+        throw error;
+      }
+      throw new SoftprobeCaseLoadError('failed to load case into the runtime', error);
+    }
   }
 
   /**
@@ -97,13 +140,7 @@ export class SoftprobeSession {
    * author fixes ambiguity at authoring time (see `docs/design.md` §3.2.3).
    */
   findInCase(spec: SoftprobeFindInCaseSpec): CapturedHit {
-    if (this.loadedCase === null) {
-      throw new Error(
-        'findInCase requires a case: call `await session.loadCaseFromFile(path)` before `findInCase`.'
-      );
-    }
-
-    const matches = findSpans(this.loadedCase, spec);
+    const matches = this.findAllInCase(spec);
     if (matches.length === 0) {
       throw new Error(
         `findInCase: no span in the loaded case matches ${formatPredicate(spec)}. ` +
@@ -114,14 +151,26 @@ export class SoftprobeSession {
       const ids = matches
         .map((m) => m.span.spanId ?? '<unknown>')
         .join(', ');
-      throw new Error(
+      throw new SoftprobeCaseLookupAmbiguityError(
         `findInCase: ${matches.length} spans match ${formatPredicate(spec)}. ` +
           `Disambiguate the predicate — candidate span ids: ${ids}.`
       );
     }
 
-    const [{ span }] = matches;
-    return { response: responseFromSpan(span), span };
+    return matches[0];
+  }
+
+  findAllInCase(spec: SoftprobeFindInCaseSpec): CapturedHit[] {
+    if (this.loadedCase === null) {
+      throw new SoftprobeCaseLoadError(
+        'findInCase requires a case: call `await session.loadCaseFromFile(path)` before `findInCase`.'
+      );
+    }
+
+    return findSpans(this.loadedCase, spec).map(({ span }) => ({
+      response: responseFromSpan(span),
+      span,
+    }));
   }
 
   async mockOutbound(spec: SoftprobeMockRuleSpec): Promise<void> {
@@ -132,6 +181,14 @@ export class SoftprobeSession {
   async clearRules(): Promise<void> {
     this.rules.length = 0;
     await this.client.updateRules(this.id, { version: 1, rules: [] });
+  }
+
+  async setPolicy(policyDocument: unknown): Promise<void> {
+    await this.client.setPolicy(this.id, policyDocument);
+  }
+
+  async setAuthFixtures(fixturesDocument: unknown): Promise<void> {
+    await this.client.setAuthFixtures(this.id, fixturesDocument);
   }
 
   async close(): Promise<void> {

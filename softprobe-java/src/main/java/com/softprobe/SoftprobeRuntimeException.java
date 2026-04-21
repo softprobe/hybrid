@@ -1,6 +1,6 @@
 package com.softprobe;
 
-public final class SoftprobeRuntimeException extends RuntimeException {
+public class SoftprobeRuntimeException extends RuntimeException {
   private final int statusCode;
   private final String body;
 

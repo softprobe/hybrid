@@ -42,7 +42,7 @@
                     {
                       "key": "sp.span.type",
                       "value": {
-                        "stringValue": "inject"
+                        "stringValue": "extract"
                       }
                     },
                     {

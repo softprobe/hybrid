@@ -90,7 +90,7 @@ If **any** of these links is missing, capture will record the hops it sees but f
 
 - **Treat `sessionId` as a capability.** Anyone who knows it can drive mock/replay behavior for that session. Scope sessions to the minimum TTL required.
 - **In hosted deployments**, sessions are namespaced per org — knowing a session id from another tenant is not sufficient to access it.
-- **In production canaries**, require a valid auth token on the `/v1/sessions` endpoint (the OSS runtime accepts a bearer token via `SOFTPROBE_API_TOKEN`).
+- **In production canaries**, require auth on the runtime endpoints before exposing them broadly. Bearer-token support for the OSS runtime is planned contract work; hosted deployments enforce their own auth separately.
 
 ## See also
 

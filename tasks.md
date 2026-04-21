@@ -226,11 +226,47 @@ Validates the **complete capture → replay loop** using real components: `softp
 
 ### PE.3 Strict miss
 
-- [ ] **PE.3a — Strict policy blocks unmocked traffic.** With a replay session loaded from `captured.case.json` and policy `externalHttp: strict`:
+- [x] **PE.3a — Strict policy blocks unmocked traffic.** With a replay session loaded from `captured.case.json` and policy `externalHttp: strict`: done: validated the end-to-end strict-miss path against the live compose stack
   1. Send a request to a **different path** (e.g. `GET /unknown`) through the proxy.
   2. Assert: proxy returns a `5xx` or configured error response (not forwarded to the app workload).
   3. Assert: app received `0` `/hello` hits.  
   **Verify:** Confirms the strict-miss → error path of P1.0d is exercised end-to-end.
+
+---
+
+## Phase PH — Hybrid convergence and core contract completion
+
+Bring repo docs, runtime/CLI contracts, and the four SDKs back in line with the unified hybrid design before moving on to later codegen/export work.
+
+### PH.0 Repo and docs convergence
+
+- [x] **PH.0a — Canonical top-level docs.** Rewrite `README.md`, `docs/repo-layout.md`, `softprobe-runtime/README.md`, `softprobe-proxy/README.md`, and `softprobe-js/README.md` so they all describe the unified proxy-first hybrid product. Move older NDJSON/framework-patching and analytics-agent positioning into clearly-labeled legacy or migration sections instead of presenting them as the product. done: converged the five top-level docs on the unified runtime/proxy-first story and pushed older product language into explicit legacy notes  
+  **Verify:** `rg "control API only|NDJSON|framework patch|business-level tracing|analytics" README.md docs/repo-layout.md softprobe-runtime/README.md softprobe-proxy/README.md softprobe-js/README.md` returns only intentional legacy/migration references.
+
+- [x] **PH.0b — Docs-site scope honesty.** Update `docs-site/` pages that currently present not-yet-built OSS features as current GA behavior so they are marked preview/planned or trimmed to the shipped surface, without contradicting `docs/design.md` or `spec/`. done: rewrote the control API and CLI references around the current OSS surface, downgraded future/runtime-auth claims to planned, and removed suite-run overstatement from the main overview pages  
+  **Verify:** `docs-site/reference/http-control-api.md` and `docs-site/reference/cli.md` stop claiming unimplemented OSS endpoints/commands as current behavior.
+
+### PH.1 Runtime machine contract
+
+- [x] **PH.1a — `GET /v1/meta`.** Add a machine-readable metadata endpoint on `softprobe-runtime` returning runtime version, `specVersion`, `schemaVersion`, and the minimal compatibility fields the CLI/SDKs need for drift detection. Write handler and contract tests first. done: added `/v1/meta` with runtime/spec/schema metadata and handler coverage  
+  **Verify:** `go test ./...` in `softprobe-runtime/` covers success + method guard + field presence.
+
+- [x] **PH.1b — Session stats endpoint + counters.** Add `GET /v1/sessions/{sessionId}/stats` backed by real inject/extract/strict-miss counters in the shared session store. Write failing tests first for at least one inject hit, one extract upload, and one strict miss. done: added session stats handler plus inject/extract/strict-miss counter wiring  
+  **Verify:** runtime tests assert counter increments and unknown-session error shape.
+
+- [x] **PH.1c — Runtime auth + stable errors.** Gate control and OTLP handlers behind optional bearer auth via `SOFTPROBE_API_TOKEN`, keep `/health` unauthenticated, and normalize control-plane JSON errors/status codes so SDKs and CLI can rely on them. Write auth/error tests first. done: added optional bearer auth middleware and stable JSON control error envelopes  
+  **Verify:** tests cover missing token → `401`, wrong token → `403`, valid token → success, and unknown-session/malformed-body envelopes.
+
+### PH.2 CLI contract completion
+
+- [x] **PH.2a — `generate` dispatch + fragment fixture alignment.** Wire `generate` into `cmd/softprobe/main.go`, then align the fragment golden case/example expectations with the live e2e app response shape so `softprobe-js` generated-session and quickstart tests stop drifting. Write or tighten failing tests first. done: dispatched `generate`, switched the fragment golden case to replayable extract data, and realigned generated/README test expectations  
+  **Verify:** `go test ./...` in `softprobe-runtime/` and `npm test -- --runInBand` in `softprobe-js/` are green for the generator and fragment replay examples.
+
+- [x] **PH.2b — `session close`, `session stats`, and explicit `--shell`.** Add CLI subcommands for close/stats, keep shell export as an explicit `--shell` mode, and cover both human-readable and `--json` output with tests first. done: added CLI stats/close commands, explicit `--shell`, and nil-safe CLI writer handling  
+  **Verify:** CLI tests parse JSON for `session start --json` / `session stats --json` / `session close --json`; `--shell` prints only the export line.
+
+- [x] **PH.2c — Common JSON envelope + doctor drift detection.** Standardize shipped CLI `--json` commands on a top-level envelope (`status`, `exitCode`, command-specific fields) and expand `doctor` to compare runtime metadata from `/v1/meta` rather than only pinging `/health`. Write failing tests first for drift and unreachable runtime cases. done: added common CLI JSON envelopes and `doctor` health+meta drift detection with JSON failure output  
+  **Verify:** CLI tests cover healthy runtime, spec/schema drift, unreachable runtime, and stable JSON field presence.
 
 ---
 
@@ -275,8 +311,25 @@ Can parallelize after P0.4a and P0.2c (client needs stable shapes).
 - [x] **P4.0b — TS SDK `Softprobe` / `SoftprobeSession`.** Implement **`startSession`**, **`attach`**, **`loadCaseFromFile`**, **`findInCase`**, **`mockOutbound`**, **`clearRules`**, **`close`** as the **only** HTTP callers to `/v1/sessions`, `/load-case`, `/rules`, `/close` per **`docs/design.md` §3.2** (no `fetch` in generated Jest modules). **`mockOutbound`** must **merge** then **replace** full rules document per store semantics (`ApplyRules`). Optional: **`setPolicy`**, **`setAuthFixtures`**. done: Softprobe/SoftprobeSession shipped with findInCase + mockOutbound; replayOutbound removed per P4.5 refactor  
   **Verify:** unit tests assert outbound `POST` bodies validate against `session-rules.request.schema.json` / `rule.schema.json`; two `mockOutbound` calls in a row preserve both rules; `clearRules` sends empty `rules`.
 
-- [ ] **P4.0c — Jest canonical quickstart.** `softprobe-js/README.md` (or `examples/jest-golden-path/`) documents **one** copy-paste flow: `doctor` → session → load-case/rules via SDK → Jest test with `x-softprobe-session-id`; links `docs/design.md` §5.3.  
+- [x] **P4.0c — Jest canonical quickstart.** `softprobe-js/README.md` (or `examples/jest-golden-path/`) documents **one** copy-paste flow: `doctor` → session → load-case/rules via SDK → Jest test with `x-softprobe-session-id`; links `docs/design.md` §5.3. done: updated the Jest replay quickstart with `doctor`, the §5.3 materialization link, and verified the documented `npm test` path against compose  
   **Verify:** documented `npm test` (or CI job) passes.
+
+### P4.6 SDK parity and packaging truth
+
+- [x] **P4.6a — TypeScript parity surface + typed errors.** Add the missing minimal SDK surface in `softprobe-js` (`loadCase`, `findAllInCase`, `setPolicy`, `setAuthFixtures`) plus stable typed errors for runtime unreachable, unknown session, case-load failure, and case-lookup ambiguity. Write failing unit tests first. done: added the missing session APIs plus typed runtime/case error classes and verified the full TS suite  
+  **Verify:** `npm test -- --runInBand` covers each new method and error type.
+
+- [x] **P4.6b — Python parity surface + typed errors.** Extend `softprobe-python` with the same minimal parity surface and stable typed errors on top of the thin client. Write failing tests first. done: added `load_case`, `find_all_in_case`, `set_policy`, `set_auth_fixtures`, plus `SoftprobeRuntimeUnreachableError`, `SoftprobeUnknownSessionError`, `SoftprobeCaseLoadError`, and `SoftprobeCaseLookupAmbiguityError` with unit coverage in `tests/test_softprobe.py`  
+  **Verify:** Python unit tests cover new methods and error classes/messages.
+
+- [x] **P4.6c — Java parity surface + typed errors.** Extend `softprobe-java` with the same minimal parity surface and stable typed errors. Write failing tests first. done: added `loadCase(String)`, `findAllInCase`, `setPolicy`, `setAuthFixtures`, and the `SoftprobeRuntimeUnreachableException` / `SoftprobeUnknownSessionException` / `SoftprobeCaseLoadException` / `SoftprobeCaseLookupAmbiguityException` hierarchy with JUnit coverage in `ParitySurfaceTest`  
+  **Verify:** `mvn test -q` covers new methods and exception classes.
+
+- [x] **P4.6d — Go parity surface + typed errors.** Align `softprobe-go` with the documented minimal parity surface and typed errors, or trim any remaining mismatched docs in the same task scope if the feature is intentionally absent. Write failing tests first. done: added `LoadCase([]byte)`, `FindAllInCase`, `SetAuthFixtures`, plus `UnreachableError`, `UnknownSessionError`, `CaseLoadError`, and `CaseLookupAmbiguityError`, with `errors.As` recoverability covered in `parity_surface_test.go`  
+  **Verify:** `go test ./...` in `softprobe-go/` covers new methods and error recovery via `errors.As`.
+
+- [x] **P4.6e — Package READMEs and publication truth.** Add or refresh package-level READMEs for Go, Python, and Java and correct any docs that imply public registry publication which this repo does not currently automate or release. done: added `softprobe-python/README.md`, `softprobe-java/README.md`, and `softprobe-go/README.md` with source-based usage; refreshed `softprobe-js/README.md` publish note; annotated `docs-site/installation.md`, `reference/sdk-python.md`, `reference/sdk-java.md`, `reference/sdk-go.md`, `guides/replay-in-pytest.md`, `guides/replay-in-junit.md`, and `guides/replay-in-go.md` with explicit "not yet published" warnings  
+  **Verify:** each SDK repo has a README with source/local usage that matches the current release reality.
 
 ### P4.1 JavaScript / TypeScript
 

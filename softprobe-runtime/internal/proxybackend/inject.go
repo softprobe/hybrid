@@ -133,9 +133,13 @@ func HandleInject(st *store.Store) http.HandlerFunc {
 				http.Error(w, "mock rule missing response", http.StatusInternalServerError)
 				return
 			}
+			_, _ = st.RecordInjectedSpans(req.SessionID, 1)
 			writeInjectHit(w, response)
 		case "error":
 			status, body := buildErrorResponse(match.Rule)
+			if match.Rule.ID == strictPolicyRuleID && match.Source == "policy" {
+				_, _ = st.RecordStrictMiss(req.SessionID, 1)
+			}
 			writeInjectError(w, status, body)
 		case "passthrough", "capture_only":
 			// The proxy must perform the real outbound call; a miss tells it to

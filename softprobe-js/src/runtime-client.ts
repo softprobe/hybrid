@@ -29,6 +29,20 @@ export class SoftprobeRuntimeError extends Error {
   }
 }
 
+export class SoftprobeRuntimeUnreachableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SoftprobeRuntimeUnreachableError';
+  }
+}
+
+export class SoftprobeUnknownSessionError extends SoftprobeRuntimeError {
+  constructor(status: number, body: string) {
+    super(status, body);
+    this.name = 'SoftprobeUnknownSessionError';
+  }
+}
+
 interface ResponseLike {
   ok: boolean;
   status: number;
@@ -46,6 +60,8 @@ type FetchLike = (input: string, init?: RequestInitLike) => Promise<ResponseLike
 interface SessionsClient {
   create(input: SessionCreateInput): Promise<SessionCreateResponse>;
   loadCase(sessionId: string, caseDocument: unknown): Promise<SessionCreateResponse>;
+  setPolicy(sessionId: string, policyDocument: unknown): Promise<SessionCreateResponse>;
+  setAuthFixtures(sessionId: string, fixturesDocument: unknown): Promise<SessionCreateResponse>;
   close(sessionId: string): Promise<SessionCloseResponse>;
 }
 
@@ -63,6 +79,8 @@ export class SoftprobeRuntimeClient {
     this.sessions = {
       create: (input) => this.createSession(input),
       loadCase: (sessionId, caseDocument) => this.loadCase(sessionId, caseDocument),
+      setPolicy: (sessionId, policyDocument) => this.setPolicy(sessionId, policyDocument),
+      setAuthFixtures: (sessionId, fixturesDocument) => this.setAuthFixtures(sessionId, fixturesDocument),
       close: (sessionId) => this.closeSession(sessionId),
     };
   }
@@ -79,22 +97,36 @@ export class SoftprobeRuntimeClient {
     return this.postJson<SessionCloseResponse>(`/v1/sessions/${sessionId}/close`, {});
   }
 
+  async setPolicy(sessionId: string, policyDocument: unknown): Promise<SessionCreateResponse> {
+    return this.postJson<SessionCreateResponse>(`/v1/sessions/${sessionId}/policy`, policyDocument);
+  }
+
+  async setAuthFixtures(sessionId: string, fixturesDocument: unknown): Promise<SessionCreateResponse> {
+    return this.postJson<SessionCreateResponse>(`/v1/sessions/${sessionId}/fixtures/auth`, fixturesDocument);
+  }
+
   async updateRules(sessionId: string, rulesDocument: unknown): Promise<SessionCreateResponse> {
     return this.postJson<SessionCreateResponse>(`/v1/sessions/${sessionId}/rules`, rulesDocument);
   }
 
   private async postJson<T>(path: string, body: unknown): Promise<T> {
-    const response = await this.fetchImpl(this.url(path), {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
+    let response: ResponseLike;
+    try {
+      response = await this.fetchImpl(this.url(path), {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new SoftprobeRuntimeUnreachableError(`softprobe runtime is unreachable: ${message}`);
+    }
 
     const responseText = await response.text();
     if (!response.ok) {
-      throw new SoftprobeRuntimeError(response.status, responseText);
+      throw classifyRuntimeError(response.status, responseText);
     }
 
     return JSON.parse(responseText) as T;
@@ -107,4 +139,17 @@ export class SoftprobeRuntimeClient {
 
 export function createSoftprobeRuntimeClient(options: SoftprobeRuntimeClientOptions): SoftprobeRuntimeClient {
   return new SoftprobeRuntimeClient(options.baseUrl, options.fetchImpl);
+}
+
+function classifyRuntimeError(status: number, body: string): SoftprobeRuntimeError {
+  try {
+    const parsed = JSON.parse(body) as { error?: { code?: string } };
+    if (parsed.error?.code === 'unknown_session') {
+      return new SoftprobeUnknownSessionError(status, body);
+    }
+  } catch {
+    // Fall back to the generic runtime error when the body is not JSON.
+  }
+
+  return new SoftprobeRuntimeError(status, body);
 }

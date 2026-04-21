@@ -40,7 +40,7 @@ features:
 
   - icon: ⚡
     title: Scale beyond unit tests
-    details: <code>softprobe suite run</code> executes thousands of captured cases in parallel and emits JUnit XML for any CI. Customize with TypeScript hooks for PII masking or custom assertions.
+    details: Planned orchestration layers such as <code>softprobe suite run</code> build on the same runtime, proxy, and case format. The current OSS core focuses on capture/replay sessions and SDK-driven tests first.
     link: /guides/run-a-suite-at-scale
     linkText: Run a suite
 

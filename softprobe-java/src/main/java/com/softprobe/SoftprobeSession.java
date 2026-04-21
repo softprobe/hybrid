@@ -36,15 +36,49 @@ public final class SoftprobeSession {
   /**
    * Reads an OTLP-shaped case document from {@code path}, pushes it to the
    * runtime, and keeps a parsed copy in memory for {@link #findInCase}.
+   *
+   * <p>File read / JSON parse failures raise {@link SoftprobeCaseLoadException}.
+   * Runtime unreachable / unknown-session failures pass through with their typed
+   * form.
    */
   public void loadCaseFromFile(Path path) {
+    String caseJson;
+    JsonNode parsed;
     try {
-      String caseJson = Files.readString(path);
-      this.loadedCase = MAPPER.readTree(caseJson);
-      client.sessions().loadCase(id, caseJson);
+      caseJson = Files.readString(path);
+      parsed = MAPPER.readTree(caseJson);
     } catch (IOException e) {
-      throw new SoftprobeRuntimeException(0, "failed to read case file: " + e.getMessage());
+      throw new SoftprobeCaseLoadException(
+          "failed to load case from " + path + ": " + e.getMessage(), e);
     }
+    loadCaseInternal(parsed, caseJson);
+  }
+
+  /**
+   * Pushes an already-prepared JSON case document to the runtime and keeps a
+   * parsed copy in memory for {@link #findInCase}.
+   */
+  public void loadCase(String caseJson) {
+    JsonNode parsed;
+    try {
+      parsed = MAPPER.readTree(caseJson);
+    } catch (IOException e) {
+      throw new SoftprobeCaseLoadException(
+          "failed to parse case document: " + e.getMessage(), e);
+    }
+    loadCaseInternal(parsed, caseJson);
+  }
+
+  private void loadCaseInternal(JsonNode parsed, String caseJson) {
+    try {
+      client.sessions().loadCase(id, caseJson);
+    } catch (SoftprobeUnknownSessionException | SoftprobeRuntimeUnreachableException e) {
+      throw e;
+    } catch (SoftprobeRuntimeException e) {
+      throw new SoftprobeCaseLoadException(
+          "failed to load case into the runtime: " + e.getMessage(), e);
+    }
+    this.loadedCase = parsed;
   }
 
   /**
@@ -53,11 +87,7 @@ public final class SoftprobeSession {
    * than one span matches — test authors disambiguate at authoring time.
    */
   public CapturedHit findInCase(CaseSpanPredicate predicate) {
-    if (loadedCase == null) {
-      throw new IllegalStateException(
-          "findInCase requires a case: call `session.loadCaseFromFile(path)` first.");
-    }
-    List<JsonNode> matches = CaseLookup.findSpans(loadedCase, predicate);
+    List<JsonNode> matches = lookup(predicate);
     if (matches.isEmpty()) {
       throw new IllegalStateException(
           "findInCase: no span in the loaded case matches "
@@ -72,7 +102,7 @@ public final class SoftprobeSession {
         }
         ids.append(span.path("spanId").asText("<unknown>"));
       }
-      throw new IllegalStateException(
+      throw new SoftprobeCaseLookupAmbiguityException(
           "findInCase: "
               + matches.size()
               + " spans match "
@@ -82,6 +112,29 @@ public final class SoftprobeSession {
     }
     JsonNode span = matches.get(0);
     return new CapturedHit(CaseLookup.responseFromSpan(span), span);
+  }
+
+  /**
+   * Returns every span that matches {@code predicate}. Never throws on zero
+   * matches — callers handle the empty list. Use {@link #findInCase} when you
+   * expect exactly one match and want authoring-time errors for ambiguity.
+   */
+  public List<CapturedHit> findAllInCase(CaseSpanPredicate predicate) {
+    List<JsonNode> matches = lookup(predicate);
+    List<CapturedHit> hits = new ArrayList<>(matches.size());
+    for (JsonNode span : matches) {
+      hits.add(new CapturedHit(CaseLookup.responseFromSpan(span), span));
+    }
+    return hits;
+  }
+
+  private List<JsonNode> lookup(CaseSpanPredicate predicate) {
+    if (loadedCase == null) {
+      throw new SoftprobeCaseLoadException(
+          "findInCase requires a case: call `session.loadCaseFromFile(path)` "
+              + "or `session.loadCase(caseJson)` first.");
+    }
+    return CaseLookup.findSpans(loadedCase, predicate);
   }
 
   /** Appends a {@code mock} rule for the session and pushes the full rule-set. */
@@ -97,6 +150,16 @@ public final class SoftprobeSession {
   public void clearRules() {
     rules.clear();
     syncRules();
+  }
+
+  /** Pushes a policy document to {@code POST /v1/sessions/{id}/policy}. */
+  public void setPolicy(String policyJson) {
+    client.sessions().setPolicy(id, policyJson);
+  }
+
+  /** Pushes an auth fixtures document to {@code POST /v1/sessions/{id}/fixtures/auth}. */
+  public void setAuthFixtures(String fixturesJson) {
+    client.sessions().setAuthFixtures(id, fixturesJson);
   }
 
   public void close() {

@@ -1,34 +1,81 @@
 # softprobe/hybrid
 
-Monorepo workspace for the **Softprobe Hybrid** platform: **proxy-first HTTP** capture and replay, **OTEL-shaped** case artifacts, and a **language-neutral control plane** for rules and sessions.
+Monorepo workspace for the **Softprobe Hybrid** platform: a **proxy-first HTTP**
+capture/replay system with a **unified runtime**, **OTLP-shaped case files**, and
+language SDKs that steer replay through the same JSON control API.
 
-## Contents
+## Canonical product
 
-| Path | Description |
-|------|-------------|
-| [`spec/`](./spec/) | Canonical contracts: schemas, protocols, and examples; product design lives in [`docs/design.md`](./docs/design.md). |
-| [`softprobe-proxy/`](./softprobe-proxy/) | Envoy/WASM data plane (Rust): HTTP client to runtime for inject/extract per [`spec/protocol/proxy-otel-api.md`](spec/protocol/proxy-otel-api.md). |
-| **`softprobe-runtime`** (see [`tasks.md`](./tasks.md) P0.0) | OSS HTTP **control API** only ([`spec/protocol/http-control-api.md`](spec/protocol/http-control-api.md)). Inject/extract: **proxy backend** (e.g. `https://o.softprobe.ai`). |
-| [`softprobe-js/`](./softprobe-js/) | JavaScript SDK, codegen, optional temporary reference runtime. |
+Softprobe's current product shape is:
 
-## Design source of truth
+- **`softprobe-proxy`**: Envoy + WASM data plane that intercepts ingress and
+  egress HTTP and talks to the runtime over OTLP (`/v1/inject`, `/v1/traces`)
+- **`softprobe-runtime`**: unified Go service that serves both the **JSON
+  control API** and the **proxy OTLP API** from one process and one in-memory
+  session store
+- **Language SDKs**: TypeScript, Go, Python, and Java helpers that create
+  sessions, load cases, look up captured spans in memory, and register explicit
+  mock rules
+- **Case artifacts**: `*.case.json` files containing OTLP-compatible trace
+  payloads
 
-- **Hybrid product and engineering design:** [`docs/design.md`](./docs/design.md)
-- **Platform overview:** [`docs/platform-architecture.md`](./docs/platform-architecture.md)
-- **Repo topology:** [`docs/repo-layout.md`](./docs/repo-layout.md)
+In local and self-hosted setups, `SOFTPROBE_RUNTIME_URL` and the proxy's
+`sp_backend_url` point at the **same** `softprobe-runtime` base URL.
 
-## Contracts quick links
+## Workspace layout
 
-- [HTTP control API](spec/protocol/http-control-api.md) — sessions, cases, rules (JSON)
-- [Proxy OTEL API](spec/protocol/proxy-otel-api.md) — inject lookup and trace extract (protobuf)
-- [Session headers](spec/protocol/session-headers.md)
+| Path | Responsibility |
+|------|----------------|
+| [`spec/`](./spec/) | Canonical schemas, protocol definitions, and example artifacts |
+| [`softprobe-runtime/`](./softprobe-runtime/) | Unified runtime and canonical `softprobe` CLI source |
+| [`softprobe-proxy/`](./softprobe-proxy/) | Envoy/WASM data plane |
+| [`softprobe-js/`](./softprobe-js/) | TypeScript SDK and migration-era Node package surfaces |
+| [`softprobe-go/`](./softprobe-go/) | Go SDK |
+| [`softprobe-python/`](./softprobe-python/) | Python SDK |
+| [`softprobe-java/`](./softprobe-java/) | Java SDK |
+| [`e2e/`](./e2e/) | End-to-end compose stack and cross-SDK replay harnesses |
+| [`docs-site/`](./docs-site/) | User-facing documentation site sources |
 
-## Nested Git history (local backup)
+## Source of truth
 
-This monorepo previously used separate Git repositories under `proxy/` and `softprobe-js/`. Their `.git` directories were moved to **`.nested-git-backup/`** (ignored by Git) so one repository could track the whole workspace. To work with the old remotes again, move the backup back, for example:
+- Product and engineering design: [`docs/design.md`](./docs/design.md)
+- Platform architecture: [`docs/platform-architecture.md`](./docs/platform-architecture.md)
+- Repo topology and responsibilities: [`docs/repo-layout.md`](./docs/repo-layout.md)
+- Control API contract: [`spec/protocol/http-control-api.md`](./spec/protocol/http-control-api.md)
+- Proxy OTLP contract: [`spec/protocol/proxy-otel-api.md`](./spec/protocol/proxy-otel-api.md)
+- Session header propagation: [`spec/protocol/session-headers.md`](./spec/protocol/session-headers.md)
 
-`mv .nested-git-backup/proxy.git proxy/.git`
+## Local development quick start
+
+Bring up the reference stack:
+
+```bash
+docker compose -f e2e/docker-compose.yaml up --build --wait
+```
+
+The compose harness publishes:
+
+- runtime: `http://127.0.0.1:8080`
+- proxy ingress: `http://127.0.0.1:8082`
+- app: `http://127.0.0.1:8081`
+- upstream: `http://127.0.0.1:8083`
+
+From there:
+
+- run the runtime CLI and control-plane tests from [`softprobe-runtime/`](./softprobe-runtime/)
+- run SDK-specific tests from the language package directories
+- run end-to-end replay flows from [`e2e/`](./e2e/)
+
+## Legacy note
+
+This workspace still contains older Node-specific NDJSON/framework-instrumentation
+surfaces and earlier proxy/dashboard positioning in some packages. Those remain
+for migration and compatibility work, but they are **not** the canonical product
+direction. The hybrid proxy-first runtime described in [`docs/design.md`](./docs/design.md)
+is the source of truth.
 
 ## Contributing
 
-Implementations should validate behavior against `spec` schemas and compatibility fixtures as they are added. Prefer extending the spec before changing proxy or SDK behavior in incompatible ways.
+Follow [`AGENTS.md`](./AGENTS.md) and [`tasks.md`](./tasks.md). Prefer extending
+or correcting the contracts in `spec/` before making incompatible runtime,
+proxy, or SDK changes.

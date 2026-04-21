@@ -8,12 +8,7 @@ const REQUIRED_RELATIVE_LINKS = [
   '(./design-matcher.md)',
 ];
 
-const REQUIRED_ROOT_DOC_LINKS = [
-  '(design.md)',
-  '(design-context.md)',
-  '(design-cassette.md)',
-  '(design-matcher.md)',
-];
+const REQUIRED_ROOT_DOC_LINKS = ['design.md', 'design-context.md', 'design-cassette.md', 'design-matcher.md'];
 
 describe('Task 10.3 design link consistency', () => {
   it('design docs cross-link using design-*.md convention', () => {

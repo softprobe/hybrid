@@ -3,6 +3,7 @@ package controlapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -254,4 +255,238 @@ func TestPolicyRulesAndFixturesBumpRevision(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSessionStatsReturnsInjectHitCounters(t *testing.T) {
+	st := store.NewStore()
+	mux := NewMux(st)
+
+	sessionID := createSessionForStatsTest(t, mux, "replay")
+
+	rulesDoc := `{
+		"version": 1,
+		"rules": [
+			{
+				"when": {
+					"direction": "outbound",
+					"method": "GET",
+					"path": "/fragment"
+				},
+				"then": {
+					"action": "mock",
+					"response": {
+						"status": 200,
+						"body": "{\"dep\":\"ok\"}"
+					}
+				}
+			}
+		]
+	}`
+	rulesReq := httptest.NewRequest(http.MethodPost, "/v1/sessions/"+sessionID+"/rules", bytes.NewBufferString(rulesDoc))
+	rulesRec := httptest.NewRecorder()
+	mux.ServeHTTP(rulesRec, rulesReq)
+	if rulesRec.Code != http.StatusOK {
+		t.Fatalf("apply rules status = %d, want 200", rulesRec.Code)
+	}
+
+	injectPayload := []byte(fmt.Sprintf(`{
+		"resourceSpans": [{
+			"scopeSpans": [{
+				"spans": [{
+					"attributes": [
+						{"key":"sp.span.type","value":{"stringValue":"inject"}},
+						{"key":"sp.session.id","value":{"stringValue":"%s"}},
+						{"key":"sp.traffic.direction","value":{"stringValue":"outbound"}},
+						{"key":"http.request.method","value":{"stringValue":"GET"}},
+						{"key":"url.host","value":{"stringValue":"softprobe-proxy:8084"}},
+						{"key":"url.path","value":{"stringValue":"/fragment"}}
+					]
+				}]
+			}]
+		}]
+	}`, sessionID))
+	injectReq := httptest.NewRequest(http.MethodPost, "/v1/inject", bytes.NewReader(mustProtoPayload(t, injectPayload)))
+	injectReq.Header.Set("Content-Type", "application/x-protobuf")
+	injectRec := httptest.NewRecorder()
+	mux.ServeHTTP(injectRec, injectReq)
+	if injectRec.Code != http.StatusOK {
+		t.Fatalf("inject status = %d, want 200", injectRec.Code)
+	}
+
+	stats := getSessionStatsForTest(t, mux, sessionID)
+	if stats.Stats.InjectedSpans != 1 {
+		t.Fatalf("injectedSpans = %d, want 1", stats.Stats.InjectedSpans)
+	}
+	if stats.Stats.ExtractedSpans != 0 {
+		t.Fatalf("extractedSpans = %d, want 0", stats.Stats.ExtractedSpans)
+	}
+	if stats.Stats.StrictMisses != 0 {
+		t.Fatalf("strictMisses = %d, want 0", stats.Stats.StrictMisses)
+	}
+}
+
+func TestSessionStatsReturnsCaptureExtractCounters(t *testing.T) {
+	st := store.NewStore()
+	mux := NewMux(st)
+
+	sessionID := createSessionForStatsTest(t, mux, "capture")
+
+	tracePayload := []byte(fmt.Sprintf(`{
+		"resourceSpans": [{
+			"scopeSpans": [{
+				"spans": [{
+					"attributes": [
+						{"key":"sp.span.type","value":{"stringValue":"extract"}},
+						{"key":"sp.session.id","value":{"stringValue":"%s"}},
+						{"key":"sp.traffic.direction","value":{"stringValue":"outbound"}},
+						{"key":"url.host","value":{"stringValue":"softprobe-proxy:8084"}},
+						{"key":"url.path","value":{"stringValue":"/fragment"}},
+						{"key":"http.response.status_code","value":{"intValue":200}}
+					]
+				}]
+			}]
+		}]
+	}`, sessionID))
+	traceReq := httptest.NewRequest(http.MethodPost, "/v1/traces", bytes.NewReader(tracePayload))
+	traceReq.Header.Set("Content-Type", "application/json")
+	traceRec := httptest.NewRecorder()
+	mux.ServeHTTP(traceRec, traceReq)
+	if traceRec.Code != http.StatusNoContent {
+		t.Fatalf("traces status = %d, want 204", traceRec.Code)
+	}
+
+	stats := getSessionStatsForTest(t, mux, sessionID)
+	if stats.Stats.ExtractedSpans != 1 {
+		t.Fatalf("extractedSpans = %d, want 1", stats.Stats.ExtractedSpans)
+	}
+	if stats.Stats.InjectedSpans != 0 {
+		t.Fatalf("injectedSpans = %d, want 0", stats.Stats.InjectedSpans)
+	}
+	if stats.Stats.StrictMisses != 0 {
+		t.Fatalf("strictMisses = %d, want 0", stats.Stats.StrictMisses)
+	}
+}
+
+func TestSessionStatsReturnsStrictMissCounters(t *testing.T) {
+	st := store.NewStore()
+	mux := NewMux(st)
+
+	sessionID := createSessionForStatsTest(t, mux, "replay")
+
+	policyReq := httptest.NewRequest(http.MethodPost, "/v1/sessions/"+sessionID+"/policy", bytes.NewBufferString(`{"externalHttp":"strict"}`))
+	policyRec := httptest.NewRecorder()
+	mux.ServeHTTP(policyRec, policyReq)
+	if policyRec.Code != http.StatusOK {
+		t.Fatalf("policy status = %d, want 200", policyRec.Code)
+	}
+
+	injectPayload := []byte(fmt.Sprintf(`{
+		"resourceSpans": [{
+			"scopeSpans": [{
+				"spans": [{
+					"attributes": [
+						{"key":"sp.span.type","value":{"stringValue":"inject"}},
+						{"key":"sp.session.id","value":{"stringValue":"%s"}},
+						{"key":"sp.traffic.direction","value":{"stringValue":"outbound"}},
+						{"key":"http.request.method","value":{"stringValue":"GET"}},
+						{"key":"url.host","value":{"stringValue":"softprobe-proxy:8084"}},
+						{"key":"url.path","value":{"stringValue":"/missing"}}
+					]
+				}]
+			}]
+		}]
+	}`, sessionID))
+	injectReq := httptest.NewRequest(http.MethodPost, "/v1/inject", bytes.NewReader(mustProtoPayload(t, injectPayload)))
+	injectReq.Header.Set("Content-Type", "application/x-protobuf")
+	injectRec := httptest.NewRecorder()
+	mux.ServeHTTP(injectRec, injectReq)
+	if injectRec.Code != http.StatusInternalServerError {
+		t.Fatalf("inject status = %d, want 500", injectRec.Code)
+	}
+
+	stats := getSessionStatsForTest(t, mux, sessionID)
+	if stats.Stats.StrictMisses != 1 {
+		t.Fatalf("strictMisses = %d, want 1", stats.Stats.StrictMisses)
+	}
+	if stats.Stats.InjectedSpans != 0 {
+		t.Fatalf("injectedSpans = %d, want 0", stats.Stats.InjectedSpans)
+	}
+	if stats.Stats.ExtractedSpans != 0 {
+		t.Fatalf("extractedSpans = %d, want 0", stats.Stats.ExtractedSpans)
+	}
+}
+
+func TestSessionStatsReturnsUnknownSessionError(t *testing.T) {
+	mux := NewMux(store.NewStore())
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/sessions/missing/stats", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal error body: %v", err)
+	}
+	if body.Error.Code != "unknown_session" {
+		t.Fatalf("error code = %q, want unknown_session", body.Error.Code)
+	}
+}
+
+type sessionStatsTestResponse struct {
+	SessionID       string `json:"sessionId"`
+	SessionRevision int    `json:"sessionRevision"`
+	Mode            string `json:"mode"`
+	Stats           struct {
+		InjectedSpans  int `json:"injectedSpans"`
+		ExtractedSpans int `json:"extractedSpans"`
+		StrictMisses   int `json:"strictMisses"`
+	} `json:"stats"`
+}
+
+func createSessionForStatsTest(t *testing.T, mux *http.ServeMux, mode string) string {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/sessions", bytes.NewBufferString(fmt.Sprintf(`{"mode":%q}`, mode)))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create session status = %d, want 200", rec.Code)
+	}
+
+	var body struct {
+		SessionID string `json:"sessionId"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal create response: %v", err)
+	}
+	return body.SessionID
+}
+
+func getSessionStatsForTest(t *testing.T, mux *http.ServeMux, sessionID string) sessionStatsTestResponse {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/sessions/"+sessionID+"/stats", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("stats status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	var body sessionStatsTestResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal stats response: %v", err)
+	}
+	if body.SessionID != sessionID {
+		t.Fatalf("sessionId = %q, want %q", body.SessionID, sessionID)
+	}
+	return body
 }

@@ -24,16 +24,27 @@ type loadCaseResponse struct {
 	SessionRevision int    `json:"sessionRevision"`
 }
 
+type sessionStatsResponse struct {
+	SessionID       string `json:"sessionId"`
+	SessionRevision int    `json:"sessionRevision"`
+	Mode            string `json:"mode"`
+	Stats           struct {
+		InjectedSpans  int `json:"injectedSpans"`
+		ExtractedSpans int `json:"extractedSpans"`
+		StrictMisses   int `json:"strictMisses"`
+	} `json:"stats"`
+}
+
 func handleCreateSession(st *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			writeMethodNotAllowedError(w)
 			return
 		}
 
 		var req createSessionRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Mode == "" {
-			http.Error(w, "invalid create session request", http.StatusBadRequest)
+			writeInvalidRequestError(w, "invalid create session request")
 			return
 		}
 
@@ -49,26 +60,75 @@ func handleCreateSession(st *store.Store) http.HandlerFunc {
 
 func handleSessionCommand(st *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
 		path := strings.TrimPrefix(r.URL.Path, "/v1/sessions/")
 		switch {
+		case strings.HasSuffix(path, "/stats"):
+			if r.Method != http.MethodGet {
+				writeMethodNotAllowedError(w)
+				return
+			}
+			handleSessionStats(st, strings.TrimSuffix(path, "/stats"))(w, r)
 		case strings.HasSuffix(path, "/close"):
+			if r.Method != http.MethodPost {
+				writeMethodNotAllowedError(w)
+				return
+			}
 			handleCloseSession(st, strings.TrimSuffix(path, "/close"))(w, r)
 		case strings.HasSuffix(path, "/load-case"):
+			if r.Method != http.MethodPost {
+				writeMethodNotAllowedError(w)
+				return
+			}
 			handleLoadCase(st, strings.TrimSuffix(path, "/load-case"))(w, r)
 		case strings.HasSuffix(path, "/policy"):
+			if r.Method != http.MethodPost {
+				writeMethodNotAllowedError(w)
+				return
+			}
 			handlePolicy(st, strings.TrimSuffix(path, "/policy"))(w, r)
 		case strings.HasSuffix(path, "/rules"):
+			if r.Method != http.MethodPost {
+				writeMethodNotAllowedError(w)
+				return
+			}
 			handleRules(st, strings.TrimSuffix(path, "/rules"))(w, r)
 		case strings.HasSuffix(path, "/fixtures/auth"):
+			if r.Method != http.MethodPost {
+				writeMethodNotAllowedError(w)
+				return
+			}
 			handleFixturesAuth(st, strings.TrimSuffix(path, "/fixtures/auth"))(w, r)
 		default:
 			http.NotFound(w, r)
 		}
+	}
+}
+
+func handleSessionStats(st *store.Store, sessionID string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID = strings.TrimSuffix(sessionID, "/")
+		if sessionID == "" {
+			writeUnknownSessionError(w)
+			return
+		}
+
+		session, ok := st.Get(sessionID)
+		if !ok {
+			writeUnknownSessionError(w)
+			return
+		}
+
+		var resp sessionStatsResponse
+		resp.SessionID = session.ID
+		resp.SessionRevision = session.Revision
+		resp.Mode = session.Mode
+		resp.Stats.InjectedSpans = session.Stats.InjectedSpans
+		resp.Stats.ExtractedSpans = session.Stats.ExtractedSpans
+		resp.Stats.StrictMisses = session.Stats.StrictMisses
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(resp)
 	}
 }
 
@@ -88,7 +148,7 @@ func handleCloseSession(st *store.Store, sessionID string) http.HandlerFunc {
 
 		if session.Mode == "capture" {
 			if err := proxybackend.WriteCapturedCase(session.ID, session.Extracts); err != nil {
-				http.Error(w, "write captured case failed", http.StatusInternalServerError)
+				writeAPIError(w, http.StatusInternalServerError, "internal_error", "write captured case failed")
 				return
 			}
 		}
@@ -122,7 +182,7 @@ func handleLoadCase(st *store.Store, sessionID string) http.HandlerFunc {
 
 		loadedCase, err := io.ReadAll(r.Body)
 		if err != nil || len(loadedCase) == 0 {
-			http.Error(w, "invalid load-case request", http.StatusBadRequest)
+			writeInvalidRequestError(w, "invalid load-case request")
 			return
 		}
 
@@ -174,7 +234,7 @@ func handleMutatingPayload(st *store.Store, sessionID string, update func(string
 
 		payload, err := io.ReadAll(r.Body)
 		if err != nil || len(payload) == 0 {
-			http.Error(w, "invalid control payload", http.StatusBadRequest)
+			writeInvalidRequestError(w, "invalid control payload")
 			return
 		}
 
@@ -191,15 +251,4 @@ func handleMutatingPayload(st *store.Store, sessionID string, update func(string
 			SessionRevision: session.Revision,
 		})
 	}
-}
-
-func writeUnknownSessionError(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotFound)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"error": map[string]any{
-			"code":    "unknown_session",
-			"message": "unknown session",
-		},
-	})
 }

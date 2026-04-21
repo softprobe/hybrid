@@ -23,7 +23,7 @@ The tradeoff is that you run an Envoy sidecar (locally via Docker, in production
 | Case format | OTLP JSON (standard) | Custom JSON | Custom |
 | SDKs | 4 languages | 1 (Go client) | No first-party SDK |
 | Strict policy | Built-in | Limited | Built-in |
-| CLI suite runner | Yes | No | Yes |
+| CLI suite runner | Planned | No | Yes |
 
 Softprobe differentiates on OTLP-native case files (use any OTEL tool to inspect or export) and first-party cross-language SDKs with identical APIs.
 
@@ -88,9 +88,13 @@ For teams that don't use Envoy, a standalone "Softprobe Proxy" binary is on the 
 
 ### Do all four SDKs have feature parity?
 
-Yes, at the level of `Softprobe`, `SoftprobeSession`, `findInCase`, `findAllInCase`, `mockOutbound`, `clearRules`, `setPolicy`, and `close`. The TypeScript SDK is the reference; Python / Java / Go ports are validated against the same test fixtures.
+They are converging on the same core session/case/replay model, with the
+TypeScript SDK as the current reference. Exact parity for every helper and test
+integration should be checked against each SDK reference page rather than
+assumed.
 
-Ergonomic extras (framework integrations, test-helper packages) can lead or lag across languages by a minor version. Check each SDK reference page.
+Framework-specific extras and test-helper packages may lead or lag across
+languages.
 
 ### What happens on a network partition between SDK and runtime?
 

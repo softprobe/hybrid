@@ -30,7 +30,9 @@ Every request to the hosted runtime must carry:
 Authorization: Bearer sp_live_...
 ```
 
-SDKs and the CLI read `SOFTPROBE_API_TOKEN` from the environment automatically.
+Hosted-compatible SDK/CLI flows are designed around `SOFTPROBE_API_TOKEN` in the
+environment. Check the current OSS runtime/CLI docs before assuming the local
+open-source binaries already wire this automatically.
 
 ### Key types
 

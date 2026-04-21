@@ -144,6 +144,10 @@ In a mesh, attach the filter to your workload with a `WasmPlugin` resource. See 
 
 Install the SDK for the language your tests are written in. You can install more than one if your services span languages.
 
+::: warning Publication status
+Only the TypeScript SDK (`@softprobe/softprobe-js`) has historical releases on a public registry. **Python, Java, and Go SDKs are not yet released** from this repository — the `pip install`, `go get`, and Maven coordinates below refer to **planned** releases. Today, consume Python / Java / Go SDKs directly from source in the [softprobe monorepo](https://github.com/softprobe/softprobe) (see each package's `README.md`).
+:::
+
 ### TypeScript / JavaScript
 
 ```bash
@@ -161,6 +165,7 @@ Reference: [TypeScript SDK](/reference/sdk-typescript).
 ### Python
 
 ```bash
+# Planned PyPI release — not yet published from this repo.
 pip install softprobe
 ```
 
@@ -175,6 +180,7 @@ Reference: [Python SDK](/reference/sdk-python).
 ### Java (Maven)
 
 ```xml
+<!-- Planned Maven Central release — not yet published from this repo. -->
 <dependency>
   <groupId>dev.softprobe</groupId>
   <artifactId>softprobe-java</artifactId>
@@ -188,6 +194,7 @@ Reference: [Java SDK](/reference/sdk-java).
 ### Go
 
 ```bash
+# Planned Go module release — not yet published from this repo.
 go get github.com/softprobe/softprobe-go@v0.5.0
 ```
 

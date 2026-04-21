@@ -4,68 +4,100 @@ The JSON HTTP surface used by the CLI, SDKs, and any custom integration. The can
 
 All endpoints live under `{runtimeBase}/v1/...`. Content type is `application/json` on requests and responses. Every mutating call increments `sessionRevision` (returned in the response).
 
+::: info Scope of this page
+This page documents what the current OSS `softprobe-runtime` in this repository
+actually serves. One read-only endpoint is called out under [Planned](#planned)
+where the design defines a future direction but the implementation is not yet
+wired.
+:::
+
 ## Base URL
 
 In local OSS setups, `SOFTPROBE_RUNTIME_URL` (for CLI/SDK) and `sp_backend_url` (for the proxy WASM) both point at the **same** runtime base URL. For the reference Docker Compose, that is `http://127.0.0.1:8080` from the host and `http://softprobe-runtime:8080` from inside the compose network.
 
 Hosted deployments use `https://o.softprobe.ai`.
 
-## Health
+## Health and metadata
 
 ### `GET /health`
 
 ```bash
 curl http://127.0.0.1:8080/health
-# 200 OK
-# {"status":"ok","version":"0.5.0"}
 ```
 
-Liveness probe. Returns 200 when the process is running; does not check downstream dependencies.
+Example response:
 
-## Sessions
+```json
+{
+  "status": "ok",
+  "specVersion": "http-control-api@v1",
+  "schemaVersion": "1"
+}
+```
+
+Liveness probe. Returns 200 when the process is running; does not check
+per-session state or downstream dependencies.
+
+### `GET /v1/meta`
+
+Runtime and contract metadata. Used by `softprobe doctor` to check CLI/SDK
+alignment with the runtime.
+
+Example response:
+
+```json
+{
+  "runtimeVersion": "0.0.0-dev",
+  "specVersion": "http-control-api@v1",
+  "schemaVersion": "1"
+}
+```
+
+## Session endpoints
+
+Mutating endpoints return `200 OK` on success. New sessions start with
+`sessionRevision = 0`; every subsequent mutating call increments it.
 
 ### `POST /v1/sessions`
 
-Create a new session.
+Create a session.
 
 Request:
+
 ```json
 {
   "mode": "replay"
 }
 ```
 
-Response (201):
+Response:
+
 ```json
 {
-  "sessionId": "sess_01H7P8Q4XYZ...",
-  "sessionRevision": 1,
-  "mode": "replay",
-  "createdAt": "2026-04-20T10:00:00Z"
+  "sessionId": "sess_abc123",
+  "sessionRevision": 0
 }
 ```
-
-| Body field | Values | Purpose |
-|---|---|---|
-| `mode` | `"capture"`, `"replay"`, `"generate"` | Determines what the runtime does with observed traffic |
 
 ### `POST /v1/sessions/{sessionId}/load-case`
 
 Upload a case document.
 
-Request body: same shape as an on-disk `*.case.json` file (top-level `version`, `caseId`, `traces`, `rules?`, `fixtures?`). Schema: [`case.schema.json`](/reference/case-schema).
+Request body: the same JSON shape as an on-disk `*.case.json` file.
 
-Response (200):
+Response:
+
 ```json
 {
-  "sessionRevision": 2,
-  "traceCount": 3
+  "sessionId": "sess_abc123",
+  "sessionRevision": 1
 }
 ```
 
 ### `POST /v1/sessions/{sessionId}/rules`
 
-Replace the session's rule document (wholesale — the runtime stores what you send, previous rules are discarded).
+Replace the session's stored rule document (wholesale — the runtime stores what
+you send; previous rules are discarded).
 
 Request:
 ```json
@@ -96,16 +128,21 @@ Request:
 
 Response (200):
 ```json
-{ "sessionRevision": 3, "ruleCount": 1 }
+{
+  "sessionId": "sess_abc123",
+  "sessionRevision": 2
+}
 ```
 
-::: info SDKs handle the merge
-Because the runtime replaces rules wholesale, the SDK's `mockOutbound` merges with its in-memory state before posting. If you call the endpoint directly (e.g. from `curl`), you are responsible for combining new rules with any existing ones.
+::: info SDKs merge, the runtime replaces
+The runtime replaces the stored rules document on each call. SDK helpers such as
+`mockOutbound(...)` keep a local merged list and resend the whole document so
+consecutive calls accumulate.  If you call the endpoint directly (e.g. from `curl`), you are responsible for combining new rules with any existing ones.
 :::
 
 ### `POST /v1/sessions/{sessionId}/policy`
 
-Set session policy.
+Replace the session's stored policy document.
 
 Request:
 ```json
@@ -118,120 +155,140 @@ Request:
 
 Response (200):
 ```json
-{ "sessionRevision": 4 }
+{
+  "sessionId": "sess_abc123",
+  "sessionRevision": 3
+}
 ```
 
 ### `POST /v1/sessions/{sessionId}/fixtures/auth`
 
-Register non-HTTP auth material (tokens, cookies).
+Replace the session's stored auth-fixtures document (non-HTTP auth material such
+as bearer tokens and cookies that replay should present).
 
 Request:
+
 ```json
 {
-  "fixtures": [
-    { "name": "auth_token", "value": "stub_eyJ..." }
-  ]
+  "tokens": ["stub_eyJhbGciOi..."],
+  "cookies": [
+    { "name": "session", "value": "stub_cookie", "domain": "example.test", "path": "/" }
+  ],
+  "metadata": {
+    "source": "test-fixture"
+  }
 }
 ```
 
-### `GET /v1/sessions/{sessionId}`
-
-Read current session state (policy, rule count, case summary, stats).
-
-```bash
-curl http://127.0.0.1:8080/v1/sessions/$SESSION_ID | jq
-```
+Response (200):
 
 ```json
 {
-  "sessionId": "sess_...",
-  "sessionRevision": 4,
-  "mode": "replay",
-  "policy": { "externalHttp": "strict" },
-  "ruleCount": 2,
-  "case": { "caseId": "checkout", "traceCount": 3 },
-  "stats": { "extractedSpans": 0, "injectedSpans": 2 }
+  "sessionId": "sess_abc123",
+  "sessionRevision": 4
 }
 ```
 
 ### `GET /v1/sessions/{sessionId}/stats`
 
-Counters only, cheap to poll.
+Read session counters. Cheap to poll.
+
+Example response:
+
+```json
+{
+  "sessionId": "sess_abc123",
+  "sessionRevision": 4,
+  "mode": "replay",
+  "stats": {
+    "injectedSpans": 2,
+    "extractedSpans": 0,
+    "strictMisses": 0
+  }
+}
+```
 
 ### `POST /v1/sessions/{sessionId}/close`
 
-End the session. For `mode: capture`, the runtime flushes buffered traces to the configured path.
+Close the session. In capture mode, the runtime flushes buffered traces to a case
+file before deleting the session.
 
-Response (200):
+Response:
+
 ```json
 {
-  "closed": true,
-  "casePath": "/cases/captured-sess_01H...case.json",
-  "traceCount": 3
+  "sessionId": "sess_abc123",
+  "closed": true
 }
 ```
 
-After `close`, the `sessionId` is invalid; follow-up calls return 404.
+After `close`, the session id is invalid for future control-plane calls.
 
 ## Errors
 
-All errors return a stable envelope:
+All errors return a JSON envelope with a nested `error` object:
 
 ```json
 {
-  "error": "session_not_found",
-  "message": "session 'sess_xxx' does not exist or has been closed",
-  "code": 4
+  "error": {
+    "code": "unknown_session",
+    "message": "unknown session"
+  }
 }
 ```
 
-| HTTP | `error` | When |
+| HTTP | `error.code` | When |
 |---|---|---|
-| 400 | `invalid_body` | JSON parse or schema validation failed |
-| 400 | `invalid_mode` | Unsupported `mode` value |
-| 404 | `session_not_found` | Unknown or closed `sessionId` |
-| 409 | `session_closed` | Already closed |
-| 422 | `rule_validation_failed` | `rules` document violates `rule.schema.json` |
-| 500 | `internal_error` | Bug — file an issue |
-
-## Version and schema alignment
-
-`GET /v1/meta` returns:
-
-```json
-{
-  "runtimeVersion": "0.5.0",
-  "specVersion": "v1",
-  "supportedSchemas": ["case.schema.json", "rule.schema.json", ...]
-}
-```
-
-`softprobe doctor` checks your CLI and SDK against this metadata.
+| 400 | `invalid_request` | Body could not be parsed or was empty |
+| 401 | `missing_bearer_token` | Auth enabled and no `Authorization: Bearer` header |
+| 403 | `invalid_bearer_token` | Auth enabled and token did not match |
+| 404 | `unknown_session` | Unknown or already-closed `sessionId` |
+| 405 | `method_not_allowed` | Wrong HTTP method for the route |
+| 500 | `internal_error` | Runtime-side failure (e.g. writing a captured case) |
 
 ## Authentication
 
-The OSS runtime is **unauthenticated by default** — use only on trusted networks or behind a reverse proxy.
+The OSS runtime is **unauthenticated by default** — use only on trusted networks
+or behind a reverse proxy.
 
-To require a bearer token, set `SOFTPROBE_API_TOKEN` when starting the runtime:
-
-```bash
-docker run -e SOFTPROBE_API_TOKEN=sp_secret ghcr.io/softprobe/softprobe-runtime:v0.5
-```
-
-Then pass it on every request:
+To require a bearer token, set `SOFTPROBE_API_TOKEN` on the runtime process:
 
 ```bash
-curl -H "Authorization: Bearer sp_secret" http://.../v1/sessions
+docker run -e SOFTPROBE_API_TOKEN=sp_secret ghcr.io/softprobe/softprobe-runtime:latest
 ```
 
-SDKs and the CLI read `SOFTPROBE_API_TOKEN` from the environment.
+When set, every `/v1/...` request must carry the header:
 
-## Rate limits
+```bash
+curl -H "Authorization: Bearer sp_secret" http://127.0.0.1:8080/v1/sessions
+```
 
-The OSS runtime does not rate-limit. Hosted deployments apply per-org quotas; see [Hosted deployment](/deployment/hosted).
+`/health` is always unauthenticated so orchestrators can probe it. The CLI and
+SDKs read `SOFTPROBE_API_TOKEN` from the environment and attach the header
+automatically.
+
+## Planned
+
+The design references one read-only endpoint that is **not** yet implemented in
+the OSS runtime:
+
+- `GET /v1/sessions/{sessionId}` — full session snapshot (policy, rule count,
+  case summary, stats in one payload). Until it lands, use
+  `GET /v1/sessions/{sessionId}/stats` for counters.
+
+## Relationship to the proxy
+
+Tests, SDKs, and the CLI use the JSON control API. The proxy uses the OTLP API:
+
+- `POST /v1/inject`
+- `POST /v1/traces`
+
+In the OSS reference layout, both handler groups live in the same
+`softprobe-runtime` process and share one in-memory session store.
 
 ## See also
 
-- [CLI reference](/reference/cli) — high-level commands that wrap these endpoints.
-- [Sessions and cases](/concepts/sessions-and-cases) — the mental model.
-- [Session headers](/reference/session-headers) — the inbound header protocol used alongside these endpoints.
+- [CLI reference](/reference/cli)
+- [Case schema](/reference/case-schema)
+- [Rule schema](/reference/rule-schema)
+- [Sessions and cases](/concepts/sessions-and-cases)

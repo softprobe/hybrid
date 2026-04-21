@@ -10,15 +10,26 @@ This example expects the Softprobe environment to already be running:
 
 If you have not started the stack yet, run that compose command first, then run the Jest command below.
 
+Before running the example, verify the runtime contract with:
+
+```bash
+softprobe doctor --runtime-url http://127.0.0.1:8080
+```
+
 ## Quick Start
 
 This is the canonical first-stage Jest flow for Softprobe:
 
-1. Create a session with `Softprobe`.
-2. Load a captured case with `loadCaseFromFile`.
-3. Pick the captured response with `findInCase`, then register it as a dependency mock with `mockOutbound` (mutate the response freely in between if needed).
-4. Run your app under test with `x-softprobe-session-id`.
-5. Close the session in `afterAll`.
+1. Run `softprobe doctor` against the runtime.
+2. Create a replay session with `Softprobe`.
+3. Load a captured case with `loadCaseFromFile`.
+4. Pick the captured response with `findInCase`, then register it as a dependency mock with `mockOutbound` (mutate the response freely in between if needed).
+5. Run your app under test with `x-softprobe-session-id`.
+6. Close the session in `afterAll`.
+
+This mirrors the SDK-side materialization flow in `docs/design.md` §5.3:
+the runtime owns session state, while the Jest test materializes one captured
+dependency response into an explicit mock rule before driving the SUT.
 
 Copy the test below into your Jest suite and run `npm test`.
 
@@ -43,7 +54,7 @@ describe('fragment replay', () => {
 
     await session.loadCaseFromFile(path.join(generatedDir, '../../spec/examples/cases/fragment-happy-path.case.json'));
 
-    // Pure in-memory lookup against the loaded case — see docs/design.md §3.2.
+    // Pure in-memory lookup against the loaded case — see docs/design.md §5.3.
     const hit = session.findInCase({
       direction: 'outbound',
       method: 'GET',

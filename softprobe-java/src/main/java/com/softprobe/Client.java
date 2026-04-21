@@ -34,6 +34,14 @@ public final class Client {
       return postJson("/v1/sessions/" + sessionId + "/rules", rulesJson);
     }
 
+    public Map<String, Object> setPolicy(String sessionId, String policyJson) {
+      return postJson("/v1/sessions/" + sessionId + "/policy", policyJson);
+    }
+
+    public Map<String, Object> setAuthFixtures(String sessionId, String fixturesJson) {
+      return postJson("/v1/sessions/" + sessionId + "/fixtures/auth", fixturesJson);
+    }
+
     public Map<String, Object> close(String sessionId) {
       return postJson("/v1/sessions/" + sessionId + "/close", "{}");
     }
@@ -60,23 +68,36 @@ public final class Client {
   }
 
   private Map<String, Object> postJson(String path, String body) {
+    Response response;
     try {
-      Response response =
+      response =
           transport.send(
               new Request(
                   "POST",
                   baseUri.resolve(path),
                   Map.of("content-type", "application/json"),
                   body));
-
-      if (response.statusCode() < 200 || response.statusCode() >= 300) {
-        throw new SoftprobeRuntimeException(response.statusCode(), response.body());
-      }
-
-      return parseFlatJsonObject(response.body());
     } catch (IOException e) {
-      throw new SoftprobeRuntimeException(0, e.getMessage() == null ? "" : e.getMessage());
+      throw new SoftprobeRuntimeUnreachableException(
+          "softprobe runtime is unreachable: " + (e.getMessage() == null ? "" : e.getMessage()),
+          e);
     }
+
+    if (response.statusCode() < 200 || response.statusCode() >= 300) {
+      throw classifyRuntimeException(response.statusCode(), response.body());
+    }
+
+    return parseFlatJsonObject(response.body());
+  }
+
+  private static SoftprobeRuntimeException classifyRuntimeException(int status, String body) {
+    // Recognize the stable `{"error":{"code":"unknown_session",...}}` envelope
+    // without pulling in a JSON dependency here (the thin Client keeps its
+    // regex-based parser). We only care about the single code token.
+    if (body != null && body.contains("\"unknown_session\"") && body.contains("\"code\"")) {
+      return new SoftprobeUnknownSessionException(status, body);
+    }
+    return new SoftprobeRuntimeException(status, body);
   }
 
   private static Response sendWithHttpClient(Request request) throws IOException {

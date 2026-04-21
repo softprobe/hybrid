@@ -4,7 +4,15 @@ The Python flow mirrors [Replay in Jest](/guides/replay-in-jest) — the same ca
 
 ## 1. Install the SDK
 
+::: warning Not yet on PyPI
+`softprobe` is not yet published to PyPI. Until it is, install `pytest` from
+PyPI and consume `softprobe` from source in the
+[softprobe monorepo](https://github.com/softprobe/softprobe) (`softprobe-python/`)
+— see that package's `README.md` for the editable-install recipe.
+:::
+
 ```bash
+# Planned — not yet published.
 pip install softprobe pytest
 ```
 

@@ -17,6 +17,14 @@ type Session struct {
 	Rules        []byte
 	FixturesAuth []byte
 	Extracts     [][]byte
+	Stats        SessionStats
+}
+
+// SessionStats tracks per-session runtime counters without affecting revision.
+type SessionStats struct {
+	InjectedSpans  int
+	ExtractedSpans int
+	StrictMisses   int
 }
 
 // Store keeps control-runtime sessions in memory.
@@ -108,6 +116,27 @@ func (s *Store) BufferExtract(id string, payload []byte) bool {
 	return true
 }
 
+// RecordInjectedSpans increments the inject-hit counter without bumping revision.
+func (s *Store) RecordInjectedSpans(id string, count int) (Session, bool) {
+	return s.recordStats(id, func(stats *SessionStats) {
+		stats.InjectedSpans += count
+	})
+}
+
+// RecordExtractedSpans increments the accepted-extract counter without bumping revision.
+func (s *Store) RecordExtractedSpans(id string, count int) (Session, bool) {
+	return s.recordStats(id, func(stats *SessionStats) {
+		stats.ExtractedSpans += count
+	})
+}
+
+// RecordStrictMiss increments the strict-policy miss counter without bumping revision.
+func (s *Store) RecordStrictMiss(id string, count int) (Session, bool) {
+	return s.recordStats(id, func(stats *SessionStats) {
+		stats.StrictMisses += count
+	})
+}
+
 func (s *Store) mutate(id string, fn func(*Session)) (Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -119,6 +148,20 @@ func (s *Store) mutate(id string, fn func(*Session)) (Session, bool) {
 
 	session.Revision++
 	fn(&session)
+	s.sessions[id] = session
+	return session, true
+}
+
+func (s *Store) recordStats(id string, fn func(*SessionStats)) (Session, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[id]
+	if !ok {
+		return Session{}, false
+	}
+
+	fn(&session.Stats)
 	s.sessions[id] = session
 	return session, true
 }
