@@ -1,0 +1,76 @@
+# End-to-end suite driven by `softprobe suite run`. Mirrors
+# `e2e/jest-hooks/suites/fragment.suite.yaml` but goes through the Go
+# CLI's Node sidecar instead of the Jest adapter so the same authoring
+# model works from CI (CLI + JUnit XML) and from the dev loop (Jest).
+#
+# The suite references a single captured case (`/fragment` → "ok") and
+# uses two hooks:
+#
+#   • rewriteDep  : MockResponseHook rewrites the captured response
+#                   body before it is registered as a mock rule, so the
+#                   live upstream's "ok" can never be mistaken for a
+#                   passing test.
+#   • helloShape  : BodyAssertHook validates the SUT's /hello response
+#                   after the CLI drives it through the ingress proxy.
+name: fragment-hooks-cli
+version: 1
+
+cases:
+  # Drives the top-level `mocks` + `assertions` defaults — the captured
+  # `/fragment` body is rewritten by the `rewriteDep` MockResponseHook,
+  # and `helloShape` validates it survived the round-trip.
+  - path: ../../../spec/examples/cases/fragment-happy-path.case.json
+    name: happy-path
+
+  # Reuses the SAME capture file but rewrites the mock declaratively
+  # via `overrides.mocks` — no hook. Demonstrates:
+  #   • per-case `overrides:` shallow-merging into top-level defaults
+  #   • `source: inline` mocks (YAML-only, no hook process involvement)
+  #   • one suite driving multiple distinct SUT outcomes from one capture
+  - path: ../../../spec/examples/cases/fragment-happy-path.case.json
+    name: fragment-down
+    overrides:
+      mocks:
+        - name: fragment
+          match:
+            direction: outbound
+            method: GET
+            path: /fragment
+          source: inline
+          response:
+            status: 503
+            headers:
+              content-type: application/json
+            body: '{"dep":"unavailable"}'
+      assertions:
+        # The SUT swallows dependency failures: `/hello` still returns 200
+        # with `dep="unavailable"` in the body (see e2e/app/main.go).
+        status: 200
+        body:
+          mode: json-subset
+          custom: helloUnavailable
+
+request:
+  # Route through the ingress proxy on :8082 so the WASM filter
+  # translates x-softprobe-session-id into W3C tracestate for the
+  # egress hop. See softprobe-proxy/src/otel.rs session-id tests.
+  url: ${INGRESS_URL:-http://127.0.0.1:8082}
+  method: GET
+  path: /hello
+
+mocks:
+  - name: fragment
+    match:
+      direction: outbound
+      method: GET
+      path: /fragment
+    hook: rewriteDep
+
+assertions:
+  status: 200
+  headers:
+    include:
+      content-type: ^application/json
+  body:
+    mode: json-subset
+    custom: helloShape

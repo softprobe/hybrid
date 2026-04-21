@@ -19,7 +19,7 @@ We've accepted that every feature currently documented on this site is a commitm
 - **Jest codegen** (`softprobe generate jest-session`) for a zero-boilerplate default path.
 - **Envoy + WASM** proxy with ingress / egress listener pair; Docker Compose for local dev.
 - **Strict policy** with observable per-session miss counter and the [debug-strict-miss](/guides/debug-strict-miss) workflow.
-- **CLI**: `doctor`, `session {start,load-case,rules apply,policy set --strict,stats,close}`, `inspect case`, `generate jest-session`.
+- **CLI**: `doctor`, `session {start,load-case,rules apply,policy set --strict,stats,close}`, `inspect case`, `generate jest-session`, and the new **`suite {run,validate,diff}`** with Node hook sidecar + JUnit/HTML reporters — see the [`e2e/cli-suite-run/`](https://github.com/softprobe/softprobe/tree/main/e2e/cli-suite-run) end-to-end harness.
 - **Docs site** at `docs.softprobe.dev` (this site).
 - **End-to-end acceptance tests** covering capture, replay, and strict-miss paths across Go, Jest, pytest, and JUnit harnesses.
 
@@ -35,7 +35,7 @@ Each item below is actively scoped in [`tasks.md`](https://github.com/softprobe/
 
 ### Delivering what's already documented (closing the doc-vs-shipped gap)
 
-- **CLI surface parity with `reference/cli.md`** — `capture run`, `replay run`, `suite run` (sequential, then `--parallel`), `suite validate`, `suite diff`, `validate {case,rules,suite}`, `inspect session`, `generate test` for non-Jest frameworks, `export otlp`, `scrub`, and shell `completion`. Stable exit codes (`0/2/3/4/5/10/20`), universal `--json` envelope, and `--verbose`/`--quiet`/`NO_COLOR`. Target: **v0.6**. Tracks [tasks.md PD1](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd1--cli-contract-completeness).
+- **CLI surface parity with `reference/cli.md`** — remaining items are `capture run`, `replay run`, `validate {case,rules,suite}`, `inspect session`, `generate test` for non-Jest frameworks, `export otlp`, `scrub`, and shell `completion`. Stable exit codes (`0/2/3/4/5/10/20`), universal `--json` envelope, and `--verbose`/`--quiet`/`NO_COLOR`. `suite run`/`validate`/`diff` with the Node hook sidecar has landed. Target: **v0.6**. Tracks [tasks.md PD1](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd1--cli-contract-completeness).
 - **Auth plumbing** — CLI and all four SDKs read `SOFTPROBE_API_TOKEN` from the environment and attach `Authorization: Bearer` automatically. The runtime already validates the token (v0.5); the clients don't send it yet. Target: **v0.6**. Tracks [tasks.md PD2](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd2--runtime-auth-plumbing-in-sdks-and-cli).
 - **Runtime observability** — Prometheus `/metrics`, `SOFTPROBE_LOG_LEVEL`, `{sessionId}` template substitution in `SOFTPROBE_CAPTURE_CASE_PATH`. Target: **v0.6**. Tracks [tasks.md PD4](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd4--runtime-observability-and-capture-operations).
 - **Object-storage capture writers** — `s3://`, `gs://`, `azblob://` destinations for capture output (default remains `file://`). Target: **v0.6–v0.7**. Tracks [tasks.md PD4.4a](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd4--runtime-observability-and-capture-operations).
@@ -48,7 +48,7 @@ Each item below is actively scoped in [`tasks.md`](https://github.com/softprobe/
 - **Redis-backed session store** so `softprobe-runtime` can run multi-replica in Kubernetes. See [Kubernetes deployment — HA and scaling](/deployment/kubernetes). Target: **v0.6–v0.7**.
 - **Hosted service GA** on `o.softprobe.ai` with documented [SLA](/deployment/hosted#sla) and regional availability. Target: **v0.6–v0.7**.
 - **Multi-process runtime split** — separate the control API and OTLP backend into two deployables for clouds that want to scale them independently. Target: **v0.7**. Depends on the Redis store landing first.
-- **Hook runtime v1** — TypeScript/JavaScript hooks executed in a Node sidecar from the Go CLI for data transformations and custom assertions. Target: **v0.6–v0.7**.
+- **Hook runtime v1** — TypeScript/JavaScript hooks executed in a Node sidecar from the Go CLI for data transformations and custom assertions. Shipped in the current build: `RequestHook`, `MockResponseHook`, `BodyAssertHook`, `HeadersAssertHook` are resolved from `--hooks *.ts` files via the embedded sidecar; end-to-end harness at [`e2e/cli-suite-run/`](https://github.com/softprobe/softprobe/tree/main/e2e/cli-suite-run). Remaining hook runtime work (Python/Java sidecars for those CLIs, hook sandboxing options) is tracked in PD3+.
 
 ### Ecosystem track
 

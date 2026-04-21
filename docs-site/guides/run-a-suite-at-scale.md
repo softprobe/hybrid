@@ -1,7 +1,7 @@
 # Run a suite at scale
 
-::: warning Not shipped yet
-The `softprobe suite` runner described on this page is **planned** for v0.6. Tracked as [PD1.7 in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd17-suite-subcommand-the-big-one). Until it lands, use your test framework's native parametrization to iterate over cases: Jest `describe.each`, pytest `@pytest.mark.parametrize`, JUnit `@ParameterizedTest`, or Go `t.Run`. The SDK primitives (`loadCaseFromFile`, `findInCase`, `mockOutbound`) work the same way against one case or thousands; only the scheduler, hooks, and JUnit reporter are missing.
+::: tip Ships in this build
+`softprobe suite run` is implemented end-to-end: scheduler, Node hook sidecar, JUnit XML, HTML report. The sibling Jest adapter (`runSuite()` from `@softprobe/softprobe-js/suite`) shares the same YAML schema and hook contract, so you can author hooks once and run them from CI (CLI) or your IDE (Jest). A full end-to-end harness lives at [`e2e/cli-suite-run/`](https://github.com/softprobe/softprobe/tree/main/e2e/cli-suite-run) — docker compose + `softprobe suite run` + MockResponseHook + BodyAssertHook wired against the same `app` / `upstream` services the rest of the e2e fleet uses.
 :::
 
 Hand-written tests are great for a handful of scenarios. But when you capture production sessions in bulk — hundreds, thousands, maybe tens of thousands of `*.case.json` files — writing one Jest test per case doesn't scale.
@@ -166,10 +166,13 @@ When most cases share defaults but a few need tweaks:
 ```yaml
 cases:
   - path: cases/checkout/happy.case.json
+    name: happy-path
   - path: cases/checkout/card-declined.case.json
+    name: card-declined
     overrides:
       mocks:
         - name: stripe
+          source: inline
           response:
             status: 402
             body: '{"error":{"type":"card_error","code":"card_declined"}}'
@@ -177,7 +180,17 @@ cases:
         status: 402
 ```
 
-Overrides shallow-merge into `defaults`.
+Overrides shallow-merge into `defaults`: `request`, `assertions`, and `policy` replace wholesale; `mocks` merge by `name:` so override entries with matching names swap the default in place. Unmatched override mocks append. Full rules: [Suite YAML → Per-case overrides](/reference/suite-yaml#per-case-overrides).
+
+**One capture, many scenarios.** A powerful pattern when you only have one real recording: point two `cases:` entries at the *same* `path:` and have one use the hook-driven default mock while the other uses `overrides.mocks` with `source: inline` to simulate a failure mode. You now have end-to-end coverage of two distinct SUT outcomes from a single capture. The [`e2e/cli-suite-run/`](https://github.com/softprobe/softprobe/tree/main/e2e/cli-suite-run) harness does exactly this — a `happy-path` case lets a `rewriteDep` `MockResponseHook` mutate the captured `/fragment` body, and a `fragment-down` case overrides the same mock with an inline 503 to test the SUT's degraded-dependency path. Same `/hello` endpoint, same YAML, two verified outcomes.
+
+### The `name:` field matters at scale
+
+With 2,000 cases in one suite, log lines like `FAIL cases/checkout/happy.case.json` aren't enough — especially when multiple cases reference the same capture. Add `name:` to each entry:
+
+- Human output shows `path [name]`
+- JSON/JUnit carries it as `displayName`/`caseId`
+- `--filter SUBSTR` matches against it, so `--filter card-declined` does the obvious thing
 
 ## Using environment variables
 

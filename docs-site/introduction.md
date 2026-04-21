@@ -53,7 +53,7 @@ The **artifact** is `*.case.json` — a plain JSON document containing an array 
 - **Replay** a captured case as a deterministic mock for every dependency the app talked to.
 - **Override selectively** — mock only `/fragment` while `/payments` still goes live.
 - **Mutate before replay** — bump a timestamp, rotate a token, swap a masked credit card for a test value.
-- **Build toward larger orchestration** — suite runners and hook execution are planned on top of the same runtime, proxy, and case artifacts.
+- **Run suites at scale** — `softprobe suite run suites/*.yaml --hooks hooks/*.ts` drives thousands of captures deterministically with a shared Node sidecar for hooks; emits JUnit XML for CI.
 - **Keep one mental model** — even as more tooling lands, the core remains sessions, case files, and explicit SDK-authored mock rules.
 
 ## What it is not

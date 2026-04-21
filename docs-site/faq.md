@@ -23,7 +23,7 @@ The tradeoff is that you run an Envoy sidecar (locally via Docker, in production
 | Case format | OTLP JSON (standard) | Custom JSON | Custom |
 | SDKs | 4 languages | 1 (Go client) | No first-party SDK |
 | Strict policy | Built-in | Limited | Built-in |
-| CLI suite runner | Planned | No | Yes |
+| CLI suite runner | Yes (YAML + Node hook sidecar, JUnit/HTML) | No | Yes |
 
 Softprobe differentiates on OTLP-native case files (use any OTEL tool to inspect or export) and first-party cross-language SDKs with identical APIs.
 

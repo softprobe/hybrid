@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"flag"
@@ -14,7 +15,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
 // runSuite dispatches `softprobe suite {run,validate,diff}`. The runner
@@ -41,11 +41,12 @@ func runSuite(args []string, stdout, stderr io.Writer) int {
 }
 
 type suiteCaseResult struct {
-	CaseID     string `json:"caseId"`
-	Path       string `json:"path"`
-	Status     string `json:"status"` // "passed", "failed", "skipped"
-	DurationMs int64  `json:"durationMs"`
-	Error      string `json:"error,omitempty"`
+	CaseID      string `json:"caseId"`
+	DisplayName string `json:"displayName,omitempty"`
+	Path        string `json:"path"`
+	Status      string `json:"status"` // "passed", "failed", "skipped"
+	DurationMs  int64  `json:"durationMs"`
+	Error       string `json:"error,omitempty"`
 }
 
 func runSuiteRun(args []string, stdout, stderr io.Writer) int {
@@ -53,17 +54,19 @@ func runSuiteRun(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 
 	runtimeURL := fs.String("runtime-url", "http://127.0.0.1:8080", "control runtime base URL")
+	appURL := fs.String("app-url", "", "URL of the SUT (defaults to $APP_URL, then http://127.0.0.1:8081)")
 	parallel := fs.Int("parallel", defaultSuiteParallelism(), "concurrent cases")
-	hooks := fs.String("hooks", "", "hook files (currently accepted but ignored pending PD3.1c)")
+	var hookFiles stringSliceFlag
+	fs.Var(&hookFiles, "hooks", "hook file (repeatable; TypeScript accepted on Node 22+)")
 	junitPath := fs.String("junit", "", "write JUnit XML to PATH")
 	reportPath := fs.String("report", "", "write HTML report to PATH")
 	filter := fs.String("filter", "", "run only cases whose path contains substring")
 	failFast := fs.Bool("fail-fast", false, "stop on first failure")
 	jsonOutput := fs.Bool("json", false, "emit JSON output")
+	envFile := fs.String("env-file", "", "load VAR=value lines into the process env before parsing the suite")
 	if err := fs.Parse(args); err != nil {
 		return exitInvalidArgs
 	}
-	_ = hooks // accept but ignore until hook runtime lands
 
 	if fs.NArg() != 1 {
 		_, _ = fmt.Fprintln(stderr, "suite run: expected one suite file path")
@@ -74,12 +77,27 @@ func runSuiteRun(args []string, stdout, stderr io.Writer) int {
 	}
 	suitePath := fs.Arg(0)
 
+	if *envFile != "" {
+		if err := loadEnvFile(*envFile); err != nil {
+			_, _ = fmt.Fprintf(stderr, "suite run: %s\n", err)
+			return exitValidation
+		}
+	}
+
 	doc, errs := loadSuite(suitePath)
 	if len(errs) > 0 {
 		for _, e := range errs {
 			_, _ = fmt.Fprintf(stderr, "suite run: %s\n", e)
 		}
 		return exitValidation
+	}
+	// Suite-level `env:` is applied after --env-file so the suite file
+	// can declare defaults that --env-file overrides. Already-set vars
+	// win (env > env-file > suite env).
+	for k, v := range doc.Env {
+		if _, ok := os.LookupEnv(k); !ok {
+			_ = os.Setenv(k, v)
+		}
 	}
 
 	cases := expandSuiteCases(suitePath, doc, *filter)
@@ -91,7 +109,26 @@ func runSuiteRun(args []string, stdout, stderr io.Writer) int {
 		return exitOK
 	}
 
-	results := runSuiteCases(*runtimeURL, cases, *parallel, *failFast, stderr)
+	resolvedAppURL := *appURL
+	if resolvedAppURL == "" {
+		resolvedAppURL = os.Getenv("APP_URL")
+	}
+
+	sidecar, err := startHookSidecar(hookFiles, stderr)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "suite run: %s\n", err)
+		return exitGeneric
+	}
+	defer func() { _ = sidecar.Close() }()
+
+	env := suitePipelineEnv{
+		RuntimeURL: *runtimeURL,
+		AppURL:     resolvedAppURL,
+		SuiteName:  doc.Name,
+		Sidecar:    sidecar,
+	}
+
+	results := runSuiteCasesPipeline(env, doc, cases, *parallel, *failFast)
 
 	passed, failed := tally(results)
 	if *junitPath != "" {
@@ -272,12 +309,17 @@ func expandSuiteCases(suitePath string, doc *suiteDocument, filter string) []res
 		}
 		sort.Strings(globbed)
 		for _, match := range globbed {
-			if filter != "" && !strings.Contains(match, filter) {
+			// Filter matches either the resolved path OR the display
+			// name — two cases can share a capture file (see the
+			// `fragment-down` override in e2e/cli-suite-run) so
+			// filtering on path alone makes them indistinguishable.
+			if filter != "" && !strings.Contains(match, filter) && !strings.Contains(entry.Name, filter) {
 				continue
 			}
 			out = append(out, resolvedCase{
 				DisplayName: entry.Name,
 				Path:        match,
+				Overrides:   entry.Overrides,
 			})
 		}
 	}
@@ -287,6 +329,7 @@ func expandSuiteCases(suitePath string, doc *suiteDocument, filter string) []res
 type resolvedCase struct {
 	DisplayName string
 	Path        string
+	Overrides   *suiteDefaults
 }
 
 func resolveSuiteCasePath(suitePath, casePath string) string {
@@ -296,7 +339,11 @@ func resolveSuiteCasePath(suitePath, casePath string) string {
 	return filepath.Join(filepath.Dir(suitePath), casePath)
 }
 
-func runSuiteCases(runtimeURL string, cases []resolvedCase, parallel int, failFast bool, stderr io.Writer) []suiteCaseResult {
+// runSuiteCasesPipeline drives every case through runSuitePipelineCase
+// with a bounded worker pool. Shares one sidecar across the whole run so
+// per-case hook overhead is just a JSON roundtrip, not a process spawn.
+func runSuiteCasesPipeline(env suitePipelineEnv, doc *suiteDocument, cases []resolvedCase, parallel int, failFast bool) []suiteCaseResult {
+	ctx := context.Background()
 	results := make([]suiteCaseResult, len(cases))
 	sem := make(chan struct{}, parallel)
 	var wg sync.WaitGroup
@@ -317,7 +364,9 @@ func runSuiteCases(runtimeURL string, cases []resolvedCase, parallel int, failFa
 		go func(idx int, rc resolvedCase) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			result := runSingleSuiteCase(runtimeURL, rc)
+			merged := mergedDefaults(doc.Defaults, rc.Overrides)
+			result := runSuitePipelineCase(ctx, env, rc, merged)
+			result.DisplayName = rc.DisplayName
 			results[idx] = result
 			if failFast && result.Status == "failed" {
 				abortMu.Lock()
@@ -330,55 +379,52 @@ func runSuiteCases(runtimeURL string, cases []resolvedCase, parallel int, failFa
 	return results
 }
 
-func runSingleSuiteCase(runtimeURL string, rc resolvedCase) suiteCaseResult {
-	start := time.Now()
-	result := suiteCaseResult{Path: rc.Path}
+// stringSliceFlag lets `--hooks` repeat. Matches the pattern used by
+// `go test -run` and the rest of this CLI.
+type stringSliceFlag []string
 
-	caseBytes, err := os.ReadFile(rc.Path)
+func (s *stringSliceFlag) String() string {
+	if s == nil {
+		return ""
+	}
+	return strings.Join(*s, ",")
+}
+
+func (s *stringSliceFlag) Set(v string) error {
+	for _, part := range strings.Split(v, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			*s = append(*s, part)
+		}
+	}
+	return nil
+}
+
+// loadEnvFile reads a simple `KEY=VALUE` file and applies the variables
+// to the current process. Lines starting with `#` and blank lines are
+// ignored. Already-set env vars win.
+func loadEnvFile(path string) error {
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		result.Status = "failed"
-		result.Error = fmt.Sprintf("read case: %v", err)
-		result.DurationMs = time.Since(start).Milliseconds()
-		return result
+		return fmt.Errorf("env-file: %w", err)
 	}
-	var doc caseDocument
-	_ = json.Unmarshal(caseBytes, &doc)
-	result.CaseID = doc.CaseID
-	if result.CaseID == "" {
-		result.CaseID = filepath.Base(rc.Path)
+	for i, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		idx := strings.IndexByte(line, '=')
+		if idx <= 0 {
+			return fmt.Errorf("env-file: line %d: expected KEY=VALUE", i+1)
+		}
+		key := strings.TrimSpace(line[:idx])
+		val := strings.TrimSpace(line[idx+1:])
+		val = strings.Trim(val, `"'`)
+		if _, present := os.LookupEnv(key); !present {
+			_ = os.Setenv(key, val)
+		}
 	}
-
-	client := newHTTPClient(30 * time.Second)
-	sessionID, code := suiteStartSession(client, runtimeURL, "replay")
-	if code != exitOK {
-		result.Status = "failed"
-		result.Error = "runtime unavailable"
-		result.DurationMs = time.Since(start).Milliseconds()
-		return result
-	}
-	defer func() {
-		_ = suiteCloseSession(client, runtimeURL, sessionID)
-	}()
-
-	if code := suitePostBytes(client, runtimeURL, sessionID, "load-case", caseBytes); code != exitOK {
-		result.Status = "failed"
-		result.Error = "load-case failed"
-		result.DurationMs = time.Since(start).Milliseconds()
-		return result
-	}
-
-	stats, code := fetchSessionStatsQuiet(runtimeURL, sessionID)
-	if code != exitOK {
-		result.Status = "failed"
-		result.Error = "stats fetch failed"
-		result.DurationMs = time.Since(start).Milliseconds()
-		return result
-	}
-	_ = stats
-
-	result.Status = "passed"
-	result.DurationMs = time.Since(start).Milliseconds()
-	return result
+	return nil
 }
 
 func suiteStartSession(client *http.Client, runtimeURL, mode string) (string, int) {
@@ -482,10 +528,17 @@ func writeSuiteHuman(w io.Writer, suiteName string, results []suiteCaseResult, p
 		case "skipped":
 			status = "SKIP"
 		}
+		// `displayName` from `cases[i].name` lets one capture file back
+		// multiple cases (e.g. happy-path vs fragment-down overriding
+		// the mock). Fall back to the path alone when unnamed.
+		label := r.Path
+		if r.DisplayName != "" {
+			label = fmt.Sprintf("%s [%s]", r.Path, r.DisplayName)
+		}
 		if r.Error != "" {
-			_, _ = fmt.Fprintf(w, "  %s %s (%dms): %s\n", status, r.Path, r.DurationMs, r.Error)
+			_, _ = fmt.Fprintf(w, "  %s %s (%dms): %s\n", status, label, r.DurationMs, r.Error)
 		} else {
-			_, _ = fmt.Fprintf(w, "  %s %s (%dms)\n", status, r.Path, r.DurationMs)
+			_, _ = fmt.Fprintf(w, "  %s %s (%dms)\n", status, label, r.DurationMs)
 		}
 	}
 	_, _ = fmt.Fprintf(w, "result: passed=%d failed=%d total=%d\n", passed, failed, len(results))

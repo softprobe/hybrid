@@ -221,8 +221,8 @@ Diagnostic: reports inject statistics for a live session. Usually more useful th
 
 ## `softprobe suite`
 
-::: warning Not shipped yet
-The `softprobe suite` subcommands (`run`, `validate`, `diff`) are **planned** for v0.6. Tracked as [PD1.7 in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd17-suite-subcommand-the-big-one). Until they land, drive suites from your test framework's native runner (Jest `describe.each`, pytest parametrize, JUnit `@ParameterizedTest`, Go `t.Run`) using the SDK's `loadCaseFromFile` + `findInCase` + `mockOutbound` primitives.
+::: tip Ships in this build
+`softprobe suite run`, `validate`, and `diff` are implemented. `suite run` spawns a Node sidecar per invocation to resolve `RequestHook` / `MockResponseHook` / `BodyAssertHook` / `HeadersAssertHook` references from your `suite.yaml`, and emits JUnit XML + a standalone HTML report. A worked end-to-end harness — docker-compose + two cases off one capture file (one hook-driven, one YAML-only `source: inline`) — lives at [`e2e/cli-suite-run/`](https://github.com/softprobe/softprobe/tree/main/e2e/cli-suite-run).
 :::
 
 Read one or more case files and run them as a test suite.
@@ -241,15 +241,28 @@ softprobe suite run suites/checkout.suite.yaml \
 
 | Flag | Default | Purpose |
 |---|---|---|
+| `--runtime-url URL` | `http://127.0.0.1:8080` | Control-plane runtime |
+| `--app-url URL` | `$APP_URL` → `http://127.0.0.1:8081` | SUT base URL; prefer the ingress proxy so `x-softprobe-session-id` becomes `tracestate` on egress |
 | `--parallel N` | `min(32, cpu*4)` | Concurrent cases |
-| `--hooks PATH[,PATH]` | — | TypeScript/JavaScript hook files |
+| `--hooks PATH` | — | Hook file; repeatable. TS accepted on Node 22+ (uses `--experimental-strip-types`); otherwise compile to `.js`/`.mjs` |
 | `--junit PATH` | — | Emit JUnit XML |
-| `--report PATH` | — | Emit HTML report |
-| `--json` | off | Stream JSON results to stdout |
-| `--filter GLOB` | — | Run only cases matching substring |
+| `--report PATH` | — | Emit standalone HTML report |
+| `--json` | off | Emit JSON envelope on stdout |
+| `--filter SUBSTR` | — | Keep cases whose resolved path **or** `name:` contains `SUBSTR` |
 | `--fail-fast` | off | Stop on first failure |
-| `--env-file PATH` | — | Load env vars (dotenv-style) |
-| `--verbose` | off | Print per-case diagnostics |
+| `--env-file PATH` | — | Load `KEY=VALUE` lines into process env before YAML expansion |
+
+Default human output:
+
+```text
+suite: <name>
+  OK   <path> [<name>] (<ms>)
+  FAIL <path> [<name>] (<ms>): <error>
+  ...
+result: passed=<n> failed=<n> total=<n>
+```
+
+The bracketed `[<name>]` surfaces `cases[i].name` so two cases that share the same `path:` (e.g. one capture driving multiple override shapes) stay distinguishable. JSON output carries both `path` and `displayName`; JUnit XML puts the `caseId` in `name` and the path in `classname`.
 
 Exit code: `0` if all cases passed, `20` if any failed.
 
@@ -302,7 +315,7 @@ Dumps the current session's policy, rules, loaded case summary, and statistics.
 ## `softprobe validate`
 
 ::: warning Not shipped yet
-`softprobe validate {case,rules,suite}` is **planned** for v0.6. Tracked as [PD1.4 in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd14-validate-subcommand). Until it lands, run the schemas directly: `npx ajv -s spec/schemas/case.schema.json -d cases/checkout.case.json` (or equivalent for `rule.schema.json`). The `suite.schema.json` ships as part of [PD1.7a](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd17-suite-subcommand-the-big-one).
+`softprobe validate {case,rules}` is **planned** for v0.6. Tracked as [PD1.4 in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd14-validate-subcommand). Until it lands, run the schemas directly: `npx ajv -s spec/schemas/case.schema.json -d cases/checkout.case.json` (or equivalent for `rule.schema.json`). Suite YAML already has a first-class validator — use `softprobe suite validate suites/checkout.suite.yaml` (shipped in PD1.7e), which uses the bundled `spec/schemas/suite.schema.json`.
 :::
 
 Schema validation for any of the supported artifact types.

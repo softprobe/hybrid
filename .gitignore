@@ -50,3 +50,9 @@ e2e/jest-hooks/node_modules/
 
 # Java (e2e junit harness)
 e2e/junit-replay/target/
+
+# CLI suite-run harness artifacts
+e2e/cli-suite-run/out/
+
+# Top-level CLI binary produced by `go build -o ../softprobe`
+/softprobe

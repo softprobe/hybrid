@@ -9,25 +9,39 @@ For a walkthrough with examples, see [Run a suite at scale](/guides/run-a-suite-
 ```yaml
 name: checkout-nightly          # (required) human-readable suite name
 version: 1                      # (optional) schema version, defaults to 1
-cases: cases/**/*.case.json     # (required) glob or list
+
+cases:                          # (required) glob, list, or explicit entries
+  - path: cases/happy.case.json
+    name: happy-path            # (optional) stable display name
+  - path: cases/declined.case.json
+    name: declined
+    overrides: { ... }          # per-case overrides (shallow merge)
 
 defaults:                       # (optional) applied to every case
   request:    { ... }
   mocks:      [ ... ]
   assertions: { ... }
 
-cases:                          # alternative to the glob form
-  - path: cases/happy.case.json
-  - path: cases/declined.case.json
-    overrides: { ... }          # per-case overrides (shallow merge)
+# Shortcut: when every case shares the same request/mocks/assertions you
+# can omit `defaults:` and declare them at the top level. The parser
+# folds these into `defaults` automatically, so this…
+request:    { ... }
+mocks:      [ ... ]
+assertions: { ... }
+# …is equivalent to putting them under `defaults:`. Useful for small
+# suites; switch to `defaults:` once you start using `overrides:`.
 
 env:                            # (optional) default env vars
-  TEST_TOKEN: default-token
+  TEST_TOKEN: default-token     # shell env > --env-file > suite `env:`
 ```
+
+::: tip Worked example
+A minimal 2-case suite — one hook-driven, one YAML-only — lives in [`e2e/cli-suite-run/`](https://github.com/softprobe/softprobe/tree/main/e2e/cli-suite-run). It reuses a single capture file and drives two different SUT outcomes from it through `overrides:` + `source: inline`. The same YAML runs under both `softprobe suite run` and the Jest `runSuite()` adapter.
+:::
 
 ### `cases`
 
-Either a glob string/list or an array of objects with `path` + optional `overrides`.
+Either a glob string/list or an array of objects with `path` + optional `name` + optional `overrides`.
 
 ```yaml
 # Form A: glob
@@ -41,14 +55,21 @@ cases:
 # Form C: explicit with overrides
 cases:
   - path: cases/checkout/happy.case.json
-  - path: cases/checkout/declined.case.json
+    name: happy-path
+  - path: cases/checkout/happy.case.json        # same capture!
+    name: declined
     overrides:
       mocks:
         - name: stripe
+          source: inline
           response: { status: 402, body: '...' }
       assertions:
         status: 402
 ```
+
+The `name:` field is the **displayName**: it shows up in the human output as `path [name]`, in JSON/JUnit as `displayName`/`caseId`, and — crucially — is matchable by `softprobe suite run --filter`. Two cases can share the same `path:` (one capture → many tests), which is why `name:` is the only reliable way to disambiguate them.
+
+`cases[i].skip: true` and `cases[i].only: true` let you scope a run without editing `filter`. `only:` on one entry auto-skips the rest.
 
 ## `defaults.request`
 
@@ -207,7 +228,12 @@ cases:
         status: 402
 ```
 
-Overrides shallow-merge into `defaults`: top-level keys replace wholesale, except `mocks` which merges by `name`.
+Overrides shallow-merge into `defaults`:
+
+- `request`, `assertions`, `policy` — replace wholesale when present
+- `mocks` — merge by `name`: an override whose `name:` matches an existing mock replaces that one in place; unmatched overrides append
+
+This is what lets one capture file drive two distinct test shapes: the top-level `mocks:` can register a hook-driven mock, and a per-case `overrides.mocks:` entry with the same `name:` can swap it for a `source: inline` response without touching the shared hooks. See [`e2e/cli-suite-run/suites/fragment.suite.yaml`](https://github.com/softprobe/softprobe/tree/main/e2e/cli-suite-run/suites/fragment.suite.yaml) for a runnable example.
 
 ## Environment variable expansion
 

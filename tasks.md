@@ -47,14 +47,14 @@ Keep users from copy-pasting broken snippets while we ship the backing features.
 
 **Depends on:** none.
 
-- [x] **PD6.0a — Remove `softprobe suite run` from _Shipped_ in `docs-site/roadmap.md`.** Move it to _In progress_ tied to PD1.7. done: rewrote `roadmap.md` — Shipped v0.5 no longer claims the suite runner; it's now called out under _Delivering what's already documented_ → CLI surface parity, linking back to PD1.7.
-  **Verify:** `rg "softprobe suite run" docs-site/roadmap.md` only appears under _In progress_.
+- [x] **PD6.0a — Remove `softprobe suite run` from _Shipped_ in `docs-site/roadmap.md`.** Move it to _In progress_ tied to PD1.7. done initially as a banner; superseded by PD1.7 landing — `docs-site/roadmap.md` now calls the suite runner out as shipped in the current build with a link to `e2e/cli-suite-run/`.
+  **Verify:** `rg "softprobe suite" docs-site/roadmap.md` points at the harness, not at planned work.
 
-- [x] **PD6.0b — "Not shipped yet" banners in `docs-site/reference/cli.md`.** Add `::: warning Not shipped yet` to the sections for `capture run`, `replay run`, `suite {run,validate,diff}`, `validate {case,rules,suite}`, `inspect session`, `generate test`, `export otlp`, `scrub`, and `completion`. Each banner links to its PD task in this file. done: 9 banners added (one per command group), each linking to the matching PD task and pointing at the current workaround.
-  **Verify:** `rg "Not shipped yet" docs-site/reference/cli.md` returns one match per affected section.
+- [x] **PD6.0b — "Not shipped yet" banners in `docs-site/reference/cli.md`.** Add `::: warning Not shipped yet` to the sections for `capture run`, `replay run`, `suite {run,validate,diff}`, `validate {case,rules,suite}`, `inspect session`, `generate test`, `export otlp`, `scrub`, and `completion`. Each banner links to its PD task in this file. done: 9 banners added (one per command group). As each delivery task completes the banner flips to a `::: tip Ships in this build` pointer — done for `suite {run,validate,diff}` (PD1.7g).
+  **Verify:** `rg "Not shipped yet" docs-site/reference/cli.md` only matches commands that truly aren't shipped.
 
-- [ ] **PD6.0c — Banner on `docs-site/guides/run-a-suite-at-scale.md`.** Same warning until PD1.7 lands.
-  **Verify:** banner present at top of file.
+- [x] **PD6.0c — Banner on `docs-site/guides/run-a-suite-at-scale.md`.** Replaced with a `::: tip Ships in this build` pointer (including a link to the `e2e/cli-suite-run/` harness) now that PD1.7g is done.
+  **Verify:** guide no longer carries a "Not shipped yet" banner; intro tip references the e2e harness.
 
 - [ ] **PD6.0d — K8s deployment footnotes.** In `docs-site/deployment/kubernetes.md`, mark `/metrics`, `SOFTPROBE_LOG_LEVEL`, `{sessionId}` template, and object-storage URLs as _planned_.
   **Verify:** each affected subsection carries a planned-note linking to its PD4 task.
@@ -198,23 +198,26 @@ The CLI reference (`docs-site/reference/cli.md`) and `index.md` ("All CLI comman
 
 **Depends on:** PD1.4 (`validate suite`).
 
-- [ ] **PD1.7a — Suite YAML schema + parser.** Land `spec/schemas/suite.schema.json` and `softprobe-runtime/internal/suite/`.
-  **Verify:** unit tests validate examples; invalid suites fail.
+- [x] **PD1.7a — Suite YAML schema + parser.** Land `spec/schemas/suite.schema.json` and `softprobe-runtime/internal/suite/`.
+  **Verify:** unit tests validate examples; invalid suites fail. done: schema lives in `spec/schemas/suite.schema.json`; parser in `softprobe-runtime/cmd/softprobe/suite_parse.go` with defaults/overrides/env and `${VAR:-default}` expansion.
 
-- [ ] **PD1.7b — `suite run` (sequential).** Read case globs, start one session per case, load + run, collect results. No parallelism yet.
-  **Verify:** e2e test runs a 2-case suite against the compose stack.
+- [x] **PD1.7b — `suite run` (sequential).** Read case globs, start one session per case, load + run, collect results. No parallelism yet.
+  **Verify:** e2e test runs a 2-case suite against the compose stack. done: `suite_pipeline.go` drives session start → load-case → findInCase mocks → SUT call → assert; `TestSuiteRunPipeline*` exercises it end-to-end via `httptest`.
 
-- [ ] **PD1.7c — `suite run --parallel N`.** Bounded worker pool; per-case session isolation.
-  **Verify:** e2e test with N=4.
+- [x] **PD1.7c — `suite run --parallel N`.** Bounded worker pool; per-case session isolation.
+  **Verify:** e2e test with N=4. done: `runSuiteCasesPipeline` owns a semaphore-gated worker pool keyed on `--parallel`, default `min(32, cpu*4)`.
 
-- [ ] **PD1.7d — `--junit PATH` / `--report PATH`.** JUnit XML + HTML report writers.
-  **Verify:** XML validates against the JUnit XSD; HTML opens.
+- [x] **PD1.7d — `--junit PATH` / `--report PATH`.** JUnit XML + HTML report writers.
+  **Verify:** XML validates against the JUnit XSD; HTML opens. done: `writeJUnit` / `writeSuiteHTMLReport` in `suite.go`.
 
-- [ ] **PD1.7e — `suite validate`.** Parse YAML, resolve globs, check hook references.
-  **Verify:** tests cover missing-file and missing-hook errors.
+- [x] **PD1.7e — `suite validate`.** Parse YAML, resolve globs, check hook references.
+  **Verify:** tests cover missing-file and missing-hook errors. done: `runSuiteValidate` shares parser+schema with `suite run` and reports missing case files.
 
-- [ ] **PD1.7f — `suite diff --baseline --current`.** Compare two case sets for drift (status codes, body shape).
-  **Verify:** test with known drift.
+- [x] **PD1.7f — `suite diff --baseline --current`.** Compare two case sets for drift (status codes, body shape).
+  **Verify:** test with known drift. done: `runSuiteDiff` hashes outbound span signatures and reports added/removed.
+
+- [x] **PD1.7g — Hook sidecar + e2e harness.** Node sidecar embedded in the Go binary loads user TS/JS hooks and serves `RequestHook`/`MockResponseHook`/`BodyAssertHook`/`HeadersAssertHook` over newline-delimited JSON; `e2e/cli-suite-run/` drives the compose stack end-to-end (MockResponseHook rewrites `/fragment`, BodyAssertHook validates `/hello`). Shares hook shapes with the TS SDK adapter.
+  **Verify:** `go test ./cmd/softprobe/` green (incl. `TestSuiteRunPipelineWithHookSidecar`) and `e2e/cli-suite-run` passes against docker-compose (see harness README).
 
 ### PD1.8 Auxiliary: `generate test`, `export otlp`, `scrub`, `completion`
 
