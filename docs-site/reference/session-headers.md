@@ -96,4 +96,4 @@ If **any** of these links is missing, capture will record the hops it sees but f
 
 - [HTTP control API](/reference/http-control-api) — how `sessionId` is created.
 - [Architecture](/concepts/architecture) — where the proxy sits and what it does with these headers.
-- [Troubleshooting](/guides/troubleshooting#session-id-missing-from-egress-captures) — common propagation failures.
+- [Troubleshooting](/guides/troubleshooting#my-egress-mocks-arent-hit) — common propagation failures.

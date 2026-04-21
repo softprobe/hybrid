@@ -46,13 +46,15 @@ Rotate keys in the dashboard. Old keys continue to work for **24 hours** after t
 
 ## Regions
 
-| Region | Endpoint |
-|---|---|
-| US East (default) | `https://o.softprobe.ai` |
-| EU West | `https://eu.o.softprobe.ai` |
-| Asia Pacific | `https://ap.o.softprobe.ai` |
+| Region | Endpoint | Primary cloud | Data residency |
+|---|---|---|---|
+| US East (default) | `https://o.softprobe.ai` | AWS `us-east-1` | US only |
+| EU West | `https://eu.o.softprobe.ai` | AWS `eu-west-1` | EU only; GDPR-compliant with DPA |
+| Asia Pacific | `https://ap.o.softprobe.ai` | AWS `ap-southeast-1` | APAC only; APPI-compliant |
 
-Data stays in the region where it was captured. EU and AP regions are GDPR / APPI-compliant.
+**Data residency guarantees.** Captures, session metadata, and control-plane records never leave the region where they were created. Org-wide settings, billing metadata, and audit logs are replicated to a single global control plane (`control.softprobe.ai`) in US East.
+
+**Latency from other regions.** The hosted runtime has the same ~1 ms p50 SLO as the OSS runtime inside its region, but cross-region callers may see ~80–200 ms on each `/v1/inject`. For latency-sensitive CI, prefer a region close to your workers or pin to one region via `SOFTPROBE_RUNTIME_URL`.
 
 ## Capture storage
 
@@ -88,6 +90,10 @@ Or configure S3 Streaming Export in the dashboard (enterprise tier).
 
 Current usage and hard limits are in the dashboard.
 
+**Behavior on breach.** When a rate limit is exceeded, the runtime returns **`429 Too Many Requests`** with a `Retry-After` header indicating seconds until the window resets. The SDK surfaces this as `RuntimeError` with `status: 429`; CI pipelines should fail fast (exit code 3 from the CLI) rather than busy-loop. Enterprise tiers can configure soft limits that only emit warnings via the audit log.
+
+**Header echo.** Each response includes `x-softprobe-quota-remaining` (sessions this window) and `x-softprobe-quota-reset` (UNIX epoch). Use these to pace automated capture jobs.
+
 ## Proxy configuration
 
 Point your mesh's Softprobe WASM at the hosted endpoint:
@@ -105,9 +111,12 @@ If your cluster egress is restricted, allowlist:
 
 ## SLA
 
-- **Availability:** 99.9% monthly (Team), 99.99% (Enterprise).
-- **Latency:** P50 < 30ms, P99 < 200ms for `/v1/inject` from North America, EU, and APAC regions.
-- **Status page:** [status.softprobe.dev](https://status.softprobe.dev).
+- **Availability:** 99.9% monthly (Team), 99.99% (Enterprise). Measured on the hosted runtime's `/health` endpoint from three external probes per region.
+- **Latency:** P50 < 30ms, P99 < 200ms for `/v1/inject` from North America, EU, and APAC regions (to the nearest hosted region).
+- **Support response:** same-business-day on Team; 4-business-hour on Enterprise with dedicated Slack Connect.
+- **Status page:** [status.softprobe.dev](https://status.softprobe.dev). Subscribe via RSS, email, or Slack webhook.
+- **Exclusions.** Planned maintenance windows (announced 7 days ahead on the status page), region-wide cloud provider outages (AWS `us-east-1` etc.), and user-caused breaches of rate limits are excluded from SLA credits.
+- **Credits.** Missed availability in a month triggers automatic service credits per the Terms of Service (`softprobe.dev/terms`).
 
 ## Multi-tenant model
 

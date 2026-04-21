@@ -127,6 +127,37 @@ Every mutating control call bumps `sessionRevision`. Proxy-side inject caches, i
 
 See [Sessions and cases](/concepts/sessions-and-cases) for the full lifecycle.
 
+### Proxy inject cache (optional, `sessionRevision`-keyed)
+
+To keep the inject hot path fast under load, a proxy implementation **may** cache inject decisions locally. The cache is a per-proxy-instance dictionary; it is **not** part of the runtime.
+
+**If a proxy implements this cache, it MUST:**
+
+1. Key each entry on the tuple `(sessionId, sessionRevision, requestFingerprint)`. The fingerprint is implementation-defined but typically includes method, host, path, and normalized body hash.
+2. Treat any entry whose `sessionRevision` does not match the current session's revision as **invalid** (ignore, do not serve).
+3. Bump the fetched revision on every `/v1/inject` response — the runtime echoes `sessionRevision` in the inject response's OTLP attributes when it cares to.
+4. Honor `close` (session delete) by dropping all cache entries for that `sessionId`.
+
+Because `clearRules()`, `mockOutbound()`, `loadCaseFromFile()`, and `setPolicy()` all bump the revision, authors get strong guarantees: **after any rule change, the next `/v1/inject` either returns the fresh decision or a cache miss (never a stale hit)**.
+
+The OSS reference proxy (Envoy + Rust WASM) does **not** cache inject decisions; every hop is a fresh runtime lookup. Hosted deployments may enable caching for throughput. See [Proxy OTLP API](/reference/proxy-otel-api) for the wire contract.
+
+### Trace context propagation (critical)
+
+Softprobe relies on **standard W3C Trace Context** — `traceparent` and `tracestate` — to correlate inbound test requests with the outbound calls your app makes. The chain:
+
+1. The test sends `x-softprobe-session-id: <id>` on the request to the app.
+2. The ingress proxy reads that header and writes the session id into `tracestate` (per [session-headers](/reference/session-headers)).
+3. The app receives `traceparent` + `tracestate` like any other instrumented service.
+4. When the app makes an outbound call, its OpenTelemetry HTTP client propagates **both** headers.
+5. The egress proxy reads `tracestate`, decodes the session id, and includes it in `sp.session.id` on `/v1/inject`.
+
+::: warning This is the #1 integration risk
+If outbound OpenTelemetry propagation is broken (missing instrumentation, wrong propagator config, a plain `fetch` that drops headers), the egress proxy **will not see the session id** and will treat every outbound call as an untagged, un-mocked request. Typical symptoms: mocks never fire on egress, tests hit real upstreams in "replay" mode, strict policy never triggers.
+
+To verify, run a capture session and inspect the resulting case file — if you see ingress hops but not egress hops, propagation is broken. See the [troubleshooting guide](/guides/troubleshooting#my-egress-mocks-arent-hit) for specifics per language.
+:::
+
 ## The capture artifact
 
 A **case file** is one JSON document on disk, typically named `cases/<scenario>.case.json`. Its top level looks like:

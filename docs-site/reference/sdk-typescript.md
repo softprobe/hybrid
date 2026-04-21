@@ -94,6 +94,10 @@ As above, but accepts an in-memory case document (e.g. one you built programmati
 
 **Synchronous, in-memory, zero-network** lookup against the loaded case. Returns `CapturedHit`:
 
+::: warning Throws on ambiguity
+`findInCase` **throws** `CaseLookupError` if **zero** or **more than one** spans match the predicate — ambiguity is caught at authoring time, never at request time. The thrown error includes the matched span ids so you can narrow the predicate. Use [`findAllInCase`](#findallincase-predicate) when you genuinely expect multiple matches.
+:::
+
 ```ts
 interface CapturedHit {
   response: CapturedResponse;  // materialized HTTP response
@@ -138,7 +142,11 @@ Non-throwing variant; returns an array (possibly empty).
 
 `async (spec: MockRuleSpec) => Promise<void>`
 
-Registers a concrete mock rule on the runtime. Merges with any rules already applied via this handle.
+Registers a concrete mock rule on the runtime.
+
+::: info Merge on the client, replace on the wire
+The runtime's `POST /v1/sessions/{id}/rules` **replaces** the entire rules document. The SDK compensates by keeping a local merged list: every call to `mockOutbound` appends to that list and sends the complete list to the runtime. Two calls in the same test process accumulate. Use [`clearRules()`](#clearrules) to reset the SDK-side list.
+:::
 
 ```ts
 interface MockRuleSpec {
@@ -246,31 +254,49 @@ import type {
 
 ## Errors
 
-All SDK errors extend `SoftprobeError`:
+All SDK errors extend `SoftprobeError`.
+
+### Error catalog
+
+| Condition | Error class | Typical cause | Recovery |
+|---|---|---|---|
+| **Runtime unreachable** | `RuntimeError` (cause: `ECONNREFUSED` / `ETIMEDOUT`) | Runtime not running, wrong `baseUrl`, firewall | Start the runtime; `softprobe doctor` |
+| **Unknown session** | `RuntimeError` with `status: 404` | Session already closed, wrong id | Start a fresh session |
+| **Strict miss** (proxy returns error to app) | Not an SDK error — surfaces as an HTTP error inside the SUT, e.g. `Error: Request failed with status 599` | Missing `mockOutbound` or wrong predicate | Add the rule; see [Debug strict miss](/guides/troubleshooting#_403-forbidden-on-outbound-under-strict-policy) |
+| **Invalid rule payload** | `RuntimeError` with `status: 400`, body describing the schema violation | Rule body doesn't validate against [rule-schema](/reference/rule-schema) | Fix the spec; SDK validates many fields client-side |
+| **`findInCase` zero matches** | `CaseLookupError` with `.matches.length === 0` | Predicate too narrow; capture didn't include that hop | Relax predicate; re-capture |
+| **`findInCase` multiple matches** | `CaseLookupError` with `.matches.length > 1` | Predicate too broad; capture has >1 matching hop | Narrow predicate with `path` / `pathPrefix` / `bodyJsonPath`; or use `findAllInCase` |
+
+### Example
 
 ```ts
-import { SoftprobeError, RuntimeError, CaseLookupError } from '@softprobe/softprobe-js';
+import { SoftprobeError, RuntimeError, CaseLookupError, CaseLoadError } from '@softprobe/softprobe-js';
 
 try {
-  const hit = session.findInCase({ ... });
+  const hit = session.findInCase({ direction: 'outbound', hostSuffix: 'stripe.com' });
 } catch (e) {
   if (e instanceof CaseLookupError) {
-    // e.message = "findInCase: 0 matches for {...}"
-    // e.matches contains all found spans
-  }
-  if (e instanceof RuntimeError) {
-    // e.status, e.body, e.url
+    console.error(
+      `findInCase: ${e.matches.length} matches:`,
+      e.matches.map((m) => m.spanId),
+    );
+  } else if (e instanceof RuntimeError) {
+    console.error(`runtime ${e.status} at ${e.url}: ${e.body}`);
+  } else if (e instanceof CaseLoadError) {
+    console.error(`case load failed: ${e.path}: ${e.message}`);
   }
   throw e;
 }
 ```
 
-| Class | When thrown |
-|---|---|
-| `RuntimeError` | Runtime returned non-2xx |
-| `CaseLookupError` | `findInCase` saw 0 or >1 matches |
-| `CaseLoadError` | `loadCaseFromFile` failed to parse / validate |
-| `SoftprobeError` | Base class; parent of all the above |
+### Class hierarchy
+
+| Class | Extends | When thrown |
+|---|---|---|
+| `SoftprobeError` | `Error` | Base class; catch this to catch everything |
+| `RuntimeError` | `SoftprobeError` | Runtime returned non-2xx. Fields: `status`, `body`, `url` |
+| `CaseLookupError` | `SoftprobeError` | `findInCase` saw 0 or >1 matches. Field: `matches: Span[]` |
+| `CaseLoadError` | `SoftprobeError` | `loadCaseFromFile` failed to parse / validate. Field: `path` |
 
 ## Logging
 

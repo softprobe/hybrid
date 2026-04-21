@@ -74,25 +74,66 @@ Each element is an **OTLP ExportTraceServiceRequest** / **TracesData** JSON payl
 }
 ```
 
-## Softprobe-specific attributes
+## OTLP attribute vocabulary
 
-The attributes Softprobe reads and writes on captured spans:
+Case file spans use the OTLP attribute vocabulary defined in [`spec/protocol/case-otlp-json.md`](https://github.com/softprobe/softprobe/blob/main/spec/protocol/case-otlp-json.md). The same vocabulary is used on the wire in [`spec/protocol/proxy-otel-api.md`](https://github.com/softprobe/softprobe/blob/main/spec/protocol/proxy-otel-api.md), so case files can round-trip through the proxy OTLP API without reshaping.
 
-| Attribute | Type | Purpose |
-|---|---|---|
-| `sp.session.id` | string | The session that captured this span |
-| `sp.traffic.direction` | `"inbound"` / `"outbound"` | Which leg of the proxy |
-| `sp.span.type` | `"extract"` / `"inject"` | Extract on capture, inject on replay |
-| `http.method` | string | Standard HTTP semantics |
-| `http.target` | string | Inbound path |
-| `url.full` | string | Outbound URL |
-| `http.status_code` | int | Response status |
-| `http.request.body` | string | Request body (base64 for non-UTF-8) |
-| `http.response.body` | string | Response body |
-| `http.request.headers.*` | string | Per-header attributes |
-| `http.response.headers.*` | string | Per-header attributes |
+### Softprobe identity attributes
 
-For the authoritative list see [`spec/protocol/proxy-otel-api.md`](https://github.com/softprobe/softprobe/blob/main/spec/protocol/proxy-otel-api.md).
+These attributes identify the Softprobe context of a captured span and **SHOULD** be present on every span produced by the proxy:
+
+| Attribute | OTLP value type | Required | Purpose |
+|---|---|---|---|
+| `sp.session.id` | `stringValue` | yes | Session that captured this span |
+| `sp.traffic.direction` | `stringValue` (`"inbound"` / `"outbound"`) | yes | Which leg of the proxy |
+| `sp.span.type` | `stringValue` (`"extract"` / `"inject"`) | yes | `extract` in case files; `inject` only on inject requests |
+| `sp.service.name` | `stringValue` | recommended | Logical service name (may also be on `resource.attributes`) |
+
+### HTTP identity attributes
+
+Required on every span that represents HTTP traffic (i.e. virtually all case-file spans):
+
+| Attribute | OTLP value type | Required | Purpose |
+|---|---|---|---|
+| `url.host` | `stringValue` | yes | Target host (outbound) or listener host (inbound) |
+| `url.path` | `stringValue` | yes | Request path (starting with `/`) |
+| `http.request.method` | `stringValue` | yes | HTTP method (`GET`, `POST`, `PUT`, …) |
+
+### HTTP payload attributes
+
+Present on all request/response pairs; optional only when the body/header set is legitimately empty:
+
+| Attribute | OTLP value type | Required | Purpose |
+|---|---|---|---|
+| `http.request.header.<name>` | `stringValue` | no | One attribute per request header, lowercase name |
+| `http.request.body` | `stringValue` | no | Request body (UTF-8 or base64 if binary) |
+| `http.response.status_code` | `intValue` | yes | Response status (200, 401, 503, …) |
+| `http.response.header.<name>` | `stringValue` | no | One attribute per response header, lowercase name |
+| `http.response.body` | `stringValue` | no | Response body (UTF-8 or base64 if binary) |
+
+### Legacy attribute aliases
+
+Some tooling still emits older OpenTelemetry conventions. Softprobe treats these as equivalent during capture, but the canonical on-disk form is the vocabulary above:
+
+| Legacy attribute | Canonical equivalent |
+|---|---|
+| `http.method` | `http.request.method` |
+| `http.status_code` | `http.response.status_code` |
+| `http.target` | `url.path` |
+| `url.full` | Derived from `url.host` + `url.path` (not required to match separately) |
+
+If you hand-author a case file, prefer the canonical attributes.
+
+### Size guidance
+
+For predictable diffing, validation, and AI-generated cases, v1 tooling SHOULD enforce:
+
+- at most **100 spans** per case file,
+- at most **128 attributes** per span,
+- at most **64 KiB** for any string attribute value,
+- at most **1 MiB** for a single trace document.
+
+Exceeding these is not a hard error but should prompt review.
 
 ## Embedded rules
 

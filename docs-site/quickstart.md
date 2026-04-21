@@ -98,7 +98,54 @@ module.exports = {
 };
 ```
 
-## 5. Write the replay test
+## 5. Write the replay test — two paths
+
+Pick one. Both run against the same case file and pass the same assertion.
+
+### Path A — Codegen (recommended)
+
+Let the CLI generate a session helper from the case file. You commit the generator output alongside the case.
+
+```bash
+softprobe generate jest-session \
+  --case ../softprobe/e2e/captured.case.json \
+  --out test/generated/fragment.replay.session.ts
+```
+
+Then write a short test that imports the generated helper:
+
+```ts
+// fragment.replay.test.ts
+import { startReplaySession } from './test/generated/fragment.replay.session';
+
+describe('fragment replay', () => {
+  let sessionId = '';
+  let close = async () => {};
+
+  beforeAll(async () => {
+    const session = await startReplaySession();
+    sessionId = session.sessionId;
+    close = session.close;
+  });
+
+  afterAll(() => close());
+
+  it('replays /fragment through the mesh', async () => {
+    const res = await fetch('http://127.0.0.1:8082/hello', {
+      headers: { 'x-softprobe-session-id': sessionId },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ message: 'hello', dep: 'ok' });
+  });
+});
+```
+
+The generated helper contains one `findInCase` + `mockOutbound` pair per outbound hop in the case. Regenerate any time the capture changes. This is the [default happy path](/guides/generate-jest-session) — start here unless Path B's ad-hoc control is required.
+
+### Path B — Ad-hoc `findInCase` + `mockOutbound`
+
+Write the session setup by hand. Use this when you need to **mutate** a captured response, express **ordered responses**, or use **predicate-based** matching beyond `(direction, method, path)` triples.
 
 Create `fragment.replay.test.ts`:
 
@@ -148,7 +195,7 @@ describe('fragment replay', () => {
 });
 ```
 
-::: tip What the test does
+::: tip What Path B does
 1. **`startSession({ mode: 'replay' })`** asks the runtime for a fresh session.
 2. **`loadCaseFromFile`** uploads the case file to the runtime and parses it in the SDK.
 3. **`findInCase`** is an in-memory lookup — it throws if zero or multiple spans match, so ambiguity surfaces at *authoring* time, not test time.

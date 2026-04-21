@@ -2,7 +2,13 @@
 
 Rules are how Softprobe expresses **"when this kind of request happens, do this"**. Policy is how you set safe defaults for anything without a matching rule. Together they define the entire decision space the runtime operates over.
 
-This page is a concept reference. For the wire shape, see [`spec/schemas/rule.schema.json`](https://github.com/softprobe/softprobe/blob/main/spec/schemas/rule.schema.json).
+This page is a concept reference. For the wire shape, see [`spec/schemas/rule.schema.json`](https://github.com/softprobe/softprobe/blob/main/spec/schemas/rule.schema.json) or the [rule schema reference](/reference/rule-schema).
+
+::: info Author-time vs request-time
+**The runtime never walks captured `traces[]` on the inject hot path.** Rules are the only thing the runtime evaluates on each `/v1/inject`. Choosing *which* captured response to return for a given request is **authoring-time work** done in the SDK via `findInCase`; the resulting response is then registered as a concrete `mock` rule.
+
+This is why you won't find a "replay from case" action — the SDK turns case lookup into regular rules. See [design §5.3](https://github.com/softprobe/softprobe/blob/main/docs/design.md#53-inject-resolution-placement-normative) for the rationale.
+:::
 
 ## A rule has two halves
 
@@ -94,8 +100,36 @@ Fine-grained control over what happens on a miss:
 When multiple rules could match, the runtime picks exactly one. The algorithm is deterministic:
 
 1. **Highest `priority`** wins.
-2. On a tie, **layer order** decides: session rules (from `mockOutbound`) beat case-embedded rules, which beat policy defaults.
-3. Within the same layer and priority, **later entries win** (the last `mockOutbound` call overrides the first).
+2. On a tie across layers, **later layer wins**: session rules (from `mockOutbound`) beat case-embedded rules, which beat policy defaults.
+3. On a tie within one layer, **later entry in the array wins** (the last `mockOutbound` call or last rule in `case.rules[]`).
+
+These two tie-breakers compose: to force a rule to override a same-priority rule in a higher layer, lift its `priority` up.
+
+### Worked example
+
+Case file ships:
+
+```yaml
+# case.rules[]
+- id: partner-default
+  priority: 100
+  when:  { direction: outbound, host: partner.example.com }
+  then:  { action: mock, response: { status: 200, body: "{\"source\":\"case\"}" } }
+```
+
+Test does:
+
+```ts
+await session.mockOutbound({
+  id: 'partner-override',
+  priority: 100,
+  direction: 'outbound',
+  host: 'partner.example.com',
+  response: { status: 200, body: JSON.stringify({ source: 'test' }) },
+});
+```
+
+Both have `priority: 100`. The **session rule wins** because it's in a later layer, and the test sees `{"source":"test"}`. No need to bump the priority.
 
 ```text
   Session rules  (your mockOutbound calls)   ◄ highest
@@ -169,6 +203,21 @@ Write rules by hand (as YAML in `softprobe session rules apply --file rules/stri
 - you need the exact wire shape for a contract test.
 
 Everywhere else, prefer `mockOutbound`.
+
+## SDKs merge, the runtime replaces
+
+The runtime's `POST /v1/sessions/{id}/rules` endpoint **replaces the entire rules document** — whatever rules you send becomes the session's full rule set. This is simple but would be brittle for test authors if surfaced raw.
+
+The SDKs compensate by **merging on the client side**: every `mockOutbound()` call appends to a local list and re-sends the complete list, so consecutive calls accumulate. The `clearRules()` method resets the SDK-side list and sends an empty document to the runtime.
+
+| Channel | Merge behavior |
+|---|---|
+| SDK `mockOutbound()` | Appends; consecutive calls accumulate |
+| SDK `clearRules()` | Resets the SDK-side list; sends `{ "version": 1, "rules": [] }` |
+| CLI `softprobe session rules apply` | Replaces (no client-side merging) |
+| Raw `POST …/rules` | Replaces |
+
+If you mix SDK `mockOutbound` with `softprobe session rules apply` on the same session, the last writer wins. Pick one channel per session.
 
 ## Session revision and cache safety
 

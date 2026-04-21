@@ -65,6 +65,8 @@ print(hit.response.body)     # '{"id":"pi_123"...}'
 
 Accepts the same predicate keys as the JS SDK, with `snake_case`.
 
+**Raises `CaseLookupError`** if **zero** or **more than one** spans match — ambiguity surfaces at authoring time. The exception's `.matches` attribute lists the offending spans so you can narrow the predicate. Use `find_all_in_case` when multiple matches are expected.
+
 ### `mock_outbound(**spec)` → None
 
 ```python
@@ -81,6 +83,10 @@ session.mock_outbound(
 ```
 
 `response` can be a dict or a `CapturedResponse` namedtuple. Bodies can be strings or objects (the SDK serializes dicts with `json.dumps`).
+
+::: info Merge on the client, replace on the wire
+The runtime's `POST /v1/sessions/{id}/rules` **replaces** the whole rules document. The SDK keeps a local merged list so consecutive `mock_outbound()` calls accumulate. Call `session.clear_rules()` to reset the SDK-side list.
+:::
 
 ## Context manager
 
@@ -160,15 +166,46 @@ Signature conventions:
 
 ## Errors
 
+All SDK exceptions inherit from `softprobe.errors.SoftprobeError`.
+
+### Error catalog
+
+| Condition | Exception | Typical cause | Recovery |
+|---|---|---|---|
+| **Runtime unreachable** | `RuntimeError` (cause: `ConnectionError` / `Timeout`) | Runtime not running, wrong `base_url`, firewall | Start the runtime; `softprobe doctor` |
+| **Unknown session** | `RuntimeError` with `.status == 404` | Session closed, wrong id | Start a fresh session |
+| **Strict miss** (proxy returns error to app) | Not an SDK error — surfaces as a Python HTTP client exception inside the SUT | Missing `mock_outbound` or wrong predicate | Add the rule; see [Debug strict miss](/guides/troubleshooting#_403-forbidden-on-outbound-under-strict-policy) |
+| **Invalid rule payload** | `RuntimeError` with `.status == 400` | Rule body doesn't validate against [rule-schema](/reference/rule-schema) | Fix the spec; most fields validated client-side |
+| **`find_in_case` zero matches** | `CaseLookupError` with `len(e.matches) == 0` | Predicate too narrow; capture didn't include hop | Relax predicate; re-capture |
+| **`find_in_case` multiple matches** | `CaseLookupError` with `len(e.matches) > 1` | Predicate too broad | Narrow predicate; use `find_all_in_case` |
+
+### Example
+
 ```python
-from softprobe.errors import SoftprobeError, RuntimeError, CaseLookupError
+from softprobe.errors import SoftprobeError, RuntimeError, CaseLookupError, CaseLoadError
 
 try:
-    hit = session.find_in_case(...)
+    hit = session.find_in_case(direction="outbound", host_suffix="stripe.com")
 except CaseLookupError as e:
-    # e.matches is a list of the offending spans
-    print(f"Too many matches: {len(e.matches)}")
+    print(f"findInCase: {len(e.matches)} matches:",
+          [m.span_id for m in e.matches])
+    raise
+except RuntimeError as e:
+    print(f"runtime {e.status} at {e.url}: {e.body}")
+    raise
+except CaseLoadError as e:
+    print(f"case load failed: {e.path}: {e}")
+    raise
 ```
+
+### Class hierarchy
+
+| Class | Extends | When raised |
+|---|---|---|
+| `SoftprobeError` | `Exception` | Base class; catch to catch everything |
+| `RuntimeError` | `SoftprobeError` | Runtime returned non-2xx. Attributes: `status`, `body`, `url` |
+| `CaseLookupError` | `SoftprobeError` | `find_in_case` saw 0 or >1 matches. Attribute: `matches: list[Span]` |
+| `CaseLoadError` | `SoftprobeError` | `load_case_from_file` failed to parse / validate. Attribute: `path` |
 
 ## Logging
 

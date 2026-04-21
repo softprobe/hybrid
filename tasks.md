@@ -393,6 +393,116 @@ Can parallelize after P0.4a and P0.2c (client needs stable shapes).
 
 ---
 
+## Phase DG — User-facing documentation site (`docs.softprobe.dev`)
+
+Close gaps between `docs/design.md` + `spec/` + `tasks.md` and the public VitePress site under `docs-site/` (deployed to `docs.softprobe.dev`). All changes are **docs-only**; no code, contract, or schema changes. **Invariants:** every new page must be reachable from `docs-site/.vitepress/config.ts` sidebar, must pass `npm run docs:build`, and must uphold `docs/design.md` §15 invariants (no contradiction with design/spec; code snippets use only documented SDK APIs; links to `spec/` for normative shapes).
+
+**Depends on:** `docs-site/` scaffolding committed (current `main`). No runtime code dependencies.
+
+### DG1 — Complete normative reference pages
+
+- [x] **DG1.1 — `docs-site/reference/proxy-otel-api.md`.** Mirror `spec/protocol/proxy-otel-api.md` for end users: `POST /v1/inject` and `POST /v1/traces` request/response shape, OTLP `TracesData` envelope, required span attributes, hit/`200` vs miss/`404` contract, extract-path semantics, error/timeout behavior. Link to the normative spec file at top of page. done: new user-facing reference page with worked OTLP request/response examples, SLO guidance, and session correlation explanation; added to sidebar.
+  **Verify:** page is reachable from sidebar under "Reference"; links in `concepts/architecture.md` and `concepts/capture-and-replay.md` that currently describe inject/extract point at this page; `npm run docs:build` succeeds.
+
+- [x] **DG1.2 — `docs-site/reference/rule-schema.md`.** Normative rule shape per `spec/schemas/rule.schema.json`: full enumeration of `when` matchers (`direction`, `service`, `host`, `hostSuffix`, `notHostSuffix`, `method`, `path`, `pathPrefix`, header predicates, body JSONPath predicates), `then` actions (`mock`, `error`, `passthrough`, `capture_only`) with payload shapes, `id`/`priority` semantics, `consume: once|many` **v1 caveat** ("may appear in documents; v1 inject does not dequeue from `traces[]`"). Show one YAML and one JSON example each. done: new normative reference covering all 5 actions (including `replay` as deprecated), SDK shorthand vs wire-schema distinction, replace-vs-merge semantics, validation workflow.
+  **Verify:** sidebar entry under "Reference"; cross-links from `concepts/rules-and-policy.md` and `guides/mock-external-dependency.md` resolve; rule examples validate against `spec/schemas/rule.schema.json`.
+
+- [x] **DG1.3 — Expand `docs-site/reference/case-schema.md` with OTLP attribute vocabulary.** Add a new "OTLP attribute vocabulary" section enumerating required and optional attributes from `spec/protocol/case-otlp-json.md`: `sp.session.id`, `sp.traffic.direction`, `url.full`, `http.request.method`, `http.request.header.*`, `http.request.body`, `http.response.status_code`, `http.response.header.*`, `http.response.body`, `service.name`, resource vs span placement. Include size-limit guidance. done: replaced old "Softprobe-specific attributes" with a structured vocabulary (identity / HTTP identity / payload / legacy aliases) plus v1 size guidance aligned with `case-otlp-json.md`.
+  **Verify:** `rg "sp.session.id" docs-site/reference/case-schema.md` returns a match; `rg "http.response.body" docs-site/reference/case-schema.md` returns a match.
+
+### DG2 — Surface the default codegen happy path
+
+- [x] **DG2.1 — `docs-site/guides/generate-jest-session.md`.** Walk-through of `softprobe generate jest-session --case … --out …` per `docs/design.md` §3.2: prerequisites, generated file anatomy (imports `@softprobe/sdk` only, strings together `startSession` → `loadCaseFromFile` → `findInCase` + `mockOutbound`), regeneration workflow after capture refresh, sidecar YAML for policy/fixtures, diff-review tips. done: new how-to guide modeled on the actual generator output (`cmd/softprobe/generate_jest_session.go`), with test wrapper, Makefile/npm regen snippet, and diff-review tips; sidebar updated.
+  **Verify:** generated module snippet in the guide matches the current golden output of `softprobe generate jest-session` (spot-check against `cmd/softprobe` golden file); sidebar entry under "How-to guides".
+
+- [x] **DG2.2 — Quickstart Path A / Path B split.** Update `docs-site/quickstart.md` to present the **generator flow as "Path A (recommended)"** and the ad-hoc `findInCase` + `mockOutbound` flow as "Path B (when you need full control)". Keep both paths copy-paste complete. done: section 5 now offers a "Path A — Codegen (recommended)" subsection using `generate jest-session` + a `startReplaySession()` wrapper, and "Path B — Ad-hoc `findInCase` + `mockOutbound`" keeping the original copy-paste example.
+  **Verify:** quickstart still runs end-to-end from either path against the e2e compose stack.
+
+- [x] **DG2.3 — CLI `generate` subcommands.** In `docs-site/reference/cli.md`, split the `generate` section into per-framework subsections (`generate jest-session`, `generate test`). Document flags (`--case`, `--out`, `--framework`), output file location conventions, and interaction with sidecar YAML. done: `generate jest-session` now has flag table, output conventions, exit codes, and link to the codegen guide; `generate test` lists per-framework status (jest beta, vitest/pytest preview, junit alpha).
+  **Verify:** `rg "generate jest-session" docs-site/reference/cli.md` returns at least one match; table of contents reflects new subsections.
+
+### DG3 — Concepts polish (load-bearing invariants)
+
+- [x] **DG3.1 — Author-time vs request-time callout.** In `docs-site/concepts/rules-and-policy.md` and `docs-site/concepts/capture-and-replay.md`, add a **callout block** (VitePress `::: tip` or `::: info`) stating the `docs/design.md` §8 preface invariant: **"The runtime never walks `traces[]` on the inject hot path."** Case-based lookup happens **only** in the SDK via `findInCase`; the runtime evaluates **explicit rules** only. done: `::: info Author-time vs request-time` callouts added to both concept pages with a link to design §5.3.
+  **Verify:** `rg "never walks" docs-site/concepts/` returns matches in both files.
+
+- [x] **DG3.2 — `capture_only` action in actions tables.** Add `capture_only` as a documented `then.action` value in: `docs-site/concepts/rules-and-policy.md`, `docs-site/guides/mock-external-dependency.md`, `docs-site/reference/rule-schema.md` (DG1.2). Explain: "matches the request for observability / extract purposes but still forwards to the real upstream". Note that `mockOutbound` does **not** emit `capture_only` rules — those are applied via raw `rules apply` or case-embedded rules. done: rule-schema.md and rules-and-policy.md already covered `capture_only`; added a dedicated "Observe-only: `capture_only` rules" section to `guides/mock-external-dependency.md` with YAML + CLI example.
+  **Verify:** `rg "capture_only" docs-site/` returns matches in all three files.
+
+- [x] **DG3.3 — Rule composition tie-break.** In `docs-site/concepts/rules-and-policy.md`, add explicit documentation of the tie-break rule from `docs/design.md` §8.3: **"when two rules share `priority`, the later composition layer wins (session rules > case-embedded rules > policy); within a single layer, later entries win."** Add a small worked example. done: precedence section now names the two tie-breakers explicitly and includes a case-rule-vs-session-rule worked example.
+  **Verify:** `rg "later layer wins|later composition layer" docs-site/concepts/rules-and-policy.md` returns a match.
+
+- [x] **DG3.4 — Proxy inject cache & `sessionRevision`.** Add a new subsection to `docs-site/concepts/architecture.md` documenting §4.4 / §8.4: proxy-side inject-decision caching is **optional**, and when enabled **must** be keyed on `(sessionId, sessionRevision, requestFingerprint)` and invalidated on every revision bump. Cross-link from `reference/http-control-api.md`. done: new "Proxy inject cache (optional, `sessionRevision`-keyed)" subsection in architecture.md with the four MUST requirements and a note that the OSS reference proxy does not cache.
+  **Verify:** section heading appears in architecture.md ToC; cross-link from HTTP control API page resolves.
+
+- [x] **DG3.5 — OpenTelemetry outbound propagation callout.** Reinforce the `docs/design.md` §3.3 integration risk — outbound calls from the app **must** propagate W3C `traceparent` / `tracestate` via OpenTelemetry. Add a diagram/callout in `docs-site/concepts/architecture.md` and a short troubleshooting entry in `docs-site/guides/troubleshooting.md` ("my egress mocks aren't hit" → check OTel propagation). done: added a "Trace context propagation (critical)" subsection with a warning callout in architecture.md and a "My egress mocks aren't hit" anchor target in troubleshooting with per-language fixes + debug steps.
+  **Verify:** diagram or callout present in architecture.md; troubleshooting entry resolvable by `rg "OTel propagation|traceparent" docs-site/guides/troubleshooting.md`.
+
+### DG4 — SDK surface completeness
+
+- [x] **DG4.1 — Errors section in each SDK reference.** Add a unified "Errors" section to `docs-site/reference/sdk-typescript.md`, `sdk-python.md`, `sdk-java.md`, `sdk-go.md` enumerating stable error types / codes for: (a) runtime unreachable, (b) unknown session, (c) strict miss (as surfaced to the test), (d) invalid rule payload, (e) `findInCase` zero matches, (f) `findInCase` multiple matches. Include idiomatic catch examples per language. This maps to task **P4.4a**. done: uniform "Error catalog" table + idiomatic catch example + class-hierarchy table added to all four SDK references.
+  **Verify:** `rg "## Errors" docs-site/reference/sdk-*.md` returns one match per SDK file.
+
+- [x] **DG4.2 — `mockOutbound` merge-vs-replace semantics.** Add an explicit note in all four SDK references and in `docs-site/concepts/rules-and-policy.md`: **runtime `POST …/rules` replaces the entire rules document; SDKs merge on the client so consecutive `mockOutbound` calls accumulate.** Document the `clearRules()` escape hatch. done: `::: info` callouts next to each SDK's `mockOutbound` plus a new "SDKs merge, the runtime replaces" section in `concepts/rules-and-policy.md` with a channel-by-channel table.
+  **Verify:** `rg "merge.*replace|replace.*merge|accumulate" docs-site/reference/sdk-*.md docs-site/concepts/rules-and-policy.md` returns matches in all five files.
+
+- [x] **DG4.3 — `findInCase` throw behavior.** Uniformly document that `findInCase` **throws / returns an error** when zero spans or more than one span match, surfacing the matching span ids in the message. This is authoring-time validation, not a runtime miss. Add to all four SDK references. done: `::: warning` callouts next to each SDK's `findInCase` / `find_in_case` / `FindInCase` spelling out zero / multi-match behavior, with `.matches` / `getMatches()` / `Matches` field.
+  **Verify:** `rg "zero|ambiguous|multi.*match" docs-site/reference/sdk-*.md` returns matches.
+
+### DG5 — Missing how-to guides
+
+- [x] **DG5.1 — `docs-site/guides/ship-rules-with-a-case.md`.** Explain `case.rules[]` and `case.fixtures[]` (case-embedded): when to ship rules with the case file vs apply them as session rules; precedence (per §8.3); how to author, validate (`spec/schemas/case.schema.json`), and diff. done: new guide covers embed-vs-apply decision matrix, authoring paths, precedence worked example, fixtures read-back, and a review checklist.
+  **Verify:** sidebar entry; links from `concepts/rules-and-policy.md` and `reference/case-schema.md` resolve.
+
+- [x] **DG5.2 — `docs-site/guides/auth-fixtures.md`.** Walk through `POST /v1/sessions/{id}/fixtures/auth` from `docs/design.md` §7.5: when HTTP-based auth is captured via case traces vs when to use fixtures (non-HTTP tokens, cookies, session material). Show the control-API shape and the SDK wrapper in each language. done: new guide with when-to-use decision, control-API payload, SDK wrappers in TS / Python / Java / Go, hook context usage, and CI example.
+  **Verify:** sidebar entry; links from `reference/http-control-api.md` and SDK references resolve.
+
+- [x] **DG5.3 — `docs-site/guides/debug-strict-miss.md`.** What the SUT sees when strict policy blocks an outbound (HTTP status, body, headers from `docs/design.md` §8.1), how to correlate with runtime logs, how to relax policy temporarily, how to add the missing rule. done: new guide documents the 599 + `x-softprobe-strict-miss: 1` contract, provides a symptom → diagnosis decision tree, and walks through the three fixes (mockOutbound / policy relaxation / passthrough). Troubleshooting page now cross-links it from the strict-miss entry.
+  **Verify:** sidebar entry; troubleshooting page cross-links the new guide for the "strict miss" symptom.
+
+### DG6 — Deployment & operations
+
+- [x] **DG6.1 — `docs-site/deployment/envoy-standalone.md`.** Standalone Envoy + WASM YAML (no Istio), including the listener pair for ingress (8082) and egress (8084), `sp_backend_url` pointing at the runtime, WASM plugin config, health-check routing. Mirror the shape of `e2e/docker-compose.yaml` but without Docker Compose-isms. done: new deployment page modeled on `e2e/envoy.yaml` with two-listener config, `pluginConfig` reference table, iptables routing notes, and a smoke-test procedure. Sidebar updated.
+  **Verify:** sidebar entry under "Deployment"; YAML validates with `envoy --mode validate` (optional) or at minimum `yamllint`.
+
+- [x] **DG6.2 — HA staging in `docs-site/deployment/kubernetes.md`.** Add a section mapping the design's staged HA story: **v1 in-memory single-replica → add Redis/Postgres for session-state HA → multi-process split (control vs OTLP) when scaling demands it.** Include example Helm values or manifest deltas for each stage. done: section 6 rewritten as "Stage 1 in-memory single-replica → Stage 2 Redis-backed multi-replica → Stage 3 multi-process split" with manifest deltas and a sizing table.
+  **Verify:** `rg "in-memory|single-replica|multi-process" docs-site/deployment/kubernetes.md` returns matches.
+
+- [x] **DG6.3 — Flesh out `docs-site/deployment/hosted.md`.** Add subsections: **Regions** (available regions, latency, data residency), **Retention** (how long cases live, export options), **SLA** (uptime, support tiers, status page URL), **Rate limits** (cross-link from `reference/http-control-api.md`). done: Regions table now includes cloud-provider + data-residency columns; Rate limits section documents 429 + Retry-After + quota headers; SLA section includes exclusions, credits, status-page subscription.
+  **Verify:** headings appear in page ToC; each subsection is at least a paragraph, not a placeholder.
+
+### DG7 — CLI machine contract
+
+- [x] **DG7.1 — `--json` fields table in `docs-site/reference/cli.md`.** For each command that supports `--json`, list the stable output fields (`sessionId`, `sessionRevision`, `specVersion`, `schemaVersion`, `caseId`, `status`, `error`, …). State the stability contract: breaking changes require a version bump visible via `softprobe doctor`. done: new "`--json` field stability" section with common envelope + per-command table + stability contract referencing `spec/schemas/cli-*.response.schema.json`.
+  **Verify:** table with at least `doctor`, `session start`, `session load-case`, `inspect case` rows; `rg "specVersion" docs-site/reference/cli.md` returns matches.
+
+- [x] **DG7.2 — Document `softprobe doctor` spec-drift detection.** Expand the `doctor` section in `docs-site/reference/cli.md` to describe: which version fields are compared, non-zero exit code on drift, JSON output on drift. Link to `docs/design.md` §9.2 indirectly via the normative spec. done: `doctor` now documents "What it checks" table, "Spec-drift detection" subsection comparing `cliVersion`/`runtimeVersion`/`specVersion`/`schemaVersion`, and sample `--json` output including drift mode.
+  **Verify:** `doctor` section documents exit codes for drift and unreachable runtime.
+
+### DG8 — Roadmap, versioning, changelog
+
+- [x] **DG8.1 — `docs-site/roadmap.md`.** User-facing roadmap translating `tasks.md` phases into shipped / in-progress / planned sections. Hide internal granularity (e.g. "P1.0a"); surface user-visible milestones ("Go SDK", "Jest codegen", "hosted service GA"). done: new page with Shipped (v0.5), In progress (Redis multi-replica, hosted GA, codegen expansion, hook runtime, suite parallelism), Planned (multi-process split, Ruby/.NET, diff UI, cloud rules, OTel exporter), Non-goals, Contribute sections.
+  **Verify:** sidebar entry; page renders clean tables per status; no mention of "P0.6b" style task ids.
+
+- [x] **DG8.2 — `docs-site/versioning.md`.** Short page: current version (v0.5), versioning policy (semver for protocol + SDK major version alignment), what counts as a breaking change per `docs/design.md` §9.2 contract. done: new page covers current version, release cadence, four-surface compatibility matrix (SDK/CLI/spec/schema), per-surface breaking-change rules, SDK↔platform pairing, and deprecation policy.
+  **Verify:** sidebar entry; links to changelog.
+
+- [x] **DG8.3 — `docs-site/changelog.md` seed.** Seed with entries for v0.1–v0.6 sourced from `docs/design.md` §16 history. Add a short maintainer note at the top explaining entry format. done: new page seeded with v0.1 through v0.5 entries mapped from `design.md` §16, using Keep-a-Changelog style grouping (Added/Changed/Deprecated/…) and an Unreleased placeholder at the bottom.
+  **Verify:** sidebar entry; entries for v0.5 and v0.6 present at minimum.
+
+### DG9 — Glossary, QA, sidebar, build
+
+- [x] **DG9.1 — `docs-site/glossary.md`.** Sourced from `docs/design.md` §4.1: Session, Case, Rule, Policy, Inject, Extract, Capture, Replay, Fixture, `sessionRevision`, `sp_backend_url`, `x-softprobe-session-id`. Cross-link each term to its primary concept page. done: new glossary page with 23 definitions, each cross-linking to its primary concept/reference page; anchors validated against the built site.
+  **Verify:** sidebar entry (probably under "Reference" or as a top-level singleton).
+
+- [x] **DG9.2 — Link-check sweep.** Add and run a link-checker (e.g. `lychee` or `markdown-link-check`) across `docs-site/`. Fix any dead internal anchors introduced by DG1–DG8. done: in-tree shell link-checker crawls every `](/...)` markdown link against built HTML. Fixed broken anchors: `#session-header-missing`, `#403-forbidden-…` (underscore prefix needed), `#post-v1sessionssessionidfixturesauth`, `#session-id-missing-from-egress-captures`, `#replay-deprecated`, `#mockoutbound`, and glossary author-time/SDK anchors. 257 internal links pass.
+  **Verify:** link-check script passes locally; add the command to `docs-site/README.md` under a new "QA" section; optionally add a GitHub Actions workflow stub (can be parked).
+
+- [x] **DG9.3 — Sidebar, nav, and build.** Update `docs-site/.vitepress/config.ts` to include every new page added in DG1–DG8 in the appropriate sidebar section. Run `npm run docs:build` clean; preview locally; run `docker compose up --wait` in `e2e/` and spot-check that documented snippets still work against the live stack. done: sidebar gained "About" section (Roadmap, Versioning, Changelog, Glossary, FAQ); top-nav version menu refreshed (Changelog, Roadmap, Versioning, GitHub releases). `npm run docs:build` exits 0 with no broken internal link anchors.
+  **Verify:** `npm run docs:build` exits `0` with no warnings; all new pages reachable via sidebar click-through; e2e smoke test still green.
+
+---
+
 ## Parking lot (not sequential — pull into phases when ready)
 
 - [ ] **OpenAPI bundle** for control API (optional; P0.2c may suffice for v1).

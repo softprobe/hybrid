@@ -52,6 +52,68 @@ Example output:
 
 Exit code: `0` on all green, `10` on any failure. Warnings don't affect exit code.
 
+### What it checks
+
+| Check | Failing condition | Exit contribution |
+|---|---|---|
+| **Runtime reachable** | HTTP error on `GET /health` | fatal → exit `10` |
+| **CLI ↔ runtime version drift** | Runtime's `specVersion` / `schemaVersion` differs from CLI's embedded expectations in a way that breaks compatibility | fatal → exit `10` |
+| **Schema version** | Runtime `schemaVersion` not in the CLI's supported list | fatal → exit `10` |
+| **Proxy WASM present** | Optional — checks well-known paths (`/etc/envoy/…`, `$WASM_PATH`). Missing → warning only | non-fatal |
+| **Header echo** | Optional — smoke-tests `x-softprobe-session-id` through the proxy. Absent → warning only | non-fatal |
+
+### Spec-drift detection
+
+`doctor` compares three version fields when it reaches a runtime:
+
+| Field | Where reported | Semantics |
+|---|---|---|
+| `cliVersion` | Embedded in the binary (`softprobe --version`) | Changes with every CLI release |
+| `runtimeVersion` | Runtime's `/health` payload | Changes with every runtime release |
+| `specVersion` | Runtime's `/v1/version` payload | Changes only on breaking protocol changes |
+| `schemaVersion` | Runtime's `/v1/version` payload | Changes only on breaking schema changes |
+
+Compatibility rule: a CLI with `specVersion=1` will refuse to drive a runtime with `specVersion=2` (and vice versa) because the protocol is not wire-compatible across major spec versions. Same for `schemaVersion`. The CLI prints the mismatching pair and exits `10`.
+
+This gives agents and CI a cheap, deterministic way to detect "someone upgraded half the stack" without staring at version strings.
+
+### `--json` output
+
+```json
+{
+  "status": "ok",
+  "exitCode": 0,
+  "cliVersion": "0.5.0",
+  "runtimeVersion": "0.5.0",
+  "specVersion": "1",
+  "schemaVersion": "1",
+  "checks": [
+    {
+      "name": "runtime-reachable",
+      "status": "ok",
+      "details": { "url": "http://127.0.0.1:8080", "latencyMs": 4 }
+    },
+    {
+      "name": "version-drift",
+      "status": "ok",
+      "details": { "cli": "0.5.0", "runtime": "0.5.0" }
+    },
+    {
+      "name": "schema-version",
+      "status": "ok",
+      "details": { "expected": ["1"], "got": "1" }
+    },
+    {
+      "name": "wasm-binary",
+      "status": "warn",
+      "details": { "message": "WASM binary not found at /etc/envoy/sp_istio_agent.wasm" }
+    }
+  ]
+}
+```
+
+On drift, `status: "drift"` and the specific check fails with `status: "fail"` plus a message explaining the incompatible pair. See [`--json` field stability](#json-field-stability) below.
+
 ---
 
 ## `softprobe session`
@@ -245,7 +307,7 @@ Exit code: `0` on valid, `5` on invalid.
 
 ## `softprobe generate`
 
-Code generation.
+Code generation. The generator is the **default happy path** for Jest; it compiles a case file into an importable session helper so tests never call the runtime's JSON API directly.
 
 ### `generate jest-session`
 
@@ -255,11 +317,51 @@ softprobe generate jest-session \
   --out test/generated/checkout.replay.session.ts
 ```
 
-Emits a TypeScript module that creates a replay session, loads the case, and registers mocks — using only `@softprobe/softprobe-js`. See [design doc §3.2](https://github.com/softprobe/softprobe/blob/main/docs/design.md#32-default-happy-path-replay--jest-codegen-first) for the rationale.
+Emits a TypeScript module that creates a replay session, loads the case, and registers one `findInCase` + `mockOutbound` pair per unique outbound hop — using only `@softprobe/softprobe-js`. No hand-rolled `fetch` is emitted. See the [generate-jest-session guide](/guides/generate-jest-session) for the full workflow and [design doc §3.2](https://github.com/softprobe/softprobe/blob/main/docs/design.md#32-default-happy-path-replay--jest-codegen-first) for the rationale.
+
+**Flags:**
+
+| Flag | Required | Purpose |
+|---|---|---|
+| `--case PATH` | yes | Input case file (`*.case.json`) |
+| `--out PATH` | yes | Output TypeScript file; convention: `test/generated/<scenario>.replay.session.ts` |
+| `--framework jest` | no | Reserved for future frameworks (Vitest, Mocha); `jest` is the default and only value in v0.5 |
+
+**Output conventions:**
+
+- Import specifier is hard-coded to `@softprobe/softprobe-js` (the canonical TS SDK package).
+- Case-file path is stored **relative to the generated file** via `path.dirname(__filename)`, so moving the test directory doesn't break the import.
+- Rules are deduplicated by `(direction, method, path)` and sorted lexicographically for stable diffs.
+
+**Exit codes:**
+
+| Code | Meaning |
+|---|---|
+| `0` | Module written successfully |
+| `2` | Missing or malformed flags |
+| `5` | Case file failed schema validation |
+
+**Regenerate after every capture refresh.** See [generate-jest-session → regeneration workflow](/guides/generate-jest-session#regeneration-workflow).
 
 ### `generate test` (preview)
 
-Emits a full test skeleton for Jest / Vitest / pytest / JUnit. Experimental in v0.5.
+```bash
+softprobe generate test \
+  --case cases/checkout.case.json \
+  --framework vitest \
+  --out test/checkout.replay.test.ts
+```
+
+Emits a **full test file** (not just a session helper) for the chosen framework. Experimental in v0.5 — signatures may change. Currently supports:
+
+| `--framework` | Status |
+|---|---|
+| `jest` | beta |
+| `vitest` | preview |
+| `pytest` | preview |
+| `junit` | alpha |
+
+For stable codegen, prefer `generate jest-session` and write the `describe` / `it` wrapper yourself.
 
 ---
 
@@ -298,6 +400,49 @@ softprobe scrub 'cases/**/*.case.json' --rules redactions.yaml
 | `NO_COLOR` | off | Disable ANSI color |
 
 Session-creating commands (`session start`, `capture run`) can export `SOFTPROBE_SESSION_ID` via `--shell` so subsequent commands don't need `--session`.
+
+---
+
+## `--json` field stability
+
+CI pipelines and AI agents depend on the JSON shape being stable. The following fields are considered **stable** — renaming, removing, or changing their type requires a major-version bump of the CLI. New fields **may** be added at any time.
+
+### Common envelope
+
+Every `--json` response carries these fields (at the top level or nested under `data` depending on the command):
+
+| Field | Type | Present on | Purpose |
+|---|---|---|---|
+| `status` | `"ok"` \| `"fail"` \| `"drift"` | all `--json` commands | Outcome marker |
+| `exitCode` | integer | all `--json` commands | Mirrors the process exit code |
+| `error` | object \| null | on failure | `{ "code": "…", "message": "…" }` |
+
+### Per-command stable fields
+
+| Command | Stable fields |
+|---|---|
+| `doctor --json` | `cliVersion`, `runtimeVersion`, `specVersion`, `schemaVersion`, `checks[]` (each: `name`, `status`, `details?`) |
+| `session start --json` | `sessionId`, `sessionRevision`, `mode`, `specVersion`, `schemaVersion` |
+| `session load-case --json` | `sessionId`, `sessionRevision`, `caseId`, `traceCount` |
+| `session rules apply --json` | `sessionId`, `sessionRevision`, `ruleCount` |
+| `session policy set --json` | `sessionId`, `sessionRevision` |
+| `session close --json` | `sessionId`, `stats` (containing `extractedSpans`, `injectedSpans`, `strictMisses`), `capturePath?` |
+| `session stats --json` | `sessionId`, `sessionRevision`, `stats.*` |
+| `inspect case --json` | `caseId`, `version`, `traceCount`, `spanSummary[]` (each: `direction`, `method`, `host`, `path`, `status`) |
+| `capture run --json` | `sessionId`, `exitCode` (of wrapped command), `stats`, `capturePath` |
+| `replay run --json` | `sessionId`, `exitCode`, `stats` |
+| `suite run --json` | `suite`, `total`, `passed`, `failed`, `cases[]` (each: `caseId`, `status`, `durationMs`, `error?`) |
+| `suite validate --json` | `suite`, `errors[]` |
+| `generate jest-session --json` | `outputPath`, `rulesEmitted`, `caseId` |
+| `validate case --json` | `path`, `valid`, `errors[]` |
+
+### Stability contract
+
+- Stable fields are guaranteed **present** when the command succeeds. If a field is optional, its presence depends on context (e.g. `capturePath` only on capture-mode sessions).
+- Breaking changes require a CLI major-version bump (`softprobe --version` tracks both CLI and `specVersion`).
+- The `specVersion` field in `doctor` and `session start` output lets you detect drift before parsing other fields — if `specVersion` doesn't match your agent's expectations, abort.
+
+The full schemas are published in `spec/schemas/cli-*.response.schema.json`.
 
 ---
 

@@ -167,7 +167,7 @@ And set the env var in CI config.
 
 ### `403 Forbidden` on outbound under strict policy
 
-Strict policy blocks anything not mocked. Either mock the missing hop, or move that host to the allowlist:
+Strict policy blocks anything not mocked. The proxy actually returns **`599`** with `x-softprobe-strict-miss: 1`, but some HTTP clients surface it as 403, 5xx, or a generic error. Either mock the missing hop, or move that host to the allowlist:
 
 ```ts
 await session.setPolicy({
@@ -175,6 +175,8 @@ await session.setPolicy({
   externalAllowlist: ['internal.svc.cluster.local', 'auth.internal'],
 });
 ```
+
+For a full walkthrough (including how to read runtime logs and decide between `mockOutbound`, policy relaxation, and passthrough), see [Debug a strict-policy miss](/guides/debug-strict-miss).
 
 ## Proxy / runtime
 
@@ -250,16 +252,28 @@ softprobe suite run ... --hooks hooks/checkout.ts --verbose
 
 ## OpenTelemetry / trace propagation
 
-### Session id missing from egress captures
+### My egress mocks aren't hit {#my-egress-mocks-arent-hit}
 
-Your app doesn't propagate W3C Trace Context on outbound HTTP. Solutions by language:
+**Symptom:** you call `mockOutbound({ direction: 'outbound', ... })`, but the request hits the real upstream anyway (or errors under strict policy), as if the rule didn't exist.
+
+**Root cause (90% of the time):** outbound OpenTelemetry propagation is broken. The egress proxy never sees the session id in `tracestate`, so it treats every outbound call as untagged and the runtime can't find a matching session.
+
+**Confirm in 30 seconds:**
+
+1. Start a **capture** session against the same app and run one end-to-end request.
+2. `softprobe inspect case <path>` (or `jq '.traces[].resourceSpans[].scopeSpans[].spans[] | .attributes[] | select(.key == "sp.traffic.direction")' captured.case.json`).
+3. If you see `inbound` spans but **no** `outbound` spans, propagation is broken.
+
+**Fixes by language:**
 
 | Language | Fix |
 |---|---|
-| Node.js | Use `@opentelemetry/instrumentation-http` auto-instrumentation. |
-| Python | Use `opentelemetry-instrumentation-requests` (or httpx equivalent). |
-| Java | Use the OpenTelemetry Java Agent with HTTP auto-instrumentation. |
-| Go | Wrap your `http.Client` with `otelhttp.NewTransport`. |
+| Node.js | Use `@opentelemetry/instrumentation-http` auto-instrumentation. If you use `fetch` on Node < 20, wrap it with `undici` + OTEL instrumentation. |
+| Python | `opentelemetry-instrumentation-requests` or `opentelemetry-instrumentation-httpx`. Install the auto-instrumentation agent and verify with `OTEL_LOG_LEVEL=debug`. |
+| Java | Run with the OpenTelemetry Java Agent (`-javaagent:opentelemetry-javaagent.jar`). HTTP auto-instrumentation covers Apache HttpClient, OkHttp, JDK `HttpClient`, and others. |
+| Go | Wrap your `http.Client` with `otelhttp.NewTransport(http.DefaultTransport)`. The default client does **not** propagate. |
+
+**Verify propagation:** add a debug log in the app that prints `traceparent` on inbound requests and again right before every outbound call — if `traceparent` is missing or doesn't match, your instrumentation isn't wired in.
 
 You do **not** manually forward `x-softprobe-session-id` — the proxy puts session correlation into `tracestate` on ingress, and the OTel propagator moves it through.
 

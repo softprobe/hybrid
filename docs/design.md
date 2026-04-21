@@ -932,7 +932,37 @@ The proxy uses **only** the OTLP inject/extract API toward **`softprobe-runtime`
 
 ---
 
-## 15. Document history
+## 15. User-facing documentation site (`docs.softprobe.dev`)
+
+Sources under **`docs-site/`** (VitePress) are the **canonical user-facing** documentation for the platform, deployed to **`docs.softprobe.dev`** via Cloudflare Pages. The internal design docs under **`docs/`** and the normative contracts under **`spec/`** remain the source of truth for implementers; the docs site exists to give **end users** (test authors, CI operators, platform teams) a curated, progressively-disclosed view of the same concepts without asking them to read the full design.
+
+**Structural mapping:**
+
+| Internal source | `docs-site/` surface |
+|---|---|
+| `docs/design.md` §2–§5 (architecture) | `concepts/architecture.md`, `concepts/sessions-and-cases.md`, `concepts/capture-and-replay.md`, `concepts/rules-and-policy.md` |
+| `docs/design.md` §3.2 (default happy path) | `quickstart.md`, `guides/generate-jest-session.md` |
+| `docs/design.md` §6 + `spec/protocol/case-otlp-json.md` | `reference/case-schema.md` |
+| `spec/protocol/http-control-api.md` | `reference/http-control-api.md` |
+| `spec/protocol/proxy-otel-api.md` | `reference/proxy-otel-api.md` |
+| `spec/protocol/session-headers.md` | `reference/session-headers.md` |
+| `spec/schemas/rule.schema.json` | `reference/rule-schema.md` |
+| `docs/design.md` §9 (CLI) | `reference/cli.md` |
+| `docs/design.md` §7 (SDK surfaces) | `reference/sdk-{typescript,python,java,go}.md` |
+| `docs/platform-architecture.md` §10 (deployment) | `deployment/{local,kubernetes,hosted}.md` |
+| `tasks.md` phase list (status) | `roadmap.md`, `changelog.md`, `versioning.md` |
+
+**Invariants the docs site must uphold:**
+
+1. **No contradiction** with `docs/design.md` or the `spec/` protocol documents. When a concept has both a design-level and a user-level explanation, the user-level page must link back to the normative source.
+2. **No private SDK calls** in documented code snippets — only the APIs enumerated in §3.2, §7, and the SDK reference pages.
+3. **Links into `spec/`** are first-class; users who want the normative shape of a rule or OTLP attribute can always reach the schema.
+4. **Codegen-first framing** (per §3.2) is the default for Jest; ad-hoc usage is secondary.
+5. **Author-time vs request-time** distinction (per §5.3 and §8 preface) is explicit: runtime never walks OTLP `traces[]` on the inject hot path.
+
+---
+
+## 16. Document history
 
 | Version | Date | Notes |
 |---------|------|--------|
@@ -941,3 +971,4 @@ The proxy uses **only** the OTLP inject/extract API toward **`softprobe-runtime`
 | 0.3 | 2026-04-11 | Softprobe Runtime service: single process for control + proxy APIs; Go/Rust recommendation; CLI as client; K8s Deployment pattern (see `docs/platform-architecture.md`, `docs/repo-layout.md`) |
 | 0.4 | 2026-04-11 | Split **control runtime** (OSS JSON API, in-memory OK) vs **proxy backend** (inject/extract, e.g. `https://o.softprobe.ai`); datastore guidance; open integration question |
 | 0.5 | 2026-04-12 | **Unified service**: `softprobe-runtime` serves both control JSON API and proxy OTLP API (`/v1/inject`, `/v1/traces`) from one process with a shared in-memory store; `sp_backend_url` = `SOFTPROBE_RUNTIME_URL` for local/OSS; control↔backend sync open question resolved |
+| 0.6 | 2026-04-20 | Added §15 (user-facing documentation site `docs.softprobe.dev`) and the normative mapping between internal design and the `docs-site/` tree |

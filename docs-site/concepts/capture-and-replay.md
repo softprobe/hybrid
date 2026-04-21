@@ -72,6 +72,12 @@ POST /v1/sessions/sess_Y/rules    [r1]     →  sessionRevision ++
               (app) returns {"message":"hello", "dep":"ok"}
 ```
 
+::: info Author-time vs request-time
+**The runtime never walks `traces[]` on the inject hot path.** Case lookup happens **only** in the SDK via `findInCase`, at the time the test file is written or loaded. What reaches the runtime is a concrete `mock` rule with a fully-materialized response.
+
+This is a hard architectural invariant — not an implementation detail — because it keeps the inject path deterministic, language-neutral, and fast (< 5 ms p99). Anything that feels like "the runtime should decide which captured response to return" belongs in the SDK. See the [design rationale](https://github.com/softprobe/softprobe/blob/main/docs/design.md#53-inject-resolution-placement-normative).
+:::
+
 ### The author's workflow
 
 Replay is **SDK-authored**. Three SDK calls cover 90% of cases:

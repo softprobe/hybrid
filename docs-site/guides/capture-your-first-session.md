@@ -91,7 +91,7 @@ curl -s http://127.0.0.1:8080/v1/sessions/$SESSION_ID/stats | jq
 # { "extractedSpans": 2, "injectedSpans": 2 }
 ```
 
-If `extractedSpans` stays at 0 after you send traffic, your session header isn't reaching the proxy. See [Troubleshooting](/guides/troubleshooting#session-header-missing).
+If `extractedSpans` stays at 0 after you send traffic, your session header isn't reaching the proxy. See [Troubleshooting](/guides/troubleshooting#x-softprobe-session-id-rejected).
 
 ## 3. Close the session
 

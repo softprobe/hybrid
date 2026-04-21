@@ -179,26 +179,93 @@ env:
 
 The runtime streams each closed session's case file directly to object storage. Supported schemes: `s3://`, `gs://`, `azblob://`, `file://`.
 
-## 6. HA and scaling
+## 6. HA and scaling — staged rollout
 
-**Scaling up to multiple replicas:** the v1 runtime keeps session state in memory; sessions are not replicated. For HA, you need:
+The runtime evolves through three deployment stages as your load grows. Pick the earliest stage that meets your SLO.
 
-- A datastore (Redis or PostgreSQL) for session rules / loaded cases.
-- Sticky-session routing so the proxy's inject calls for a `sessionId` always reach the same replica.
+### Stage 1 — In-memory, single-replica (v0.5 OSS default)
 
-Configure the runtime with:
+- One `Deployment` with `replicas: 1`.
+- Session state lives entirely in process memory.
+- Case bytes and rule documents held in a `sync.Map`-backed store.
+- **Good for:** up to ~hundreds of concurrent sessions; CI suites; dev environments.
+- **Failure mode:** a runtime pod restart drops all active sessions — tests in flight fail fast with 404. Acceptable for CI because the outer retry catches it.
+
+Manifest delta — none; this is the default from the manifest above.
+
+### Stage 2 — Redis-backed, multi-replica-ready (planned v0.6)
+
+- Session state (rules, loaded cases, revision, fixtures) moves to **Redis** or **PostgreSQL**.
+- Runtime becomes stateless — `replicas: 3+` with a rolling update strategy.
+- Proxy continues to POST `/v1/inject` to a stable `ClusterIP` Service; any replica answers correctly.
+- **Good for:** low-to-mid thousands of concurrent sessions; blue/green runtime upgrades without dropping sessions.
+
+Manifest delta:
 
 ```yaml
-env:
-  - name: SOFTPROBE_STORE_BACKEND
-    value: "redis"
-  - name: SOFTPROBE_STORE_URL
-    value: "redis://softprobe-redis:6379/0"
+# softprobe-runtime deployment
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: runtime
+          env:
+            - name: SOFTPROBE_STORE_BACKEND
+              value: "redis"
+            - name: SOFTPROBE_STORE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: softprobe-redis
+                  key: url
+            # sessions shard by sessionId; no sticky routing required.
 ```
 
-(Planned for v0.6; v1 OSS is single-replica only.)
+Plus a Redis StatefulSet (or a managed Redis) sized for ~1 KB × active sessions.
 
-**Scaling down:** the runtime uses ~50 MB idle, ~200 MB per 1000 active sessions. One replica handles hundreds of concurrent tests; add replicas only when you have > 2k concurrent sessions.
+### Stage 3 — Multi-process split (planned v0.7)
+
+- Split the unified runtime into two `Deployment`s:
+  - **`softprobe-control`** — serves the JSON control API (tests, CLI, SDKs); low CPU.
+  - **`softprobe-otlp`** — serves the OTLP `/v1/inject` + `/v1/traces` (proxy only); high CPU, scales horizontally.
+- Both read/write the same Redis/Postgres store.
+- **Good for:** peak throughput beyond ~20k inject RPS; independent scaling of control and data planes.
+
+Manifest delta:
+
+```yaml
+# Two deployments, one Service each
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: softprobe-control, namespace: softprobe-system }
+spec:
+  replicas: 2
+  # identical container, + env:
+  #   SOFTPROBE_SERVE=control
+  #   SOFTPROBE_STORE_URL=...
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: softprobe-otlp, namespace: softprobe-system }
+spec:
+  replicas: 8                     # scale with ingress RPS
+  # identical container, + env:
+  #   SOFTPROBE_SERVE=otlp
+  #   SOFTPROBE_STORE_URL=...
+```
+
+The WasmPlugin's `sp_backend_url` points at `softprobe-otlp` (data plane), while your tests hit `softprobe-control` (control plane). Both are in-cluster ClusterIPs.
+
+### Sizing reference
+
+| Stage | Sessions / runtime pod | CPU / pod | Memory / pod |
+|---|---|---|---|
+| 1 (in-memory) | ~500 idle, ~2000 light | 200m avg, 1000m peak | 200–500 MB |
+| 2 (Redis-backed) | ~2000 idle, ~5000 light | 400m avg, 1500m peak | 100–200 MB (state offloaded) |
+| 3 (split, `otlp`) | scales linearly | 500m per ~2k RPS | 100–150 MB |
+
+Tune `resources.requests` and `HorizontalPodAutoscaler` thresholds based on these numbers.
 
 ## 7. Observability
 

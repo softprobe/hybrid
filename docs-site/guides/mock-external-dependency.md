@@ -197,6 +197,31 @@ beforeEach(() => session.clearRules());
 
 This drops all session-local mocks but keeps the session and loaded case intact — fast reset.
 
+## Observe-only: `capture_only` rules
+
+Sometimes you want a request to go through to the real upstream **and** be recorded — for example, to capture a new endpoint during an otherwise-replayed test. That's the `capture_only` action:
+
+```yaml
+# rules/audit-partner.yaml
+version: 1
+rules:
+  - id: audit-partner-calls
+    priority: 500
+    when:
+      direction: outbound
+      host: partner.example.com
+    then:
+      action: capture_only
+```
+
+```bash
+softprobe session rules apply --session $SESSION_ID --file rules/audit-partner.yaml
+```
+
+`capture_only` **does not** synthesize a response — the proxy forwards to the real upstream as usual. It only ensures the hop shows up in `POST /v1/traces` and lands in the case file at close.
+
+`mockOutbound` does not emit `capture_only` rules; apply them via `softprobe session rules apply` or embed them in `case.rules[]`. See the [rule schema reference](/reference/rule-schema) for the full action inventory.
+
 ## Common mistakes
 
 **Predicate too broad.** Writing `{ hostSuffix: 'stripe.com' }` mocks every Stripe endpoint — the one for payments, the one for webhooks, the one for customers. Narrow to `{ pathPrefix: '/v1/payment_intents' }` unless you really mean all of them.
