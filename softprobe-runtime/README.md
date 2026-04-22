@@ -82,9 +82,10 @@ An informative Kubernetes example lives in
 
 [`.github/workflows/softprobe-runtime-image.yml`](../.github/workflows/softprobe-runtime-image.yml)
 builds this directory into a single image containing **`softprobe-runtime`**
-(the HTTP server) and **`softprobe`** (the CLI). The default process is the
-server on `SOFTPROBE_LISTEN_ADDR` (`0.0.0.0:8080`). For CI smoke checks,
-`docker run … --version` dispatches to the CLI.
+(the HTTP server) and **`softprobe`** (the CLI). **With no command-line
+arguments**, the entrypoint starts the server on `SOFTPROBE_LISTEN_ADDR`
+(`0.0.0.0:8080`). **With any arguments**, it runs the CLI — e.g.
+`docker run … --version`, `docker run … doctor`, `docker run … suite run …`.
 
 Published refs (replace `ORG` with the GitHub org or user that owns the
 package, e.g. `softprobe`):

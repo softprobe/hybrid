@@ -1,12 +1,8 @@
 #!/bin/sh
 set -e
-# Route `docker run … --version` / `version` to the CLI binary; otherwise
-# start the HTTP runtime (default).
-case "${1:-}" in
---version|version)
-	exec /usr/local/bin/softprobe "$@"
-	;;
-*)
+# No args → start the HTTP runtime (Kubernetes / compose default).
+# Any args → `softprobe` CLI (`--version`, `doctor`, `suite run`, …).
+if [ "$#" -eq 0 ]; then
 	exec /usr/local/bin/softprobe-runtime
-	;;
-esac
+fi
+exec /usr/local/bin/softprobe "$@"
