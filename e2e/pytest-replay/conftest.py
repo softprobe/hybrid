@@ -30,14 +30,28 @@ from softprobe import Softprobe, SoftprobeSession  # noqa: E402
 
 RUNTIME_URL = os.environ.get("SOFTPROBE_RUNTIME_URL", "http://127.0.0.1:8080")
 APP_URL = os.environ.get("APP_URL", "http://127.0.0.1:8081")
+API_KEY = os.environ.get("SOFTPROBE_API_KEY", "")
 CASE_PATH = str(
     _REPO_ROOT / "spec" / "examples" / "cases" / "fragment-happy-path.case.json"
 )
 
 
+def _is_reachable(url: str) -> bool:
+    import urllib.request
+    import urllib.error
+
+    try:
+        with urllib.request.urlopen(url, timeout=2) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
 @pytest.fixture(scope="module")
 def softprobe() -> Softprobe:
-    return Softprobe(base_url=RUNTIME_URL)
+    if not _is_reachable(f"{RUNTIME_URL}/health"):
+        pytest.skip(f"softprobe-runtime unreachable at {RUNTIME_URL}")
+    return Softprobe(base_url=RUNTIME_URL, api_token=API_KEY or None)
 
 
 @pytest.fixture()
@@ -51,6 +65,8 @@ def replay_session(softprobe: Softprobe) -> Iterator[SoftprobeSession]:
 
 @pytest.fixture()
 def app_url() -> str:
+    if not _is_reachable(f"{APP_URL}/health"):
+        pytest.skip(f"app unreachable at {APP_URL}")
     return APP_URL
 
 

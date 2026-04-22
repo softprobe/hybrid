@@ -2,7 +2,7 @@
   "name": "@softprobe/jest-replay-example",
   "private": true,
   "scripts": {
-    "test": "SOFTPROBE_RUNTIME_URL=http://127.0.0.1:8080 APP_URL=http://127.0.0.1:8081 jest --config jest.config.js --runInBand fragment.replay.test.ts"
+    "test": "jest --config jest.config.js --runInBand fragment.replay.test.ts"
   },
   "dependencies": {
     "@softprobe/softprobe-js": "file:../../softprobe-js"

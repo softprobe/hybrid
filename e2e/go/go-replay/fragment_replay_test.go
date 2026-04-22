@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"e2e/go/e2etestutil"
-	"softprobe-go/softprobe"
+	"github.com/softprobe/softprobe-go/softprobe"
 )
 
 // TestFragmentReplayThroughTheMesh drives `/hello` on the app with a
@@ -23,9 +23,12 @@ func TestFragmentReplayThroughTheMesh(t *testing.T) {
 	runtimeURL := e2etestutil.MustEnv("SOFTPROBE_RUNTIME_URL", "http://127.0.0.1:8080")
 	appURL := e2etestutil.MustEnv("APP_URL", "http://127.0.0.1:8081")
 
+	e2etestutil.SkipIfRuntimeUnreachable(t, runtimeURL)
+	e2etestutil.SkipIfURLUnreachable(t, "app", appURL+"/health")
+
 	casePath := filepath.Join(e2etestutil.RepoRoot(), "spec", "examples", "cases", "fragment-happy-path.case.json")
 
-	sp := softprobe.New(softprobe.Options{BaseURL: runtimeURL})
+	sp := softprobe.New(softprobe.Options{BaseURL: runtimeURL, APIToken: e2etestutil.APIKey()})
 	session, err := sp.StartSession("replay")
 	if err != nil {
 		t.Fatalf("StartSession: %v", err)

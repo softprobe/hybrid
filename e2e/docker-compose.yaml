@@ -1,6 +1,6 @@
 services:
   softprobe-runtime:
-    image: golang:1.22-alpine
+    image: golang:1.25-alpine
     working_dir: /workspace/softprobe-runtime
     command: ["sh", "-c", "go run ."]
     volumes:
@@ -34,7 +34,7 @@ services:
 
   # HTTP dependency the app calls outbound through the proxy (egress listener).
   upstream:
-    image: golang:1.22-alpine
+    image: golang:1.25-alpine
     working_dir: /workspace/e2e/upstream
     command: ["sh", "-c", "go run ."]
     volumes:
@@ -49,7 +49,7 @@ services:
 
   # Application under test (SUT): ingress via :8082, egress to dependency via :8084.
   app:
-    image: golang:1.22-alpine
+    image: golang:1.25-alpine
     working_dir: /workspace/e2e/app
     command: ["sh", "-c", "go run ."]
     volumes:
@@ -70,7 +70,7 @@ services:
         condition: service_healthy
 
   test-runner:
-    image: golang:1.22-alpine
+    image: golang:1.25-alpine
     working_dir: /workspace/e2e/test-runner
     command: ["sh", "-c", "go run . && touch /tmp/e2e-ok && sleep infinity"]
     volumes:

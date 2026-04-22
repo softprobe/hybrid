@@ -1,6 +1,7 @@
 package e2etestutil
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"softprobe-go/softprobe"
+	"github.com/softprobe/softprobe-go/softprobe"
 )
 
 // EnsureCapturedCase guarantees a fresh captured.case.json suitable for downstream replay tests.
@@ -21,7 +22,7 @@ func EnsureCapturedCase(t *testing.T, runtimeURL, proxyURL, caseFile string) {
 	}
 	_ = os.Remove(caseFile)
 
-	sp := softprobe.New(softprobe.Options{BaseURL: runtimeURL})
+	sp := softprobe.New(softprobe.Options{BaseURL: runtimeURL, APIToken: APIKey()})
 	session, err := sp.StartSession("capture")
 	if err != nil {
 		t.Fatalf("StartSession: %v", err)
@@ -33,7 +34,7 @@ func EnsureCapturedCase(t *testing.T, runtimeURL, proxyURL, caseFile string) {
 	if err := session.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	WaitForFile(t, caseFile)
+	MaterializeCapturedCase(t, runtimeURL, sessionID, caseFile)
 	ValidateCaseFile(t, caseFile)
 	ValidateCaptureCaseTraceSemantics(t, caseFile)
 	if !CaseFileHasIngressEgressCapture(caseFile) {
@@ -163,6 +164,58 @@ func AppRequestCount(t *testing.T, appURL string) int64 {
 // WaitForAsyncCaptureUpload sleeps briefly so ingress and egress extract uploads finish.
 func WaitForAsyncCaptureUpload() {
 	time.Sleep(4 * time.Second)
+}
+
+// MaterializeCapturedCase ensures caseFile exists after capture close.
+// Local runtimes write the file directly; hosted runtimes expose it via GET /v1/cases/{sessionId}.
+func MaterializeCapturedCase(t *testing.T, runtimeURL, sessionID, caseFile string) {
+	t.Helper()
+
+	if fileExists(caseFile) {
+		return
+	}
+
+	apiKey := APIKey()
+	client := &http.Client{Timeout: 5 * time.Second}
+	deadline := time.Now().Add(30 * time.Second)
+	caseURL := strings.TrimRight(runtimeURL, "/") + "/v1/cases/" + sessionID
+	for time.Now().Before(deadline) {
+		req, err := http.NewRequest(http.MethodGet, caseURL, nil)
+		if err == nil {
+			if apiKey != "" {
+				req.Header.Set("Authorization", "Bearer "+apiKey)
+			}
+			resp, err := client.Do(req)
+			if err == nil {
+				body, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					if err := os.WriteFile(caseFile, body, 0o644); err != nil {
+						t.Fatalf("write case file %s: %v", caseFile, err)
+					}
+					return
+				}
+				// Hosted path may take a short moment to finalize case persistence.
+				if resp.StatusCode != http.StatusNotFound {
+					t.Fatalf("GET %s: status=%d body=%s", caseURL, resp.StatusCode, bytes.TrimSpace(body))
+				}
+			}
+		}
+		if fileExists(caseFile) {
+			return
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	WaitForFile(t, caseFile)
+	if !fileExists(caseFile) {
+		t.Fatalf("captured case not materialized at %s (runtime=%s session=%s)", caseFile, runtimeURL, sessionID)
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // CaseFileHasIngressEgressCapture reports whether the case file is suitable for replay tests.

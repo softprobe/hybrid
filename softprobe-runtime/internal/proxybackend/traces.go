@@ -8,11 +8,12 @@ import (
 	tracev1 "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"softprobe-runtime/internal/metrics"
 	"softprobe-runtime/internal/store"
 )
 
 // HandleTraces accepts OTLP extract uploads and buffers them for capture sessions.
-func HandleTraces(st *store.Store) http.HandlerFunc {
+func HandleTraces(st store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -51,6 +52,7 @@ func HandleTraces(st *store.Store) http.HandlerFunc {
 			_ = st.BufferExtract(req.SessionID, normalized)
 			_, _ = st.RecordExtractedSpans(req.SessionID, req.SpanCount)
 		}
+		metrics.Global.ExtractSpansTotal.Add(uint64(req.SpanCount))
 
 		w.WriteHeader(http.StatusNoContent)
 	}

@@ -3,6 +3,7 @@ package proxybackend
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,25 +59,57 @@ func WriteCapturedCaseTo(caseID string, tracePayloads [][]byte, override string)
 		Traces:    traces,
 	}
 
-	outputPath := interpolateCapturePath(captureOutputPath(override), caseID, now)
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
-		return "", err
-	}
-
-	file, err := os.Create(outputPath)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
+	rawPath := captureOutputPath(override)
+	outputPath := interpolateCapturePath(rawPath, caseID, now)
 
 	enc, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return "", err
 	}
-	if _, err := file.Write(append(enc, '\n')); err != nil {
+	data := append(enc, '\n')
+
+	// Resolve URI scheme. file:// and bare paths go to local disk.
+	// s3://, gs://, azblob:// are placeholders that surface an unsupported
+	// error until the relevant client is wired in.
+	localPath, schemeErr := resolveLocalPath(outputPath)
+	if schemeErr != nil {
+		return "", schemeErr
+	}
+
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
 		return "", err
 	}
-	return outputPath, nil
+	file, err := os.Create(localPath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	if _, err := file.Write(data); err != nil {
+		return "", err
+	}
+	return localPath, nil
+}
+
+// resolveLocalPath strips a file:// prefix from path and returns the OS path.
+// For s3://, gs://, azblob:// it returns an unsupported error so callers get a
+// clear message rather than a cryptic open() failure.
+func resolveLocalPath(path string) (string, error) {
+	// Fast path: no scheme — plain OS path.
+	if !strings.Contains(path, "://") {
+		return path, nil
+	}
+	u, err := url.Parse(path)
+	if err != nil {
+		return "", fmt.Errorf("invalid capture path %q: %w", path, err)
+	}
+	switch u.Scheme {
+	case "file":
+		return u.Host + u.Path, nil
+	case "s3", "gs", "azblob":
+		return "", fmt.Errorf("unsupported scheme %q in SOFTPROBE_CAPTURE_CASE_PATH — object-storage writers not yet wired for OSS runtime", u.Scheme)
+	default:
+		return "", fmt.Errorf("unsupported scheme %q in SOFTPROBE_CAPTURE_CASE_PATH", u.Scheme)
+	}
 }
 
 func captureOutputPath(override string) string {
@@ -97,6 +130,7 @@ func interpolateCapturePath(path, sessionID string, at time.Time) string {
 	}{
 		{"{sessionId}", sessionID},
 		{"{ts}", at.Format("20060102T150405Z")},
+		{"{mode}", "capture"},
 	}
 	out := path
 	for _, r := range replacements {

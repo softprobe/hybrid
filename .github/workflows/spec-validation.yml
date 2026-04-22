@@ -16,3 +16,13 @@ jobs:
           node-version: "20"
       - name: Validate spec
         run: bash spec/scripts/validate-spec.sh
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: softprobe-runtime/go.mod
+
+      - name: Validate docs snippets suite
+        run: |
+          cd softprobe-runtime
+          go build -o /tmp/softprobe ./cmd/softprobe
+          /tmp/softprobe validate suite ../docs/snippets.suite.yaml

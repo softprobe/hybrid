@@ -202,6 +202,40 @@ otel-server's `/v1/inject` endpoint is not used in the current architecture (sof
 - **GCS** — already in use. No new storage system.
 - **Cloud Run** — serverless Go containers. No cluster to manage.
 
+### Cloud Run deployment commands
+
+```bash
+# 1. Create a Serverless VPC Access connector (one-time, ~2 min)
+gcloud compute networks vpc-access connectors create softprobe-connector \
+  --project=coral-smoke-455007-j2 \
+  --region=us-central1 \
+  --network=default \
+  --range=10.8.0.0/28
+
+# 2. Deploy softprobe-runtime to Cloud Run
+gcloud run deploy softprobe-runtime \
+  --project=coral-smoke-455007-j2 \
+  --region=us-central1 \
+  --image=ghcr.io/softprobe/softprobe-runtime:latest \
+  --service-account=softprobe-runtime@coral-smoke-455007-j2.iam.gserviceaccount.com \
+  --vpc-connector=softprobe-connector \
+  --allow-unauthenticated \
+  --set-env-vars="SOFTPROBE_HOSTED=true,\
+SOFTPROBE_LISTEN_ADDR=:8080,\
+SOFTPROBE_AUTH_URL=https://auth.softprobe.ai/api/api-key/validate,\
+REDIS_HOST=10.42.202.91,\
+REDIS_PORT=6379,\
+GCS_BUCKET=softprobe-otel-data,\
+GCS_PROJECT=coral-smoke-455007-j2"
+
+# 3. Post-deploy smoke test
+SOFTPROBE_RUNTIME_URL=$(gcloud run services describe softprobe-runtime \
+  --project=coral-smoke-455007-j2 --region=us-central1 \
+  --format="value(status.url)") \
+SOFTPROBE_API_KEY=<your-key> \
+go test ./e2e/hosted/ -v -count=1
+```
+
 ---
 
 ## 8. Implementation plan (phased)

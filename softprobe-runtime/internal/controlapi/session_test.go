@@ -470,6 +470,43 @@ func createSessionForStatsTest(t *testing.T, mux *http.ServeMux, mode string) st
 	return body.SessionID
 }
 
+func TestListSessions(t *testing.T) {
+	mux := NewMux()
+
+	// Empty list
+	req := httptest.NewRequest(http.MethodGet, "/v1/sessions", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("empty list: status = %d", rec.Code)
+	}
+	var resp struct {
+		Sessions []any `json:"sessions"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
+	if len(resp.Sessions) != 0 {
+		t.Errorf("sessions = %d, want 0", len(resp.Sessions))
+	}
+
+	// Create two sessions, then list
+	createSessionForStatsTest(t, mux, "replay")
+	createSessionForStatsTest(t, mux, "capture")
+
+	req2 := httptest.NewRequest(http.MethodGet, "/v1/sessions", nil)
+	rec2 := httptest.NewRecorder()
+	mux.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("populated list: status = %d", rec2.Code)
+	}
+	var resp2 struct {
+		Sessions []map[string]any `json:"sessions"`
+	}
+	_ = json.NewDecoder(rec2.Body).Decode(&resp2)
+	if len(resp2.Sessions) != 2 {
+		t.Errorf("sessions = %d, want 2", len(resp2.Sessions))
+	}
+}
+
 func getSessionStatsForTest(t *testing.T, mux *http.ServeMux, sessionID string) sessionStatsTestResponse {
 	t.Helper()
 

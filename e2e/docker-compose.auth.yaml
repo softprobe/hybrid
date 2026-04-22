@@ -1,0 +1,4 @@
+services:
+  softprobe-runtime:
+    environment:
+      SOFTPROBE_API_TOKEN: sp_test

@@ -418,8 +418,10 @@ softprobe scrub 'cases/**/*.case.json' --rules redactions.yaml
 | Variable | Default | Purpose |
 |---|---|---|
 | `SOFTPROBE_RUNTIME_URL` | `http://127.0.0.1:8080` | Default for `--runtime-url` |
+| `SOFTPROBE_API_TOKEN` | — | Bearer token for `Authorization: Bearer <token>` (hosted runtime or token-protected OSS runtime) |
 | `SOFTPROBE_SESSION_ID` | — | Read by `--session` flags if set |
-| `SOFTPROBE_CONFIG_PATH` | — | Path to a CLI defaults file (TOML) |
+| `SOFTPROBE_CAPTURE_CASE_PATH` | `e2e/captured.case.json` | Output path for captured case files; supports `{sessionId}`, `{ts}`, `{mode}` placeholders and `file://` URIs |
+| `SOFTPROBE_LOG_LEVEL` | `info` | Runtime log level: `debug`, `info`, `warn`, `error` |
 | `NO_COLOR` | off | Disable ANSI color |
 
 Session-creating commands (`session start`, `capture run`) can export `SOFTPROBE_SESSION_ID` via `--shell` so subsequent commands don't need `--session`.

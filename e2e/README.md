@@ -131,3 +131,109 @@ All four use the same default environment (`SOFTPROBE_RUNTIME_URL=http://127.0.0
 The four SDK harnesses instead load **`spec/examples/cases/fragment-happy-path.case.json`**, a checked-in golden case, so they do not depend on a prior capture run.
 
 See [docs/design.md](../docs/design.md) §3.2, §3.4 and §5.1.
+
+---
+
+## Running against a target
+
+### Local compose stack (default)
+
+Start the stack once, then run any harness:
+
+```bash
+docker compose -f e2e/docker-compose.yaml up --build --wait
+
+# Pick a harness:
+cd e2e && go test -count=1 ./go/go-replay/...
+cd e2e/jest-replay && npm test
+python3 -m pytest e2e/pytest-replay/ -v
+cd e2e/junit-replay && mvn test
+```
+
+No extra env vars needed — all defaults point at `127.0.0.1:8080` (runtime) and `127.0.0.1:8081` (app).
+
+#### Local compose stack with bearer auth
+
+`e2e/docker-compose.auth.yaml` is a compose override that sets `SOFTPROBE_API_TOKEN=sp_test` on the runtime, exercising the same static-token auth path used by the hosted runtime. Pass `SOFTPROBE_API_KEY=sp_test` to each harness so the clients send the matching bearer token:
+
+```bash
+docker compose -f e2e/docker-compose.yaml -f e2e/docker-compose.auth.yaml up --build --wait
+
+export SOFTPROBE_API_KEY=sp_test
+
+cd e2e && RUNTIME_URL=http://127.0.0.1:8080 PROXY_URL=http://127.0.0.1:8082 \
+  APP_URL=http://127.0.0.1:8081 UPSTREAM_URL=http://127.0.0.1:8083 \
+  go test -count=1 ./go/...
+cd e2e/jest-replay && npm test
+python3 -m pytest e2e/pytest-replay/ -v
+cd e2e/junit-replay && mvn test
+```
+
+### Hosted Softprobe runtime (`runtime.softprobe.dev`)
+
+The four SDK replay harnesses and the `hosted/` smoke tests all work against the hosted runtime without any code changes. You only need a runtime URL and an API key.
+
+```bash
+export SOFTPROBE_RUNTIME_URL=https://runtime.softprobe.dev
+export SOFTPROBE_API_KEY=<your-api-key>
+export SOFTPROBE_API_TOKEN=$SOFTPROBE_API_KEY   # SDKs and CLI read SOFTPROBE_API_TOKEN
+```
+
+Then run the smoke tests first to verify connectivity:
+
+```bash
+cd e2e && go test ./hosted/ -v -count=1
+```
+
+Then the SDK replay harnesses (the `app` and `upstream` services must also be accessible — see note below):
+
+```bash
+cd e2e && go test -count=1 ./go/go-replay/...
+cd e2e/jest-replay && npm test
+python3 -m pytest e2e/pytest-replay/ -v
+cd e2e/junit-replay && mvn test
+```
+
+> **Note on `APP_URL`:** The SDK replay harnesses drive traffic through the `app` service (which must be reachable at `APP_URL`). When running purely against the hosted runtime without a local compose stack, set `APP_URL` to your own deployed test app or leave it unset — the harnesses skip gracefully if the app is unreachable.
+
+The `jest-hooks` harness also requires a running Envoy ingress proxy (`INGRESS_URL`). It is compose-only and skips automatically when the ingress proxy is unreachable.
+
+#### Cloud runtime through local proxy (no local runtime container)
+
+To verify the real proxy path against the cloud deployment, run only `softprobe-proxy`, `app`, and `upstream`; do not start the local `softprobe-runtime` container.
+
+```bash
+export SOFTPROBE_RUNTIME_URL=https://softprobe-runtime-1076343766237.us-central1.run.app
+export SOFTPROBE_API_KEY=<your-api-key>
+export SOFTPROBE_API_TOKEN=$SOFTPROBE_API_KEY
+
+cd e2e
+python3 ./scripts/render-envoy-cloud.py
+docker compose -f docker-compose.yaml -f docker-compose.cloud.yaml up --build --wait softprobe-proxy upstream app
+
+cd e2e/jest-hooks && npm test
+```
+
+`render-envoy-cloud.py` generates `e2e/envoy.cloud.yaml` from `e2e/envoy.cloud.tmpl.yaml` so Envoy/WASM calls `SOFTPROBE_RUNTIME_URL` directly with `SOFTPROBE_API_KEY`.
+
+**What skips vs. what requires the proxy stack:**
+
+| Harness | Requires compose proxy | Works hosted-only |
+|---|---|---|
+| `hosted/` smoke tests | No | Yes — this is its primary target |
+| `go/go-replay/` | No | Yes |
+| `jest-replay/` | No | Yes |
+| `pytest-replay/` | No | Yes |
+| `junit-replay/` | No | Yes |
+| `go/` (egress inject, strict policy) | Yes | Skips without proxy |
+| `jest-hooks/` | Yes | Skips without ingress proxy |
+
+### Self-hosted runtime (custom URL)
+
+Point at any runtime by setting `SOFTPROBE_RUNTIME_URL`. If your runtime requires a static bearer token (OSS `SOFTPROBE_API_TOKEN` env var on the server side), set the matching client token:
+
+```bash
+export SOFTPROBE_RUNTIME_URL=http://my-runtime:8080
+export SOFTPROBE_API_TOKEN=my-static-token
+cd e2e && go test -count=1 ./go/go-replay/...
+```

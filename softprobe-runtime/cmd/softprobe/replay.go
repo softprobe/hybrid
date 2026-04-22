@@ -53,9 +53,44 @@ func runReplayRun(args []string, stdout, stderr io.Writer) int {
 	misses := stats.Stats.StrictMisses
 
 	if *jsonOutput {
-		writeJSONEnvelope(stdout, "ok", exitOK, map[string]any{
-			"sessionId": stats.SessionID,
-			"exitCode":  exitOK,
+		// Enrich the JSON output with case staleness diagnostics by fetching
+		// the session state (which includes caseSummary).
+		caseLoaded := false
+		client := newHTTPClient(5 * time.Second)
+		stateReq, err := newRuntimeRequest(
+			http.MethodGet,
+			strings.TrimRight(*runtimeURL, "/")+"/v1/sessions/"+*sessionID+"/state",
+			nil,
+		)
+		if err == nil {
+			if stateResp, err := client.Do(stateReq); err == nil {
+				defer stateResp.Body.Close()
+				if stateResp.StatusCode == http.StatusOK {
+					var stateDoc struct {
+						CaseSummary struct {
+							CaseID string `json:"caseId"`
+						} `json:"caseSummary"`
+					}
+					if json.NewDecoder(stateResp.Body).Decode(&stateDoc) == nil {
+						caseLoaded = stateDoc.CaseSummary.CaseID != ""
+					}
+				}
+			}
+		}
+
+		// Classify failure type for agents dispatching on errorType.
+		var errorType string
+		switch {
+		case misses > 0:
+			errorType = "code_regression"
+		case caseLoaded && hits == 0:
+			errorType = "case_staleness"
+		}
+
+		payload := map[string]any{
+			"sessionId":  stats.SessionID,
+			"exitCode":   exitOK,
+			"caseLoaded": caseLoaded,
 			"stats": map[string]any{
 				"hits":           hits,
 				"misses":         misses,
@@ -63,7 +98,11 @@ func runReplayRun(args []string, stdout, stderr io.Writer) int {
 				"extractedSpans": stats.Stats.ExtractedSpans,
 				"strictMisses":   stats.Stats.StrictMisses,
 			},
-		})
+		}
+		if errorType != "" {
+			payload["errorType"] = errorType
+		}
+		writeJSONEnvelope(stdout, "ok", exitOK, payload)
 		return exitOK
 	}
 

@@ -2,7 +2,7 @@
   "name": "@softprobe/jest-hooks-example",
   "private": true,
   "scripts": {
-    "test": "SOFTPROBE_RUNTIME_URL=http://127.0.0.1:8080 INGRESS_URL=http://127.0.0.1:8082 APP_URL=http://127.0.0.1:8081 UPSTREAM_URL=http://127.0.0.1:8083 jest --config jest.config.js --runInBand fragment.hooks.test.ts"
+    "test": "jest --config jest.config.js --runInBand fragment.hooks.test.ts"
   },
   "dependencies": {
     "@softprobe/softprobe-js": "file:../../softprobe-js"

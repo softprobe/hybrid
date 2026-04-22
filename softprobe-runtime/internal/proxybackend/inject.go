@@ -5,11 +5,13 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"time"
 
 	resourcev1 "go.opentelemetry.io/proto/otlp/resource/v1"
 	tracev1 "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"softprobe-runtime/internal/metrics"
 	"softprobe-runtime/internal/store"
 )
 
@@ -84,8 +86,9 @@ func ParseInjectLookupRequest(payload []byte) (*InjectLookupRequest, error) {
 // mock rules (pushed via `PUT /v1/sessions/{id}/rules`) plus any inline rules
 // embedded in the loaded case (frozen regression cases only). There is no
 // case-trace walk on this hot path.
-func HandleInject(st *store.Store) http.HandlerFunc {
+func HandleInject(st store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -94,28 +97,33 @@ func HandleInject(st *store.Store) http.HandlerFunc {
 		payload, err := normalizeOTLPJSON(mustReadAll(r))
 		if err != nil {
 			http.Error(w, "invalid inject payload", http.StatusBadRequest)
+			metrics.Global.InjectTotal.Inc("error")
 			return
 		}
 
 		req, err := ParseInjectLookupRequest(payload)
 		if err != nil {
 			http.Error(w, "invalid inject payload", http.StatusBadRequest)
+			metrics.Global.InjectTotal.Inc("error")
 			return
 		}
 
 		if req.SessionID == "" {
 			http.Error(w, "missing session id", http.StatusBadRequest)
+			metrics.Global.InjectTotal.Inc("error")
 			return
 		}
 		session, ok := st.Get(req.SessionID)
 		if !ok {
 			http.Error(w, "unknown session", http.StatusNotFound)
+			metrics.Global.InjectTotal.Inc("error")
 			return
 		}
 
 		sessionRules, err := parseInjectRulesDocument(session.Rules)
 		if err != nil {
 			http.Error(w, "invalid session rules", http.StatusInternalServerError)
+			metrics.Global.InjectTotal.Inc("error")
 			return
 		}
 		caseRules := caseEmbeddedRules(session.LoadedCase)
@@ -123,6 +131,8 @@ func HandleInject(st *store.Store) http.HandlerFunc {
 		match := selectInjectRule(req, isStrictExternalHTTPPolicy(session.Policy), caseRules, sessionRules)
 		if match == nil {
 			writeInjectMiss(w)
+			metrics.Global.InjectTotal.Inc("miss")
+			metrics.Global.InjectLatency.Observe(time.Since(start).Seconds())
 			return
 		}
 
@@ -131,23 +141,29 @@ func HandleInject(st *store.Store) http.HandlerFunc {
 			response := buildMockResponse(match.Rule)
 			if response == nil {
 				http.Error(w, "mock rule missing response", http.StatusInternalServerError)
+				metrics.Global.InjectTotal.Inc("error")
 				return
 			}
 			_, _ = st.RecordInjectedSpans(req.SessionID, 1)
 			writeInjectHit(w, response)
+			metrics.Global.InjectTotal.Inc("hit")
 		case "error":
 			status, body := buildErrorResponse(match.Rule)
 			if match.Rule.ID == strictPolicyRuleID && match.Source == "policy" {
 				_, _ = st.RecordStrictMiss(req.SessionID, 1)
 			}
 			writeInjectError(w, status, body)
+			metrics.Global.InjectTotal.Inc("miss")
 		case "passthrough", "capture_only":
 			// The proxy must perform the real outbound call; a miss tells it to
 			// pass through. Capture semantics are handled by the extract path.
 			writeInjectMiss(w)
+			metrics.Global.InjectTotal.Inc("miss")
 		default:
 			http.Error(w, "unsupported rule action", http.StatusInternalServerError)
+			metrics.Global.InjectTotal.Inc("error")
 		}
+		metrics.Global.InjectLatency.Observe(time.Since(start).Seconds())
 	}
 }
 

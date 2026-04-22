@@ -38,11 +38,27 @@ const runtimeUrl = process.env.SOFTPROBE_RUNTIME_URL ?? 'http://127.0.0.1:8080';
 // session id into tracestate. Tests that hit the app directly (:8081)
 // bypass the proxy and defeat the point.
 const ingressUrl = process.env.INGRESS_URL ?? 'http://127.0.0.1:8082';
+const apiToken = process.env.SOFTPROBE_API_KEY ?? undefined;
+const authHeaders = apiToken ? { Authorization: `Bearer ${apiToken}` } : undefined;
 
 process.env.FRAGMENT_DEP_VALUE = 'mutated-by-hook';
 
+async function checkReachable(url: string): Promise<boolean> {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(2000) });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 runSuite(path.join(__dirname, 'suites/fragment.suite.yaml'), {
   baseUrl: runtimeUrl,
+  apiToken,
+  // Skip when the runtime or the ingress proxy (Envoy, compose-only) aren't up.
+  skipIf: async () =>
+    !(await checkReachable(`${runtimeUrl}/health`)) ||
+    !(await checkReachable(`${ingressUrl}/health`)),
   hooks: {
     rewriteDep,
     helloShape,
@@ -53,7 +69,9 @@ runSuite(path.join(__dirname, 'suites/fragment.suite.yaml'), {
     // `sess_<base64url>` format today, but the proxy must NOT rely on
     // that prefix — see `softprobe-proxy/src/otel.rs` session-id tests.
     expect(session.id).not.toMatch(/^sp-session-/);
-    const stateRes = await fetch(`${runtimeUrl}/v1/sessions/${session.id}/state`);
+    const stateRes = await fetch(`${runtimeUrl}/v1/sessions/${session.id}/state`, {
+      headers: authHeaders,
+    });
     expect(stateRes.status).toBe(200);
     const state = (await stateRes.json()) as {
       rules: {

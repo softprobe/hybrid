@@ -2,7 +2,7 @@
 # Unified runtime HTTP server + `softprobe` CLI in one image.
 # Default: start the server. `docker run … --version` runs the CLI (PD5.3a smoke).
 
-FROM golang:1.22-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 RUN apk add --no-cache ca-certificates
 COPY go.mod go.sum ./

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"e2e/go/e2etestutil"
-	"softprobe-go/softprobe"
+	"github.com/softprobe/softprobe-go/softprobe"
 )
 
 func TestStrictPolicyBlocksUnmockedTraffic(t *testing.T) {
@@ -17,11 +17,13 @@ func TestStrictPolicyBlocksUnmockedTraffic(t *testing.T) {
 	upstreamURL := e2etestutil.MustEnv("UPSTREAM_URL", "http://127.0.0.1:8083")
 	caseFile := filepath.Join(e2etestutil.ModuleRoot(), "captured.case.json")
 
+	e2etestutil.SkipIfRuntimeUnreachable(t, runtimeURL)
+
 	e2etestutil.EnsureCapturedCase(t, runtimeURL, proxyURL, caseFile)
 	e2etestutil.ResetAppCounter(t, appURL)
 	e2etestutil.ResetUpstreamCounter(t, upstreamURL)
 
-	sp := softprobe.New(softprobe.Options{BaseURL: runtimeURL})
+	sp := softprobe.New(softprobe.Options{BaseURL: runtimeURL, APIToken: e2etestutil.APIKey()})
 	session, err := sp.StartSession("replay")
 	if err != nil {
 		t.Fatalf("StartSession: %v", err)

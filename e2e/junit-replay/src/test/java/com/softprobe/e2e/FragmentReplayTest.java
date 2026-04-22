@@ -2,6 +2,7 @@ package com.softprobe.e2e;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.softprobe.CapturedHit;
 import com.softprobe.CaseSpanPredicate;
@@ -30,13 +31,33 @@ class FragmentReplayTest {
       System.getenv().getOrDefault("SOFTPROBE_RUNTIME_URL", "http://127.0.0.1:8080");
   private static final String APP_URL =
       System.getenv().getOrDefault("APP_URL", "http://127.0.0.1:8081");
+  private static final String API_KEY =
+      System.getenv().getOrDefault("SOFTPROBE_API_KEY", "");
 
   private Softprobe softprobe;
   private SoftprobeSession session;
 
+  private static boolean isReachable(String url) {
+    try {
+      HttpClient c = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+      HttpRequest req = HttpRequest.newBuilder(URI.create(url)).GET().build();
+      HttpResponse<Void> resp = c.send(req, HttpResponse.BodyHandlers.discarding());
+      return resp.statusCode() == 200;
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
   @BeforeAll
   void setUp() {
-    softprobe = new Softprobe(RUNTIME_URL);
+    assumeTrue(isReachable(RUNTIME_URL + "/health"),
+        "softprobe-runtime unreachable at " + RUNTIME_URL + " — skipping");
+    assumeTrue(isReachable(APP_URL + "/health"),
+        "app unreachable at " + APP_URL + " — skipping");
+
+    softprobe = API_KEY.isBlank()
+        ? new Softprobe(RUNTIME_URL)
+        : Softprobe.withApiToken(RUNTIME_URL, API_KEY);
     session = softprobe.startSession("replay");
 
     Path casePath =

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"softprobe-runtime/internal/metrics"
 	"softprobe-runtime/internal/proxybackend"
 	"softprobe-runtime/internal/store"
 )
@@ -35,13 +36,22 @@ type sessionStatsResponse struct {
 	} `json:"stats"`
 }
 
-func handleCreateSession(st *store.Store) http.HandlerFunc {
+// handleSessions dispatches POST (create) and GET (list) for /v1/sessions.
+func handleSessions(st store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
+		switch r.Method {
+		case http.MethodPost:
+			handleCreateSession(st).ServeHTTP(w, r)
+		case http.MethodGet:
+			handleListSessions(st).ServeHTTP(w, r)
+		default:
 			writeMethodNotAllowedError(w)
-			return
 		}
+	}
+}
 
+func handleCreateSession(st store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		var req createSessionRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Mode == "" {
 			writeInvalidRequestError(w, "invalid create session request")
@@ -49,6 +59,7 @@ func handleCreateSession(st *store.Store) http.HandlerFunc {
 		}
 
 		session := st.Create(req.Mode)
+		metrics.Global.SessionsTotal.Inc(session.Mode)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(createSessionResponse{
@@ -58,7 +69,59 @@ func handleCreateSession(st *store.Store) http.HandlerFunc {
 	}
 }
 
-func handleSessionCommand(st *store.Store) http.HandlerFunc {
+func handleListSessions(st store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		type sessionSummary struct {
+			ID       string `json:"sessionId"`
+			Mode     string `json:"mode"`
+			Revision int    `json:"sessionRevision"`
+		}
+		sessions := st.List()
+		result := make([]sessionSummary, 0, len(sessions))
+		for _, s := range sessions {
+			result = append(result, sessionSummary{ID: s.ID, Mode: s.Mode, Revision: s.Revision})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"sessions": result})
+	}
+}
+
+// handleSessionCommandWithOverrides is like handleSessionCommand but replaces close/load-case
+// with hosted-backend handlers when provided.
+func handleSessionCommandWithOverrides(st store.Store, ov *SessionCommandOverrides) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/v1/sessions/")
+		switch {
+		case strings.HasSuffix(path, "/close"):
+			if r.Method != http.MethodPost {
+				writeMethodNotAllowedError(w)
+				return
+			}
+			id := strings.TrimSuffix(path, "/close")
+			if ov.Close != nil {
+				ov.Close(w, r, id)
+			} else {
+				handleCloseSession(st, id)(w, r)
+			}
+		case strings.HasSuffix(path, "/load-case"):
+			if r.Method != http.MethodPost {
+				writeMethodNotAllowedError(w)
+				return
+			}
+			id := strings.TrimSuffix(path, "/load-case")
+			if ov.LoadCase != nil {
+				ov.LoadCase(w, r, id)
+			} else {
+				handleLoadCase(st, id)(w, r)
+			}
+		default:
+			handleSessionCommand(st)(w, r)
+		}
+	}
+}
+
+func handleSessionCommand(st store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/v1/sessions/")
 		switch {
@@ -115,7 +178,7 @@ func handleSessionCommand(st *store.Store) http.HandlerFunc {
 // operator needs at a glance: mode, revision, policy, rules, case summary,
 // and live counters. No persistent state is stored to a disk — the store is
 // the source of truth.
-func handleSessionState(st *store.Store, sessionID string) http.HandlerFunc {
+func handleSessionState(st store.Store, sessionID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID = strings.TrimSuffix(sessionID, "/")
 		if sessionID == "" {
@@ -175,7 +238,7 @@ func summarizeLoadedCase(loadedCase []byte) map[string]any {
 	return summary
 }
 
-func handleSessionStats(st *store.Store, sessionID string) http.HandlerFunc {
+func handleSessionStats(st store.Store, sessionID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID = strings.TrimSuffix(sessionID, "/")
 		if sessionID == "" {
@@ -203,7 +266,7 @@ func handleSessionStats(st *store.Store, sessionID string) http.HandlerFunc {
 	}
 }
 
-func handleCloseSession(st *store.Store, sessionID string) http.HandlerFunc {
+func handleCloseSession(st store.Store, sessionID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID = strings.TrimSuffix(sessionID, "/")
 		if sessionID == "" {
@@ -246,7 +309,7 @@ func handleCloseSession(st *store.Store, sessionID string) http.HandlerFunc {
 	}
 }
 
-func handleLoadCase(st *store.Store, sessionID string) http.HandlerFunc {
+func handleLoadCase(st store.Store, sessionID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID = strings.TrimSuffix(sessionID, "/")
 		if sessionID == "" {
@@ -280,25 +343,25 @@ func handleLoadCase(st *store.Store, sessionID string) http.HandlerFunc {
 	}
 }
 
-func handlePolicy(st *store.Store, sessionID string) http.HandlerFunc {
+func handlePolicy(st store.Store, sessionID string) http.HandlerFunc {
 	return handleMutatingPayload(st, sessionID, func(id string, payload []byte) (store.Session, bool) {
 		return st.ApplyPolicy(id, payload)
 	})
 }
 
-func handleRules(st *store.Store, sessionID string) http.HandlerFunc {
+func handleRules(st store.Store, sessionID string) http.HandlerFunc {
 	return handleMutatingPayload(st, sessionID, func(id string, payload []byte) (store.Session, bool) {
 		return st.ApplyRules(id, payload)
 	})
 }
 
-func handleFixturesAuth(st *store.Store, sessionID string) http.HandlerFunc {
+func handleFixturesAuth(st store.Store, sessionID string) http.HandlerFunc {
 	return handleMutatingPayload(st, sessionID, func(id string, payload []byte) (store.Session, bool) {
 		return st.ApplyFixturesAuth(id, payload)
 	})
 }
 
-func handleMutatingPayload(st *store.Store, sessionID string, update func(string, []byte) (store.Session, bool)) http.HandlerFunc {
+func handleMutatingPayload(st store.Store, sessionID string, update func(string, []byte) (store.Session, bool)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID = strings.TrimSuffix(sessionID, "/")
 		if sessionID == "" {

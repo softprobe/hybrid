@@ -1,0 +1,38 @@
+# PD5.4a — publish @softprobe/softprobe-js to npm on v* tags.
+name: softprobe-js npm publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Align package version with release tag
+        working-directory: softprobe-js
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm version "$VERSION" --no-git-tag-version
+
+      - name: Install and build
+        working-directory: softprobe-js
+        run: npm ci && npm run build
+
+      - name: Publish
+        working-directory: softprobe-js
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

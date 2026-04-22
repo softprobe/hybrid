@@ -57,6 +57,13 @@ export interface RunSuiteOptions {
   }>;
   /** Override `$APP_URL` — available to hooks via `ctx.env.APP_URL`. */
   appUrl?: string;
+  /** Bearer token forwarded to the runtime. Falls back to `SOFTPROBE_API_TOKEN` env var. */
+  apiToken?: string;
+  /**
+   * When provided, each test calls this function first and skips if it resolves false.
+   * Use this to skip suites that require services (proxy, app) that may not be running.
+   */
+  skipIf?: () => Promise<boolean>;
   /** Substring filter applied to `caseId` / `path`; only matching cases run. */
   filter?: string;
   /** Mark every `it` as `.concurrent`. Jest decides actual parallelism. */
@@ -122,7 +129,7 @@ export interface SuiteCaseHandle {
 export function runSuite(suitePath: string, options: RunSuiteOptions = {}): void {
   const suite = loadSuite(suitePath);
   const suiteDir = path.dirname(path.resolve(suitePath));
-  const { filter, parallel, baseUrl, hooks = {}, onCase, fetchImpl } = options;
+  const { filter, parallel, baseUrl, apiToken, skipIf, hooks = {}, onCase, fetchImpl } = options;
 
   const cases = filter
     ? suite.cases.filter((c) => c.path.includes(filter) || (c.name ?? '').includes(filter))
@@ -144,9 +151,14 @@ export function runSuite(suitePath: string, options: RunSuiteOptions = {}): void
     for (const caseRef of cases) {
       const label = caseRef.name ?? path.basename(caseRef.path);
       itFn(label, async () => {
+        if (skipIf && await skipIf()) {
+          console.log(`[softprobe] skipping "${label}" — skipIf resolved true`);
+          return; // pass the test as a no-op when services are unavailable
+        }
         const softprobe = new Softprobe({
           baseUrl,
           ...(fetchImpl ? { fetchImpl } : {}),
+          ...(apiToken ? { apiToken } : {}),
         });
         const session = await softprobe.startSession({ mode: 'replay' });
         try {

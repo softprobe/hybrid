@@ -1,0 +1,41 @@
+# PD5.4c — publish softprobe-java to Maven Central on v* tags.
+# Signs artifacts and publishes to OSSRH; auto-promotes from staging to release.
+name: softprobe-java Maven Central publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          server-id: ossrh
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+      - name: Align version with release tag
+        working-directory: softprobe-java
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mvn versions:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false
+
+      - name: Publish to Maven Central
+        working-directory: softprobe-java
+        run: mvn --no-transfer-progress -P release deploy -DskipTests
+        env:
+          MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

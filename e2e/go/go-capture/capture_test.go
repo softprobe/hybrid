@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"e2e/go/e2etestutil"
-	"softprobe-go/softprobe"
+	"github.com/softprobe/softprobe-go/softprobe"
 )
 
 func TestCaptureFlowProducesValidCaseFile(t *testing.T) {
@@ -22,7 +22,7 @@ func TestCaptureFlowProducesValidCaseFile(t *testing.T) {
 
 	_ = os.Remove(caseFile)
 
-	sp := softprobe.New(softprobe.Options{BaseURL: runtimeURL})
+	sp := softprobe.New(softprobe.Options{BaseURL: runtimeURL, APIToken: e2etestutil.APIKey()})
 	session, err := sp.StartSession("capture")
 	if err != nil {
 		t.Fatalf("StartSession: %v", err)
@@ -57,7 +57,7 @@ func TestCaptureFlowProducesValidCaseFile(t *testing.T) {
 	if err := session.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	e2etestutil.WaitForFile(t, caseFile)
+	e2etestutil.MaterializeCapturedCase(t, runtimeURL, sessionID, caseFile)
 	e2etestutil.ValidateCaseFile(t, caseFile)
 	e2etestutil.ValidateCaptureCaseTraceSemantics(t, caseFile)
 

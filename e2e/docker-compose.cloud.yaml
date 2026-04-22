@@ -1,0 +1,8 @@
+services:
+  softprobe-proxy:
+    volumes:
+      - ./envoy.cloud.yaml:/etc/envoy/envoy.yaml
+  softprobe-runtime:
+    profiles: ["local-runtime-only"]
+  test-runner:
+    profiles: ["local-runtime-only"]

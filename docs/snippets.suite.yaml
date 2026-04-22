@@ -1,0 +1,72 @@
+# docs/snippets.suite.yaml
+#
+# Canonical CLI flows extracted from the docs-site guides.
+#
+# Purpose: CI runs `softprobe validate suite docs/snippets.suite.yaml` on every
+# push to ensure all referenced case files exist and the suite schema is valid.
+# If a snippet references a case or path that no longer exists, CI fails,
+# surfacing guide rot before it reaches users.
+#
+# To run the full suite against a live compose stack:
+#   softprobe suite run docs/snippets.suite.yaml \
+#     --runtime-url http://127.0.0.1:8080 \
+#     --report-dir out/snippets
+#
+# See docs-site/guides/run-a-suite-at-scale.md for CI integration patterns.
+
+name: docs-snippets
+version: 1
+
+# ── Canonical fragment replay ─────────────────────────────────────────────────
+# Extracted from: docs-site/guides/replay-in-jest.md § "Load a case and mock"
+#                 docs-site/guides/mock-external-dependency.md § "Outbound mock"
+#
+# This is the simplest complete flow: one capture file, one outbound mock,
+# one GET assertion. Guides use it as their first copy-paste example.
+cases:
+  - path: ../spec/examples/cases/fragment-happy-path.case.json
+    name: fragment-replay-canonical
+
+  # Demonstrates the 503 override pattern from the troubleshooting guide and
+  # the ship-rules-with-a-case.md guide.
+  - path: ../spec/examples/cases/fragment-happy-path.case.json
+    name: fragment-dependency-down
+    overrides:
+      mocks:
+        - name: fragment
+          match:
+            direction: outbound
+            method: GET
+            path: /fragment
+          source: inline
+          response:
+            status: 503
+            headers:
+              content-type: application/json
+            body: '{"dep":"unavailable"}'
+      assertions:
+        status: 200
+
+request:
+  url: ${INGRESS_URL:-http://127.0.0.1:8082}
+  method: GET
+  path: /hello
+
+mocks:
+  - name: fragment
+    match:
+      direction: outbound
+      method: GET
+      path: /fragment
+    source: inline
+    response:
+      status: 200
+      headers:
+        content-type: application/json
+      body: '{"dep":"ok"}'
+
+assertions:
+  status: 200
+  headers:
+    include:
+      content-type: ^application/json

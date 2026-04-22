@@ -1,0 +1,26 @@
+# PD5.4d — verify softprobe-go module on v* tags.
+# Go modules are published by pushing a tag that matches the module path.
+# This workflow builds and tests the module to confirm the tagged commit is clean.
+name: softprobe-go module verify
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build and test
+        working-directory: softprobe-go
+        run: go test ./...

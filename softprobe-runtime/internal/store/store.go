@@ -7,7 +7,24 @@ import (
 	"sync"
 )
 
-// Session is the in-memory control-runtime session record.
+// Store is the session persistence interface. MemoryStore is the OSS
+// in-process implementation; RedisStore is the hosted implementation.
+type Store interface {
+	Create(mode string) Session
+	Get(id string) (Session, bool)
+	List() []Session
+	Close(id string) bool
+	LoadCase(id string, loadedCase []byte) (Session, bool)
+	ApplyPolicy(id string, policy []byte) (Session, bool)
+	ApplyRules(id string, rules []byte) (Session, bool)
+	ApplyFixturesAuth(id string, fixtures []byte) (Session, bool)
+	BufferExtract(id string, payload []byte) bool
+	RecordInjectedSpans(id string, count int) (Session, bool)
+	RecordExtractedSpans(id string, count int) (Session, bool)
+	RecordStrictMiss(id string, count int) (Session, bool)
+}
+
+// Session is the control-runtime session record.
 type Session struct {
 	ID           string
 	Mode         string
@@ -27,45 +44,49 @@ type SessionStats struct {
 	StrictMisses   int
 }
 
-// Store keeps control-runtime sessions in memory.
-type Store struct {
+// MemoryStore keeps sessions in memory. It satisfies the Store interface.
+type MemoryStore struct {
 	mu       sync.Mutex
 	sessions map[string]Session
 }
 
-// NewStore creates an empty in-memory session store.
-func NewStore() *Store {
-	return &Store{sessions: make(map[string]Session)}
+// NewMemoryStore creates an empty in-memory session store.
+func NewMemoryStore() *MemoryStore {
+	return &MemoryStore{sessions: make(map[string]Session)}
 }
 
-// Create stores a new session and returns it.
-func (s *Store) Create(mode string) Session {
+// NewStore is an alias for NewMemoryStore kept for backwards compatibility
+// within the package and existing tests.
+func NewStore() *MemoryStore { return NewMemoryStore() }
+
+func (s *MemoryStore) Create(mode string) Session {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	session := Session{
-		ID:       newSessionID(),
-		Mode:     mode,
-		Revision: 0,
-	}
+	session := Session{ID: newSessionID(), Mode: mode, Revision: 0}
 	s.sessions[session.ID] = session
 	return session
 }
 
-// Get returns a session by ID.
-func (s *Store) Get(id string) (Session, bool) {
+func (s *MemoryStore) Get(id string) (Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	session, ok := s.sessions[id]
 	return session, ok
 }
 
-// Close removes a session from the store.
-func (s *Store) Close(id string) bool {
+func (s *MemoryStore) List() []Session {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	result := make([]Session, 0, len(s.sessions))
+	for _, sess := range s.sessions {
+		result = append(result, sess)
+	}
+	return result
+}
 
+func (s *MemoryStore) Close(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, ok := s.sessions[id]; !ok {
 		return false
 	}
@@ -73,97 +94,77 @@ func (s *Store) Close(id string) bool {
 	return true
 }
 
-// LoadCase replaces the stored case payload and bumps the revision.
-func (s *Store) LoadCase(id string, loadedCase []byte) (Session, bool) {
-	return s.mutate(id, func(session *Session) {
-		session.LoadedCase = append([]byte(nil), loadedCase...)
+func (s *MemoryStore) LoadCase(id string, loadedCase []byte) (Session, bool) {
+	return s.mutate(id, func(sess *Session) {
+		sess.LoadedCase = append([]byte(nil), loadedCase...)
 	})
 }
 
-// ApplyPolicy replaces the stored policy payload and bumps the revision.
-func (s *Store) ApplyPolicy(id string, policy []byte) (Session, bool) {
-	return s.mutate(id, func(session *Session) {
-		session.Policy = append([]byte(nil), policy...)
+func (s *MemoryStore) ApplyPolicy(id string, policy []byte) (Session, bool) {
+	return s.mutate(id, func(sess *Session) {
+		sess.Policy = append([]byte(nil), policy...)
 	})
 }
 
-// ApplyRules replaces the stored rules payload and bumps the revision.
-func (s *Store) ApplyRules(id string, rules []byte) (Session, bool) {
-	return s.mutate(id, func(session *Session) {
-		session.Rules = append([]byte(nil), rules...)
+func (s *MemoryStore) ApplyRules(id string, rules []byte) (Session, bool) {
+	return s.mutate(id, func(sess *Session) {
+		sess.Rules = append([]byte(nil), rules...)
 	})
 }
 
-// ApplyFixturesAuth replaces the stored auth fixtures payload and bumps the revision.
-func (s *Store) ApplyFixturesAuth(id string, fixtures []byte) (Session, bool) {
-	return s.mutate(id, func(session *Session) {
-		session.FixturesAuth = append([]byte(nil), fixtures...)
+func (s *MemoryStore) ApplyFixturesAuth(id string, fixtures []byte) (Session, bool) {
+	return s.mutate(id, func(sess *Session) {
+		sess.FixturesAuth = append([]byte(nil), fixtures...)
 	})
 }
 
-// BufferExtract appends a captured extract payload without bumping the revision.
-func (s *Store) BufferExtract(id string, payload []byte) bool {
+func (s *MemoryStore) BufferExtract(id string, payload []byte) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	session, ok := s.sessions[id]
+	sess, ok := s.sessions[id]
 	if !ok {
 		return false
 	}
-
-	session.Extracts = append(session.Extracts, append([]byte(nil), payload...))
-	s.sessions[id] = session
+	sess.Extracts = append(sess.Extracts, append([]byte(nil), payload...))
+	s.sessions[id] = sess
 	return true
 }
 
-// RecordInjectedSpans increments the inject-hit counter without bumping revision.
-func (s *Store) RecordInjectedSpans(id string, count int) (Session, bool) {
-	return s.recordStats(id, func(stats *SessionStats) {
-		stats.InjectedSpans += count
-	})
+func (s *MemoryStore) RecordInjectedSpans(id string, count int) (Session, bool) {
+	return s.recordStats(id, func(stats *SessionStats) { stats.InjectedSpans += count })
 }
 
-// RecordExtractedSpans increments the accepted-extract counter without bumping revision.
-func (s *Store) RecordExtractedSpans(id string, count int) (Session, bool) {
-	return s.recordStats(id, func(stats *SessionStats) {
-		stats.ExtractedSpans += count
-	})
+func (s *MemoryStore) RecordExtractedSpans(id string, count int) (Session, bool) {
+	return s.recordStats(id, func(stats *SessionStats) { stats.ExtractedSpans += count })
 }
 
-// RecordStrictMiss increments the strict-policy miss counter without bumping revision.
-func (s *Store) RecordStrictMiss(id string, count int) (Session, bool) {
-	return s.recordStats(id, func(stats *SessionStats) {
-		stats.StrictMisses += count
-	})
+func (s *MemoryStore) RecordStrictMiss(id string, count int) (Session, bool) {
+	return s.recordStats(id, func(stats *SessionStats) { stats.StrictMisses += count })
 }
 
-func (s *Store) mutate(id string, fn func(*Session)) (Session, bool) {
+func (s *MemoryStore) mutate(id string, fn func(*Session)) (Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	session, ok := s.sessions[id]
+	sess, ok := s.sessions[id]
 	if !ok {
 		return Session{}, false
 	}
-
-	session.Revision++
-	fn(&session)
-	s.sessions[id] = session
-	return session, true
+	sess.Revision++
+	fn(&sess)
+	s.sessions[id] = sess
+	return sess, true
 }
 
-func (s *Store) recordStats(id string, fn func(*SessionStats)) (Session, bool) {
+func (s *MemoryStore) recordStats(id string, fn func(*SessionStats)) (Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	session, ok := s.sessions[id]
+	sess, ok := s.sessions[id]
 	if !ok {
 		return Session{}, false
 	}
-
-	fn(&session.Stats)
-	s.sessions[id] = session
-	return session, true
+	fn(&sess.Stats)
+	s.sessions[id] = sess
+	return sess, true
 }
 
 func newSessionID() string {
