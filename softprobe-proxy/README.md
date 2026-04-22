@@ -97,6 +97,24 @@ Hot reload without tearing down the cluster:
 make dev-reload
 ```
 
+## WASM OCI image (GHCR)
+
+The [`Dockerfile.ghcr-wasm`](./Dockerfile.ghcr-wasm) packages `target/wasm32-unknown-unknown/release/sp_istio_agent.wasm` into a **scratch** image with the module at **`/plugin.wasm`**, suitable for Istio `WasmPlugin` `oci://` URLs.
+
+[`.github/workflows/softprobe-proxy-wasm-image.yml`](../.github/workflows/softprobe-proxy-wasm-image.yml) builds on PRs (smoke: **`crane export`** streams the rootfs tar and `tar -xO plugin.wasm` + `file` reports WebAssembly) and pushes to **`ghcr.io/<owner>/softprobe-proxy`** on `main` / `v*` tags (`latest`, `sha-*`, git tag). Post-push CI runs **`oras copy`** from GHCR to a local OCI layout and asserts the `\0asm` magic is present — the same check you can run after `oras copy` from the registry.
+
+**Istio `WasmPlugin` example** (replace `ORG`):
+
+```yaml
+spec:
+  url: oci://ghcr.io/ORG/softprobe-proxy:latest
+  imagePullPolicy: IfNotPresent
+  pluginConfig:
+    sp_backend_url: http://softprobe-runtime.softprobe-system:8080
+```
+
+Private registries: configure `imagePullSecrets` on the `WasmPlugin` namespace / service account as for any other GHCR pull.
+
 ## Session propagation
 
 For service-to-service HTTP, the proxy writes session correlation into

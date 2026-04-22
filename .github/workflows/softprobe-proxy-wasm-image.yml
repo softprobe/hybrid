@@ -1,0 +1,148 @@
+# PD5.3b — build sp_istio_agent.wasm, package as scratch OCI image, push to GHCR.
+# Istio WasmPlugin: spec.url: oci://ghcr.io/<owner>/softprobe-proxy:<tag>
+name: softprobe-proxy wasm (GHCR)
+
+on:
+  pull_request:
+    paths:
+      - "softprobe-proxy/**"
+      - ".github/workflows/softprobe-proxy-wasm-image.yml"
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/softprobe-proxy
+
+jobs:
+  wasm-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            softprobe-proxy/target
+          key: ${{ runner.os }}-wasm-${{ hashFiles('softprobe-proxy/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-wasm-
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler file
+
+      - name: Build WASM
+        working-directory: softprobe-proxy
+        run: |
+          make check-deps-build
+          make build
+
+      - name: WASM SHA256 (OCI label)
+        id: wasmhash
+        working-directory: softprobe-proxy
+        run: |
+          echo "sha=$(cat target/wasm32-unknown-unknown/release/sp_istio_agent.wasm.sha256)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install crane
+        uses: imjasonh/setup-crane@v0.4
+
+      # ---- PR: build + load + smoke (no registry write) ----
+      - name: Build image (PR)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./softprobe-proxy
+          file: ./softprobe-proxy/Dockerfile.ghcr-wasm
+          push: false
+          load: true
+          tags: softprobe-proxy-wasm:ci
+          build-args: |
+            WASM_SHA256=${{ steps.wasmhash.outputs.sha }}
+
+      - name: Smoke PR image (crane export — wasm at /plugin.wasm)
+        if: github.event_name == 'pull_request'
+        run: |
+          crane export softprobe-proxy-wasm:ci | tar -xO plugin.wasm > /tmp/plugin.wasm
+          test -s /tmp/plugin.wasm
+          file /tmp/plugin.wasm | grep -i wasm
+
+      # ---- main / tag: GHCR ----
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        if: github.event_name != 'pull_request'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+
+      - name: Build and push
+        if: github.event_name != 'pull_request'
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./softprobe-proxy
+          file: ./softprobe-proxy/Dockerfile.ghcr-wasm
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            WASM_SHA256=${{ steps.wasmhash.outputs.sha }}
+
+      - name: Install ORAS (registry OCI smoke)
+        if: github.event_name != 'pull_request'
+        uses: oras-project/setup-oras@v1
+
+      - name: Smoke GHCR (crane export + ORAS copy to OCI layout)
+        if: github.event_name != 'pull_request'
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            T=latest
+          else
+            T="${{ github.ref_name }}"
+          fi
+          echo "Smoking tag: $T"
+          crane export ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:"$T" | tar -xO plugin.wasm > /tmp/plugin-ghcr.wasm
+          file /tmp/plugin-ghcr.wasm | grep -i wasm
+          rm -rf /tmp/oci-ghcr
+          oras copy ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:"$T" oci:/tmp/oci-ghcr
+          printf '\0asm' >/tmp/wasm-magic
+          found=""
+          while IFS= read -r -d '' f; do
+            if head -c4 "$f" | cmp -s - /tmp/wasm-magic; then
+              found=$f
+              break
+            fi
+          done < <(find /tmp/oci-ghcr -type f -size +50c -print0)
+          test -n "$found"
+          echo "ORAS oci layout contains wasm at: $found"
+          echo "WasmPlugin url: oci://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$T"

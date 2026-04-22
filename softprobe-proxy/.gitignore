@@ -29,9 +29,6 @@ Thumbs.db
 .env
 .env.local
 
-# Docker
-.dockerignore
-
 # Generated protobuf files
 /src/generated/
 deploy/otel-auto-instrumentation-for-dev.yaml

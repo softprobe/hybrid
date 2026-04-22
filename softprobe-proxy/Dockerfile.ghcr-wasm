@@ -1,0 +1,11 @@
+# OCI image used as Istio WasmPlugin `oci://` URL (PD5.3b).
+# Build context: `softprobe-proxy/` with `make build` already run so
+# `target/wasm32-unknown-unknown/release/sp_istio_agent.wasm` exists.
+# The WASM module is installed at `/plugin.wasm` (Istio's default path
+# when pulling WASM from an OCI image).
+FROM scratch
+ARG WASM_SHA256
+LABEL org.opencontainers.image.title="sp_istio_agent (Softprobe proxy WASM)"
+LABEL org.opencontainers.image.description="Envoy WASM filter for Softprobe hybrid capture/replay"
+LABEL wasm.sha256="${WASM_SHA256}"
+COPY target/wasm32-unknown-unknown/release/sp_istio_agent.wasm /plugin.wasm

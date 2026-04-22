@@ -1,0 +1,4 @@
+# GHCR WASM image build context — keep release wasm, drop bulky trees.
+.git
+target/debug
+**/incremental

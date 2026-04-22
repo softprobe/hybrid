@@ -107,6 +107,19 @@ spec:
     sp_backend_url: http://softprobe-runtime.softprobe-system:8080
 ```
 
+::: tip GHCR WASM image (PD5.3b)
+CI publishes a **scratch** OCI image at `ghcr.io/<github-org>/softprobe-proxy` with the module at **`/plugin.wasm`** (same layout Istio expects for `oci://` URLs). Tags: `latest` on `main`, `sha-<short>` on every push, and the git tag name on `v*` releases. Replace `softprobe` in the URL with your `repository_owner` on forks.
+
+Verify locally with ORAS (install from [oras.land](https://oras.land)):
+
+```bash
+oras copy ghcr.io/softprobe/softprobe-proxy:latest oci:./softprobe-wasm-oci
+find softprobe-wasm-oci -type f -size +50c -print0 | xargs -0 file | grep -i wasm
+```
+
+The image is **scratch-only** (no shell). Extract with **`crane export`** (see [`softprobe-proxy/README.md`](https://github.com/softprobe/hybrid/blob/main/softprobe-proxy/README.md#wasm-oci-image-ghcr)) or use ORAS as above — `docker create` / `docker cp` will not work without an entrypoint.
+:::
+
 Opt a workload in:
 
 ```yaml
