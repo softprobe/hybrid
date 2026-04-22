@@ -80,8 +80,8 @@ One-time cleanup so every downstream feature has somewhere to publish.
 - [x] **PD5.2a — CLI version string.** Replaced `const version` in `cmd/softprobe/main.go` with `internal/version` (`Version` var + `SemverTag` / `CLIDetail`). `--version` and `doctor` human first line print `softprobe v… (spec http-control-api@v1)`; `doctor --json` uses `cliVersion` with the same detail string; drift check uses `cli` = `SemverTag()`. `internal/version/version_test.go` pins the ldflags example.
   **Verify:** `go build -ldflags "-X softprobe-runtime/internal/version.Version=v0.5.0" -o /tmp/sp ./cmd/softprobe && /tmp/sp --version` → `softprobe v0.5.0 (spec http-control-api@v1)`.
 
-- [ ] **PD5.3a — Runtime container image on ghcr.** CI workflow in `.github/workflows/` builds + pushes `ghcr.io/softprobe/softprobe-runtime:<sha>` + `:v<tag>` from `softprobe-runtime/Dockerfile`. Write the workflow with a smoke-step that pulls the image and runs `docker run ghcr.io/softprobe/softprobe-runtime:<sha> --version`.
-  **Verify:** workflow green on a PR; image pullable post-tag.
+- [x] **PD5.3a — Runtime container image on ghcr.** Added `softprobe-runtime/Dockerfile` (multi-stage: server + CLI, `VERSION` build-arg → `-ldflags -X …/internal/version.Version`), `docker-entrypoint.sh` (`--version` → CLI; else server), `.dockerignore`. Workflow [`.github/workflows/softprobe-runtime-image.yml`](.github/workflows/softprobe-runtime-image.yml): on **PR** — build with `load: true`, smoke `docker run …:ci --version`; on **push to `main` / `v*` tags** — login to GHCR, `docker/metadata-action` tags (`sha-*`, `latest` on main, git tag on release), push, then smoke `latest` or `${{ github.ref_name }}`. Documented in [`softprobe-runtime/README.md`](softprobe-runtime/README.md#container-image-ghcr).
+  **Verify:** PR touching `softprobe-runtime/**` runs the workflow green; after merge to `main`, `docker run --rm ghcr.io/<owner>/softprobe-runtime:latest --version` prints `softprobe v0.0.0-dev (spec http-control-api@v1)` until a release tag passes `VERSION=${{ github.ref_name }}`.
 
 - [ ] **PD5.3b — Proxy WASM OCI bundle on ghcr.** Same pattern for `ghcr.io/softprobe/softprobe-proxy:<tag>` — OCI image containing `sp_istio_agent.wasm`. Validate via Istio `WasmPlugin` URL in a smoke job.
   **Verify:** `oras pull` surfaces the wasm blob; documented `WasmPlugin.url` resolves.
@@ -361,6 +361,24 @@ Use our own capture-and-replay engine to pin the CLI + SDK control-plane contrac
 
 ---
 
+## Phase PD8 — Hybrid instrumentation + proxy OOB docs
+
+**Depends on:** none (docs-only).
+
+- [x] **PD8.1a — Decision notes.** Add [`docs/proxy-integration-posture.md`](docs/proxy-integration-posture.md) (proxy OOB vs customer OTel/APM, market caveats, deferred `trace_span_tag`) and [`docs/language-instrumentation.md`](docs/language-instrumentation.md) (dual planes, Node legacy vs runtime+case roadmap).
+  **Verify:** both files exist; cross-links to `spec/protocol/*.md` resolve.
+
+- [x] **PD8.1b — `docs/design.md` instrumentation planes.** §2.5 links both notes and states proxy-default + optional language + OOB capture to `sp_backend_url`.
+  **Verify:** `rg "2\\.5 Instrumentation planes" docs/design.md` matches; Related contracts lists both new docs.
+
+- [x] **PD8.1c — `softprobe-js` design entrypoints.** [`softprobe-js/design.md`](softprobe-js/design.md) defers to monorepo `docs/design.md`; [`softprobe-js/design-proxy-first.md`](softprobe-js/design-proxy-first.md) states hybrid + legacy NDJSON baseline.
+  **Verify:** opening lines point at `../docs/design.md` and the two new notes.
+
+- [x] **PD8.1d — Proxy marketing docs trim.** [`softprobe-proxy/docs/use-cases.md`](softprobe-proxy/docs/use-cases.md) and [`softprobe-proxy/docs/deployment.md`](softprobe-proxy/docs/deployment.md) state OOB to `sp_backend_url`; remove implied “full bodies land in your existing APM.”
+  **Verify:** `rg -n "Unified tracing|Integration with compliance" softprobe-proxy/docs/` returns no matches.
+
+---
+
 ## Parking lot (non-sequential)
 
 - [ ] **OpenAPI bundle** for the control API (optional; `spec/schemas/session-*.schema.json` may suffice for v1).
@@ -374,3 +392,7 @@ Use our own capture-and-replay engine to pin the CLI + SDK control-plane contrac
 - [ ] **Cloud-managed rules** — version-controlled, shareable rule bundles in the hosted service.
 - [ ] **OpenTelemetry Collector exporter** — ship captured traces into existing observability pipelines without the `export otlp` shim.
 - [ ] **gRPC / WebSockets / long-running SSE** in the WASM filter — v1 ships HTTP/1.1 + HTTP/2 request-response only.
+
+- [ ] **Proxy WASM: optional `trace_span_tag` enrichment** — set tiny correlation tags on the active Envoy span (`softprobe.session.id`, trace id, capture URL) via proxy-wasm `set_property(["trace_span_tag", …], …)` for click-through from customer APM to Softprobe; bodies stay OOB. Decision: [`docs/proxy-integration-posture.md`](docs/proxy-integration-posture.md) §5.
+
+- [ ] **Node language-plane port** — move `softprobe-js` capture/replay off NDJSON cassettes and `SOFTPROBE_CONFIG_PATH` / YAML as the **product** default; align with `softprobe-runtime` sessions and `*.case.json` per [`docs/language-instrumentation.md`](docs/language-instrumentation.md) §5–6. Keep legacy code paths until migrated.

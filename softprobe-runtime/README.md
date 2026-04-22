@@ -78,6 +78,28 @@ and the design in [`docs/design.md`](../docs/design.md).
 An informative Kubernetes example lives in
 [`deploy/kubernetes.yaml`](./deploy/kubernetes.yaml).
 
+## Container image (GHCR)
+
+[`.github/workflows/softprobe-runtime-image.yml`](../.github/workflows/softprobe-runtime-image.yml)
+builds this directory into a single image containing **`softprobe-runtime`**
+(the HTTP server) and **`softprobe`** (the CLI). The default process is the
+server on `SOFTPROBE_LISTEN_ADDR` (`0.0.0.0:8080`). For CI smoke checks,
+`docker run … --version` dispatches to the CLI.
+
+Published refs (replace `ORG` with the GitHub org or user that owns the
+package, e.g. `softprobe`):
+
+| Ref | When |
+|-----|------|
+| `ghcr.io/ORG/softprobe-runtime:latest` | tip of `main` |
+| `ghcr.io/ORG/softprobe-runtime:sha-<short>` | every pushed commit on `main` / tags |
+| `ghcr.io/ORG/softprobe-runtime:<git-tag>` | annotated semver tags matching `v*` |
+
+```bash
+docker pull ghcr.io/ORG/softprobe-runtime:latest
+docker run --rm ghcr.io/ORG/softprobe-runtime:latest --version
+```
+
 ## License
 
 Softprobe Source License 1.0 (SPDX `LicenseRef-Softprobe-Source-License-1.0`) — a source-available license derived from the [Functional Source License 1.1](https://fsl.software) with a broader Competing Use clause. You may use, modify, and redistribute this code for your own internal, research, and consulting purposes at any scale. You may **not** use it in any product or service — hosted, on-premises, bundled, or rebranded — that competes with Softprobe's commercial offerings (replay testing, traffic capture, service virtualization, etc.). Each release automatically converts to Apache-2.0 two years after publication, at which point the Competing Use restriction lifts. See [`LICENSE`](./LICENSE), the repo's [`LICENSING.md`](../LICENSING.md), and the [FAQ licensing section](https://softprobe.dev/faq#licensing).

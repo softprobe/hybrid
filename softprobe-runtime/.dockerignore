@@ -1,0 +1,5 @@
+# Keep build context small; tests are not compiled into release binaries.
+**/*_test.go
+**/testdata/
+.git
+.gitignore
