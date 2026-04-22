@@ -91,7 +91,7 @@ The `npm` package ships a Node wrapper that delegates to the canonical Go binary
 
 ```bash
 softprobe --version
-# softprobe 0.5.0
+# softprobe v0.5.0 (spec http-control-api@v1)
 
 softprobe doctor
 # ✓ runtime reachable at http://127.0.0.1:8080

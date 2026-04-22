@@ -11,7 +11,7 @@ The `softprobe` CLI is the primary interface for humans, CI, and AI agents. It s
 | `--verbose` / `-v` | off | Extra diagnostic logging to stderr |
 | `--quiet` / `-q` | off | Suppress non-error output |
 | `--help` / `-h` | — | Print command help |
-| `--version` | — | Print CLI version |
+| `--version` | — | Print `softprobe SEMVER (spec http-control-api@v…)`; release builds set `SEMVER` with `-ldflags "-X softprobe-runtime/internal/version.Version=v0.5.0"` |
 
 ## Exit codes
 
@@ -40,14 +40,19 @@ softprobe doctor --json         # machine-readable
 softprobe doctor --verbose      # include HTTP request/response details
 ```
 
-Example output:
+Example output (shape; paths and markers vary by machine):
 
 ```
-✓ runtime reachable at http://127.0.0.1:8080 (v0.5.0)
-✓ CLI v0.5.0 compatible with runtime v0.5.0
-✓ schema v1 supported
-✓ proxy WASM binary present at /etc/envoy/sp_istio_agent.wasm
-⚠ x-softprobe-session-id: header not echoed by proxy (may indicate misconfig)
+softprobe v0.5.0 (spec http-control-api@v1)
+runtime healthy: ok
+runtimeVersion: 0.0.0-dev
+specVersion: http-control-api@v1
+schemaVersion: 1
+✓ runtime-reachable
+✓ version-drift
+✓ schema-version
+⚠ wasm-binary: WASM binary not found at /etc/envoy/sp_istio_agent.wasm
+⚠ header-echo: x-softprobe-session-id: header not echoed by proxy (may indicate misconfig)
 ```
 
 Exit code: `0` on all green, `10` on any failure. Warnings don't affect exit code.
@@ -70,8 +75,8 @@ Exit code: `0` on all green, `10` on any failure. Warnings don't affect exit cod
 |---|---|---|
 | `cliVersion` | Embedded in the binary (`softprobe --version`) | Changes with every CLI release |
 | `runtimeVersion` | Runtime's `/health` payload | Changes with every runtime release |
-| `specVersion` | Runtime's `/v1/version` payload | Changes only on breaking protocol changes |
-| `schemaVersion` | Runtime's `/v1/version` payload | Changes only on breaking schema changes |
+| `specVersion` | Runtime's `/v1/meta` payload | Changes only on breaking protocol changes |
+| `schemaVersion` | Runtime's `/v1/meta` payload | Changes only on breaking schema changes |
 
 Compatibility rule: a CLI with `specVersion=1` will refuse to drive a runtime with `specVersion=2` (and vice versa) because the protocol is not wire-compatible across major spec versions. Same for `schemaVersion`. The CLI prints the mismatching pair and exits `10`.
 
@@ -83,9 +88,9 @@ This gives agents and CI a cheap, deterministic way to detect "someone upgraded 
 {
   "status": "ok",
   "exitCode": 0,
-  "cliVersion": "0.5.0",
-  "runtimeVersion": "0.5.0",
-  "specVersion": "1",
+  "cliVersion": "v0.5.0 (spec http-control-api@v1)",
+  "runtimeVersion": "0.0.0-dev",
+  "specVersion": "http-control-api@v1",
   "schemaVersion": "1",
   "checks": [
     {
@@ -96,12 +101,12 @@ This gives agents and CI a cheap, deterministic way to detect "someone upgraded 
     {
       "name": "version-drift",
       "status": "ok",
-      "details": { "cli": "0.5.0", "runtime": "0.5.0" }
+      "details": { "cli": "v0.5.0", "runtime": "0.0.0-dev" }
     },
     {
       "name": "schema-version",
       "status": "ok",
-      "details": { "expected": ["1"], "got": "1" }
+      "details": { "expected": "1", "got": "1" }
     },
     {
       "name": "wasm-binary",
@@ -522,7 +527,7 @@ The CLI follows [semver](https://semver.org). Breaking changes to commands or fl
 
 ```bash
 softprobe --version
-# softprobe 0.5.0 (spec v1, built 2026-04-15)
+# softprobe v0.5.0 (spec http-control-api@v1)
 ```
 
 ## See also

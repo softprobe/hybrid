@@ -12,6 +12,7 @@ import (
 
 	"softprobe-runtime/internal/controlapi"
 	"softprobe-runtime/internal/store"
+	"softprobe-runtime/internal/version"
 )
 
 func TestRunVersionPrintsBinaryVersion(t *testing.T) {
@@ -19,8 +20,9 @@ func TestRunVersionPrintsBinaryVersion(t *testing.T) {
 	if code := run([]string{"--version"}, &out, nil); code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	if got := out.String(); !strings.Contains(got, "softprobe ") {
-		t.Fatalf("output = %q, want version string", got)
+	want := "softprobe " + version.CLIDetail(controlapi.SpecVersion) + "\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
 	}
 }
 

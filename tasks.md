@@ -77,8 +77,8 @@ One-time cleanup so every downstream feature has somewhere to publish.
 - [x] **PD5.1a — LICENSE coverage across the repo.** Superseded by the dual-license change in PD6.0e: root `LICENSE` (Softprobe Source License 1.0), `softprobe-runtime/LICENSE` and `softprobe-proxy/LICENSE` (same), `softprobe-js/LICENSE` (migrated from MIT → Apache-2.0), `softprobe-python/`, `softprobe-java/`, `softprobe-go/`, and `spec/` (all Apache-2.0). `LICENSING.md` maps every path. `softprobe-js/package.json` and `softprobe-java/pom.xml` now declare Apache-2.0.
   **Verify:** `find . -maxdepth 3 -iname LICENSE -not -path '*/node_modules/*' -not -path '*/target/*'` lists root + `softprobe-{runtime,proxy,js,python,java,go}/LICENSE` + `spec/LICENSE` (8 files total).
 
-- [ ] **PD5.2a — CLI version string.** Replace `const version = "0.0.0-dev"` in `cmd/softprobe/main.go` with a build-time `-ldflags -X` injection from a single source (`internal/version/version.go`). `main_test.go` asserts the injected value.
-  **Verify:** `go build -ldflags "-X .../version.Version=v0.5.0"` produces `softprobe --version` → `softprobe v0.5.0 (spec http-control-api@v1)`.
+- [x] **PD5.2a — CLI version string.** Replaced `const version` in `cmd/softprobe/main.go` with `internal/version` (`Version` var + `SemverTag` / `CLIDetail`). `--version` and `doctor` human first line print `softprobe v… (spec http-control-api@v1)`; `doctor --json` uses `cliVersion` with the same detail string; drift check uses `cli` = `SemverTag()`. `internal/version/version_test.go` pins the ldflags example.
+  **Verify:** `go build -ldflags "-X softprobe-runtime/internal/version.Version=v0.5.0" -o /tmp/sp ./cmd/softprobe && /tmp/sp --version` → `softprobe v0.5.0 (spec http-control-api@v1)`.
 
 - [ ] **PD5.3a — Runtime container image on ghcr.** CI workflow in `.github/workflows/` builds + pushes `ghcr.io/softprobe/softprobe-runtime:<sha>` + `:v<tag>` from `softprobe-runtime/Dockerfile`. Write the workflow with a smoke-step that pulls the image and runs `docker run ghcr.io/softprobe/softprobe-runtime:<sha> --version`.
   **Verify:** workflow green on a PR; image pullable post-tag.

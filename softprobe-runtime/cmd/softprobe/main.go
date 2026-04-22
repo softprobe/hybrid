@@ -13,9 +13,8 @@ import (
 	"time"
 
 	"softprobe-runtime/internal/controlapi"
+	"softprobe-runtime/internal/version"
 )
-
-const version = "0.0.0-dev"
 
 // Documented exit codes from docs-site/reference/cli.md#exit-codes. Changing
 // these values is a breaking change to the CLI contract; CI pipelines and
@@ -70,7 +69,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	switch args[0] {
 	case "--version", "version":
-		_, _ = fmt.Fprintf(rawStdout, "softprobe %s\n", version)
+		_, _ = fmt.Fprintf(rawStdout, "softprobe %s\n", version.CLIDetail(controlapi.SpecVersion))
 		return exitOK
 	case "--help", "-h", "help":
 		printUsage(rawStdout)
@@ -379,7 +378,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	echoCheck := runHeaderEchoCheck()
 	checks := []doctorCheckResult{
 		{Name: "runtime-reachable", Status: "ok", Details: map[string]any{"url": *runtimeURL}},
-		{Name: "version-drift", Status: "ok", Details: map[string]any{"cli": version, "runtime": meta.RuntimeVersion}},
+		{Name: "version-drift", Status: "ok", Details: map[string]any{"cli": version.SemverTag(), "runtime": meta.RuntimeVersion}},
 		{Name: "schema-version", Status: "ok", Details: map[string]any{"expected": controlapi.SchemaVersion, "got": meta.SchemaVersion}},
 		wasmCheck,
 		echoCheck,
@@ -387,7 +386,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 
 	if *jsonOutput {
 		writeJSONEnvelope(stdout, "ok", 0, map[string]any{
-			"cliVersion":     version,
+			"cliVersion":     version.CLIDetail(controlapi.SpecVersion),
 			"runtimeHealthy": health.Status == "ok",
 			"runtimeVersion": meta.RuntimeVersion,
 			"specVersion":    meta.SpecVersion,
@@ -400,7 +399,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	_, _ = fmt.Fprintf(
 		stdout,
 		"softprobe %s\nruntime healthy: %s\nruntimeVersion: %s\nspecVersion: %s\nschemaVersion: %s\n",
-		version,
+		version.CLIDetail(controlapi.SpecVersion),
 		health.Status,
 		meta.RuntimeVersion,
 		meta.SpecVersion,
