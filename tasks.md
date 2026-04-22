@@ -63,8 +63,8 @@ Keep users from copy-pasting broken snippets while we ship the backing features.
   **Softprobe Source License 1.0** (SPDX `LicenseRef-Softprobe-Source-License-1.0` — an FSL-1.1-derived license with a materially broader Competing Use clause covering on-premises, bundled, and rebranded redistribution in addition to hosted-service redistribution) for `softprobe-runtime/`, `softprobe-proxy/`, and the CLI; **Apache-2.0** for the four SDKs and `spec/`. Root `LICENSE`, per-package `LICENSE`s, `LICENSING.md` path map, rewritten FAQ (with "Can I build a commercial product that uses captured traffic?" guidance), roadmap, VitePress footer, and package manifests (`softprobe-js/package.json`, `softprobe-java/pom.xml`) all landed together.
   **Verify:** `find . -maxdepth 3 -iname LICENSE -not -path '*/node_modules/*'` lists root + all six packages + `spec/`; `head -1 LICENSE` matches `# Softprobe Source License, Version 1.0`; `grep -R "Apache 2.0 for all OSS components" docs-site/` returns no matches.
 
-- [ ] **PD6.0f — TS SDK reference banner.** Until PD3 completes, add a `::: warning` at the top of `docs-site/reference/sdk-typescript.md` noting that the error class names and `/hooks` + `/suite` subpaths are a **planned** surface; link to PD3 and to the actual class names in `softprobe-js/src/`.
-  **Verify:** banner present; existing reader won't hit a "module not found" surprise without warning.
+- [x] **PD6.0f — TS SDK reference banner.** PD3 shipped; replaced the planned `::: warning` with a `::: tip Ships in this build` at the top of `docs-site/reference/sdk-typescript.md` linking Phase PD3, `errors.ts`, `hooks.ts`, `suite.ts`, and `hook-runner.ts`. Aligned the error catalog and class hierarchy with `errors.ts` (`SoftprobeRuntimeUnreachableError`, `SoftprobeUnknownSessionError`, `HookExecutionError`) and the version table with `package.json` / `VERSION` (`2.0.x` npm vs `0.5.x` runtime line).
+  **Verify:** tip present at top of page; `rg "Not shipped yet" docs-site/reference/sdk-typescript.md` is empty; error table matches `softprobe-js/src/errors.ts`.
 
 ---
 
@@ -258,7 +258,7 @@ The CLI reference (`docs-site/reference/cli.md`) and `index.md` ("All CLI comman
 
 ## Phase PD3 — TypeScript SDK reference reality alignment
 
-The TS SDK reference (`docs-site/reference/sdk-typescript.md`) imports symbols that don't exist: `SoftprobeError`, `RuntimeError`, `CaseLookupError`, `CaseLoadError`, `@softprobe/softprobe-js/hooks`, `@softprobe/softprobe-js/suite`, `runSuite`, `setLogger`.
+**Done.** The TS SDK reference (`docs-site/reference/sdk-typescript.md`) now matches the shipped package: short error names, `/hooks` + `/suite` subpaths, `runSuite`, and `setLogger` / `SOFTPROBE_LOG` (see PD6.0f tip + error table refresh).
 
 **Depends on:** PD1.7 (for `runSuite` to have a backing format).
 

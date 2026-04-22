@@ -1,5 +1,16 @@
 # TypeScript SDK reference
 
+::: tip Ships in this build (PD3 complete)
+The short error names (`RuntimeError`, `CaseLookupError`, …), `@softprobe/softprobe-js/hooks`, `@softprobe/softprobe-js/suite` + `runSuite`, and `setLogger` / `SOFTPROBE_LOG` are **shipped** — see [Phase PD3](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd3--typescript-sdk-reference-reality-alignment) in `tasks.md`. Canonical source in this monorepo:
+
+- [`softprobe-js/src/errors.ts`](https://github.com/softprobe/softprobe/blob/main/softprobe-js/src/errors.ts) — class hierarchy and legacy aliases (`SoftprobeRuntimeError`, …)
+- [`softprobe-js/src/hooks.ts`](https://github.com/softprobe/softprobe/blob/main/softprobe-js/src/hooks.ts) — hook types for `suite.yaml`
+- [`softprobe-js/src/suite.ts`](https://github.com/softprobe/softprobe/blob/main/softprobe-js/src/suite.ts) — Jest `runSuite` runner
+- [`softprobe-js/src/hook-runner.ts`](https://github.com/softprobe/softprobe/blob/main/softprobe-js/src/hook-runner.ts) — `HookExecutionError` when a hook throws
+
+If an import of `/hooks` or `/suite` fails, ensure your resolver honors `package.json#exports` (Node 16+, current Jest/Vite/esbuild do).
+:::
+
 The `@softprobe/softprobe-js` package. Published to npm. Written in TypeScript, ships with full `.d.ts` types.
 
 ```bash
@@ -260,8 +271,8 @@ All SDK errors extend `SoftprobeError`.
 
 | Condition | Error class | Typical cause | Recovery |
 |---|---|---|---|
-| **Runtime unreachable** | `RuntimeError` (cause: `ECONNREFUSED` / `ETIMEDOUT`) | Runtime not running, wrong `baseUrl`, firewall | Start the runtime; `softprobe doctor` |
-| **Unknown session** | `RuntimeError` with `status: 404` | Session already closed, wrong id | Start a fresh session |
+| **Runtime unreachable** | `SoftprobeRuntimeUnreachableError` | DNS / TCP / TLS / timeout before an HTTP status exists | Start the runtime; check `baseUrl`; `softprobe doctor` |
+| **Unknown session** | `SoftprobeUnknownSessionError` (`instanceof RuntimeError`, `status: 404`) | Session already closed, wrong id | Start a fresh session |
 | **Strict miss** (proxy returns error to app) | Not an SDK error — surfaces as an HTTP error inside the SUT, e.g. `Error: Request failed with status 599` | Missing `mockOutbound` or wrong predicate | Add the rule; see [Debug strict miss](/guides/troubleshooting#_403-forbidden-on-outbound-under-strict-policy) |
 | **Invalid rule payload** | `RuntimeError` with `status: 400`, body describing the schema violation | Rule body doesn't validate against [rule-schema](/reference/rule-schema) | Fix the spec; SDK validates many fields client-side |
 | **`findInCase` zero matches** | `CaseLookupError` with `.matches.length === 0` | Predicate too narrow; capture didn't include that hop | Relax predicate; re-capture |
@@ -270,7 +281,14 @@ All SDK errors extend `SoftprobeError`.
 ### Example
 
 ```ts
-import { SoftprobeError, RuntimeError, CaseLookupError, CaseLoadError } from '@softprobe/softprobe-js';
+import {
+  SoftprobeError,
+  RuntimeError,
+  SoftprobeRuntimeUnreachableError,
+  SoftprobeUnknownSessionError,
+  CaseLookupError,
+  CaseLoadError,
+} from '@softprobe/softprobe-js';
 
 try {
   const hit = session.findInCase({ direction: 'outbound', hostSuffix: 'stripe.com' });
@@ -280,6 +298,10 @@ try {
       `findInCase: ${e.matches.length} matches:`,
       e.matches.map((m) => m.spanId),
     );
+  } else if (e instanceof SoftprobeRuntimeUnreachableError) {
+    console.error(`runtime unreachable: ${e.message}`);
+  } else if (e instanceof SoftprobeUnknownSessionError) {
+    console.error(`unknown session at ${e.url}: ${e.body}`);
   } else if (e instanceof RuntimeError) {
     console.error(`runtime ${e.status} at ${e.url}: ${e.body}`);
   } else if (e instanceof CaseLoadError) {
@@ -294,9 +316,14 @@ try {
 | Class | Extends | When thrown |
 |---|---|---|
 | `SoftprobeError` | `Error` | Base class; catch this to catch everything |
+| `SoftprobeRuntimeUnreachableError` | `SoftprobeError` | Transport failure before HTTP (no `status` / `body`) |
 | `RuntimeError` | `SoftprobeError` | Runtime returned non-2xx. Fields: `status`, `body`, `url` |
+| `SoftprobeUnknownSessionError` | `RuntimeError` | Runtime returned 404 for unknown session |
 | `CaseLookupError` | `SoftprobeError` | `findInCase` saw 0 or >1 matches. Field: `matches: Span[]` |
 | `CaseLoadError` | `SoftprobeError` | `loadCaseFromFile` failed to parse / validate. Field: `path` |
+| `HookExecutionError` | `SoftprobeError` | A suite hook threw; fields include hook name and kind (`hook-runner.ts`) |
+
+Legacy names `SoftprobeRuntimeError`, `SoftprobeCaseLoadError`, and `SoftprobeCaseLookupAmbiguityError` are aliases of `RuntimeError`, `CaseLoadError`, and `CaseLookupError` respectively (`errors.ts`).
 
 ## Logging
 
@@ -315,10 +342,12 @@ Or via env: `SOFTPROBE_LOG=debug npm test`.
 
 ## Version compatibility
 
-| SDK version | Runtime versions | Spec version |
+The npm package uses **2.x** semver (`package.json` / exported `VERSION` in `src/version.ts`); the Go runtime and `softprobe` CLI use the **0.5.x** platform line until release tagging catches up. Pair a given npm release with a runtime built from the same commit or release notes.
+
+| `@softprobe/softprobe-js` (npm) | `softprobe-runtime` / CLI | Spec |
 |---|---|---|
-| `0.5.x` | `0.5.x` | v1 |
-| `0.4.x` | `0.4.x` – `0.5.x` | v1 |
+| `2.0.x` (e.g. `2.0.10`) | `0.5.x` expected; dev builds may show `0.0.0-dev` | http-control-api v1 |
+| `0.4.x` (legacy) | `0.4.x` – `0.5.x` | v1 |
 
 `softprobe doctor` reports drift.
 
