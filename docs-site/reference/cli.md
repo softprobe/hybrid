@@ -78,7 +78,7 @@ Exit code: `0` on all green, `10` on any failure. Warnings don't affect exit cod
 | `specVersion` | Runtime's `/v1/meta` payload | Changes only on breaking protocol changes |
 | `schemaVersion` | Runtime's `/v1/meta` payload | Changes only on breaking schema changes |
 
-Compatibility rule: a CLI with `specVersion=1` will refuse to drive a runtime with `specVersion=2` (and vice versa) because the protocol is not wire-compatible across major spec versions. Same for `schemaVersion`. The CLI prints the mismatching pair and exits `10`.
+Compatibility rule: the CLI embeds the expected `specVersion` and `schemaVersion` constants (`http-control-api@v1`, schema `1`, today). If `/v1/meta` reports different values, `doctor` exits `10` with a `runtime_drift` error — the protocol or schema is not wire-compatible with this binary.
 
 This gives agents and CI a cheap, deterministic way to detect "someone upgraded half the stack" without staring at version strings.
 
