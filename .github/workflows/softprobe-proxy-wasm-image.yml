@@ -19,7 +19,7 @@ env:
 
 jobs:
   wasm-image:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted,Linux]
     permissions:
       contents: read
       packages: write
