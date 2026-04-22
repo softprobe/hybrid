@@ -12,6 +12,7 @@ import os from 'os';
 import path from 'path';
 
 import type { Cassette } from '../types/schema';
+import { caseDocumentToCassetteRecords } from '../core/cassette/case-bridge';
 import { CaptureEngine, softprobeExpressMiddleware } from '../instrumentations/express/capture';
 import { softprobe } from '../api';
 import { SoftprobeContext } from '../context';
@@ -160,24 +161,30 @@ describe('softprobeExpressMiddleware capture path (Task 14.1.1)', () => {
     if (midPromise) await midPromise;
     res.send({ id: 1, name: 'alice' });
     // Cassette write is async; poll for file then content so test is reliable (design: direct write, no buffer).
-    const cassetteFile = path.join(cassetteDir, `${traceId}.ndjson`);
+    const cassetteFile = path.join(cassetteDir, `${traceId}.case.json`);
     const fileDeadline = Date.now() + 2000;
     while (!fs.existsSync(cassetteFile) && Date.now() < fileDeadline) {
       await new Promise((r) => setTimeout(r, 20));
     }
     expect(fs.existsSync(cassetteFile)).toBe(true);
-    let lines: string[] = [];
     const deadline = Date.now() + 2000;
+    let inbound: { type?: string; identifier?: string } | undefined;
     while (Date.now() < deadline) {
-      const content = fs.readFileSync(cassetteFile, 'utf8');
-      lines = content.split('\n').filter(Boolean);
-      if (lines.length > 0) break;
+      const content = fs.readFileSync(cassetteFile, 'utf8').trim();
+      if (content) {
+        try {
+          const recs = caseDocumentToCassetteRecords(JSON.parse(content));
+          inbound = recs.find((r) => r.type === 'inbound');
+          if (inbound) break;
+        } catch {
+          // file may be mid-write
+        }
+      }
       await new Promise((r) => setTimeout(r, 20));
     }
-    expect(lines.length).toBeGreaterThan(0);
-    const record = JSON.parse(lines[0]);
-    expect(record.type).toBe('inbound');
-    expect(record.identifier).toBe('GET /async-users/1');
+    expect(inbound).toBeDefined();
+    expect(inbound!.type).toBe('inbound');
+    expect(inbound!.identifier).toBe('GET /async-users/1');
   });
 });
 
@@ -254,7 +261,7 @@ describe('Task 14.3.1: inbound request record contains parsed JSON body when mid
     jest.restoreAllMocks();
   });
 
-  it('request record in NDJSON contains parsed JSON body when middleware is placed after body-parser', () => {
+  it('request record on cassette contains parsed JSON body when middleware is placed after body-parser', () => {
     const saveRecord = jest.fn<ReturnType<Cassette['saveRecord']>, Parameters<Cassette['saveRecord']>>(async () => {});
     const cassette: Cassette = {
       loadTrace: async () => [],
@@ -362,7 +369,18 @@ describe('Task 21.1.1: Header extraction in middleware — SoftprobeContext.acti
     const cassetteDir = path.join(os.tmpdir(), `softprobe-header-express-${Date.now()}`);
     fs.mkdirSync(cassetteDir, { recursive: true });
     const traceId = 'header-trace-99';
-    fs.writeFileSync(path.join(cassetteDir, `${traceId}.ndjson`), '', 'utf8');
+    fs.writeFileSync(
+      path.join(cassetteDir, `${traceId}.case.json`),
+      JSON.stringify({
+        version: '1.0.0',
+        caseId: traceId,
+        mode: 'replay',
+        traces: [],
+        rules: [],
+        fixtures: [],
+      }),
+      'utf8'
+    );
     SoftprobeContext.initGlobal({ mode: 'PASSTHROUGH', cassetteDirectory: cassetteDir });
     jest.spyOn(trace, 'getActiveSpan').mockReturnValue({
       spanContext: () => ({ traceId: 'otel-span-trace', spanId: 'span-1' }),
@@ -393,7 +411,7 @@ describe('Task 21.1.1: Header extraction in middleware — SoftprobeContext.acti
     expect(downstreamContext?.traceId).toBe(traceId);
     expect(downstreamContext?.storage).toBeDefined();
     try {
-      fs.unlinkSync(path.join(cassetteDir, `${traceId}.ndjson`));
+      fs.unlinkSync(path.join(cassetteDir, `${traceId}.case.json`));
       fs.rmdirSync(cassetteDir);
     } catch {
       // ignore cleanup errors

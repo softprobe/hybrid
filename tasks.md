@@ -39,7 +39,7 @@ Full history: see `git log` and [`docs-site/changelog.md`](docs-site/changelog.m
 
 # Delivery phases (in progress)
 
-We promised more in `docs-site/` than `cmd/softprobe`, the runtime, and the SDKs ship today. These phases close the gap. Ordering prefers **truth-in-docs first** (PD6.0), then horizontal plumbing (PD2 auth, PD5 release hygiene) that unblocks everything else, then CLI surface (PD1), observability (PD4), and TS SDK reference alignment (PD3).
+We promised more in `docs-site/` than `cmd/softprobe`, the runtime, and the SDKs ship today. These phases close the gap. Ordering now prioritizes the **Node language-plane port** (PD6.5) immediately after doc truth-sync, then horizontal plumbing (PD2 auth, PD5 release hygiene) that unblocks everything else, then CLI surface (PD1), observability (PD4), and TS SDK reference alignment (PD3).
 
 ## Phase PD6.0 — Immediate doc truth-sync (banners only)
 
@@ -65,6 +65,32 @@ Keep users from copy-pasting broken snippets while we ship the backing features.
 
 - [x] **PD6.0f — TS SDK reference banner.** PD3 shipped; replaced the planned `::: warning` with a `::: tip Ships in this build` at the top of `docs-site/reference/sdk-typescript.md` linking Phase PD3, `errors.ts`, `hooks.ts`, `suite.ts`, and `hook-runner.ts`. Aligned the error catalog and class hierarchy with `errors.ts` (`SoftprobeRuntimeUnreachableError`, `SoftprobeUnknownSessionError`, `HookExecutionError`) and the version table with `package.json` / `VERSION` (`2.0.x` npm vs `0.5.x` runtime line).
   **Verify:** tip present at top of page; `rg "Not shipped yet" docs-site/reference/sdk-typescript.md` is empty; error table matches `softprobe-js/src/errors.ts`.
+
+---
+
+## Phase PD6.5 — Node language-plane port (high priority, clean cutover)
+
+Make the Node in-process path align with the hybrid runtime/session model via a **fresh cutover**. Do **not** preserve backward compatibility with NDJSON/YAML-first runtime behavior.
+
+**Depends on:** PD6.0f (truth-in-docs baseline), PD2.1b (TS runtime auth in place).
+
+- [x] **PD6.5a — Port plan + guardrails doc.** Add `softprobe-js/design-node-port.md` as the implementation plan for the language-plane cutover. It must define: target control-plane calls (`/v1/sessions`, `/load-case`, `/rules`, `/policy`, `/close`), case JSON target artifact, explicit **no-backward-compatibility** policy for NDJSON/YAML-first flows, and removal criteria for legacy modules.
+  **Verify:** `rg "design-node-port|no backward compatibility|clean cutover" softprobe-js/design-node-port.md docs/language-instrumentation.md` matches; doc contains explicit removal criteria.
+
+- [x] **PD6.5b — Runtime-first Node API facade.** Add a Node-facing facade in `softprobe-js/src/` that routes session/rule/policy operations through the existing runtime client (`Softprobe` / `SoftprobeSession`) instead of config-driven cassette defaults.
+  **Verify:** new tests prove session lifecycle + `mockOutbound` + `clearRules` use runtime HTTP paths; no compatibility facade required.
+
+- [x] **PD6.5c — Case JSON capture sink (replace NDJSON).** Introduce a capture writer that emits `*.case.json` (schema-compatible traces array) from the Node language plane and remove NDJSON as a product runtime sink.
+  **Verify:** fixture capture test writes valid `case.schema.json` output; NDJSON capture path/tests removed or rewritten.
+
+- [x] **PD6.5d — Replay reads loaded case + rules only.** Ensure replay path operates from loaded case JSON + runtime rules and remove `cassetteDirectory/{traceId}.ndjson` dependency.
+  **Verify:** replay integration test passes with only case JSON + runtime session; NDJSON replay path removed.
+
+- [ ] **PD6.5e — Config and docs cutover.** Remove `SOFTPROBE_CONFIG_PATH` + cassette-directory workflow from primary package docs/examples and replace with runtime-backed defaults in `softprobe-js/README.md` and docs-site TS pages.
+  **Verify:** runtime-first examples are primary; old config flow is either removed or clearly marked unsupported after cutover.
+
+- [x] **PD6.5f — Framework patch simplification.** Keep only minimal language hooks needed for the cutover path; remove broad framework patch matrix from the default runtime path instead of maintaining opt-in compatibility.
+  **Verify:** default Node path no longer depends on per-framework patch matrix; docs and tests reflect the reduced surface.
 
 ---
 
@@ -291,17 +317,17 @@ The CLI reference (`docs-site/reference/cli.md`) and `index.md` ("All CLI comman
 
 ## Phase PD6 — Doc truth sync (after each code phase lands)
 
-- [ ] **PD6.1 — Remove CLI banners.** As each PD1 task lands, remove the corresponding "Not shipped yet" banner from `cli.md` and the guide pages.
-  **Verify:** `rg "Not shipped yet" docs-site/` returns matches only for still-pending work.
+- [x] **PD6.1 — Remove CLI banners.** Removed stale `::: warning Not shipped yet` blocks from `docs-site/reference/cli.md` for commands that already ship (`inspect session`, `validate`, `generate test`, `export otlp`, `scrub`, `completion`). Guide pages had no such banners; Kubernetes deployment keeps warnings only for genuinely pending PD4 surfaces.
+  **Verify:** `rg "Not shipped yet" docs-site/` returns matches only for still-pending work (e.g. `docs-site/deployment/kubernetes.md` PD4 footnotes).
 
-- [ ] **PD6.2 — Update `cli.md` field-stability table.** Keep the `--json` field table honest as PD1.1c expands coverage.
-  **Verify:** table rows match the subcommands that actually emit JSON.
+- [x] **PD6.2 — Update `cli.md` field-stability table.** Documented `--json` for `inspect session`, `validate {rules,suite}`, `suite diff`, `generate test`, `export otlp`, `scrub`; clarified `completion` is not JSON; softened global copy so it does not claim every command emits JSON.
+  **Verify:** table rows match shipped CLI JSON envelopes in `softprobe-runtime/cmd/softprobe/`.
 
-- [ ] **PD6.3 — Refresh SDK references.** Update version tables, install snippets, and error catalogs as PD5.4 and PD3 land.
-  **Verify:** each reference page's import snippet compiles against the published SDK.
+- [x] **PD6.3 — Refresh SDK references.** Pointed TS/Python/Java SDK reference pages at the `hybrid` monorepo and current `tasks.md` anchors; TS tip already reflected PD3 shipped surface.
+  **Verify:** `rg "github.com/softprobe/softprobe/blob" docs-site/reference/sdk-*.md` has no stale monorepo URLs (Go page still documents future `softprobe-go` import path by design).
 
-- [ ] **PD6.4 — Refresh `roadmap.md`.** Move items from _In progress_ to _Shipped_ as phases complete.
-  **Verify:** roadmap entries match `git tag` + `docs-site/changelog.md`.
+- [x] **PD6.4 — Refresh `roadmap.md`.** Updated _Shipped_ CLI list, rewrote _In progress_ doc-vs-shipped bullets to match current tree, fixed repo links to `github.com/softprobe/hybrid`, and narrowed "doc truth" to remaining deployment banners.
+  **Verify:** roadmap narrative matches `docs-site/reference/cli.md` + `tasks.md` Phase PD1/2/3/5 status.
 
 ---
 
@@ -377,6 +403,20 @@ Use our own capture-and-replay engine to pin the CLI + SDK control-plane contrac
 - [x] **PD8.1d — Proxy marketing docs trim.** [`softprobe-proxy/docs/use-cases.md`](softprobe-proxy/docs/use-cases.md) and [`softprobe-proxy/docs/deployment.md`](softprobe-proxy/docs/deployment.md) state OOB to `sp_backend_url`; remove implied “full bodies land in your existing APM.”
   **Verify:** `rg -n "Unified tracing|Integration with compliance" softprobe-proxy/docs/` returns no matches.
 
+### PD8.2 — Public docs site + repo index (follow-up to 8.1)
+
+- [x] **PD8.2a — `docs-site/deployment/kubernetes.md`.** Add a VitePress `::: tip` after the WasmPlugin example: `sp_backend_url` is OOB to Softprobe runtime, not customer APM by default; link monorepo `docs/proxy-integration-posture.md` and `docs/language-instrumentation.md`. Fix PD4 warning links to `hybrid` `tasks.md` if still pointing at the old repo path.
+  **Verify:** page renders; links open on GitHub `main`.
+
+- [x] **PD8.2b — `docs-site/reference/proxy-otel-api.md`.** Replace misleading sentence implying any OTel collector can be pointed at `/v1/traces` as the default product story; state OOB to `sp_backend_url` and link proxy-integration-posture.
+  **Verify:** no claim that full bodies land in vendor APM by default.
+
+- [x] **PD8.2c — `docs-site/concepts/architecture.md`.** Clarify case-file export vs proxy OOB capture; link proxy-integration-posture.
+  **Verify:** architecture “capture artifact” paragraph distinguishes case JSON export from live WASM OTLP path.
+
+- [x] **PD8.2d — `docs/repo-layout.md`.** One-line pointer to the two monorepo design notes under `docs/`.
+  **Verify:** `rg proxy-integration-posture docs/repo-layout.md` matches.
+
 ---
 
 ## Parking lot (non-sequential)
@@ -395,4 +435,4 @@ Use our own capture-and-replay engine to pin the CLI + SDK control-plane contrac
 
 - [ ] **Proxy WASM: optional `trace_span_tag` enrichment** — set tiny correlation tags on the active Envoy span (`softprobe.session.id`, trace id, capture URL) via proxy-wasm `set_property(["trace_span_tag", …], …)` for click-through from customer APM to Softprobe; bodies stay OOB. Decision: [`docs/proxy-integration-posture.md`](docs/proxy-integration-posture.md) §5.
 
-- [ ] **Node language-plane port** — move `softprobe-js` capture/replay off NDJSON cassettes and `SOFTPROBE_CONFIG_PATH` / YAML as the **product** default; align with `softprobe-runtime` sessions and `*.case.json` per [`docs/language-instrumentation.md`](docs/language-instrumentation.md) §5–6. Keep legacy code paths until migrated.
+- [x] **Node language-plane port** — tracked in **Phase PD6.5** (implementation landed); **remaining:** PD6.5e (primary README + docs-site env-first narrative).

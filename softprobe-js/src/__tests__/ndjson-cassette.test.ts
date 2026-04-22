@@ -6,6 +6,7 @@ import * as otelApi from '@opentelemetry/api';
 import { AsyncHooksContextManager } from '@opentelemetry/context-async-hooks';
 import type { SoftprobeCassetteRecord } from '../types/schema';
 import { SoftprobeContext } from '../context';
+import { caseDocumentToCassetteRecords } from '../core/cassette/case-bridge';
 
 beforeAll(() => {
   const contextManager = new AsyncHooksContextManager();
@@ -14,11 +15,11 @@ beforeAll(() => {
 });
 
 /**
- * Task 13.4: One file per trace — path = {cassetteDirectory}/{traceId}.ndjson
+ * Task 13.4: One file per trace — path = {cassetteDirectory}/{traceId}.case.json
  * Task 13.6: Cassette obtained via SoftprobeContext.run + getCassette() (only context creates instances).
  */
-describe('NdjsonCassette one file per trace (Task 13.4)', () => {
-  it('uses path {dir}/{traceId}.ndjson for read and write; write then loadTrace returns that record', async () => {
+describe('CaseJsonFileCassette one file per trace (Task 13.4)', () => {
+  it('uses path {dir}/{traceId}.case.json for read and write; write then loadTrace returns that record', async () => {
     const cassetteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'softprobe-13-4-'));
     try {
       const traceId = 'trace-alpha';
@@ -39,7 +40,7 @@ describe('NdjsonCassette one file per trace (Task 13.4)', () => {
         expect(loaded[0].spanId).toBe('span-1');
         expect(loaded[0].identifier).toBe('GET /alpha');
       });
-      const expectedPath = path.join(cassetteDir, `${traceId}.ndjson`);
+      const expectedPath = path.join(cassetteDir, `${traceId}.case.json`);
       expect(fs.existsSync(expectedPath)).toBe(true);
     } finally {
       try {
@@ -92,7 +93,7 @@ describe('NdjsonCassette one file per trace (Task 13.4)', () => {
       expect(loadedB).toHaveLength(1);
       expect(loadedB[0].spanId).toBe('span-b');
       const files = fs.readdirSync(cassetteDir).sort();
-      expect(files).toEqual(['trace-a.ndjson', 'trace-b.ndjson']);
+      expect(files).toEqual(['trace-a.case.json', 'trace-b.case.json']);
     } finally {
       try {
         fs.rmSync(cassetteDir, { recursive: true });
@@ -103,7 +104,7 @@ describe('NdjsonCassette one file per trace (Task 13.4)', () => {
   });
 });
 
-describe('NdjsonCassette.loadTrace (Task 13.3: no traceId param)', () => {
+describe('CaseJsonFileCassette.loadTrace (Task 13.3: no traceId param)', () => {
   it('returns all records from the cassette file', async () => {
     const cassetteDir = path.join(__dirname, 'fixtures');
     const traceId = 'ndjson-cassette-load-trace';
@@ -119,15 +120,15 @@ describe('NdjsonCassette.loadTrace (Task 13.3: no traceId param)', () => {
   });
 });
 
-describe('NdjsonCassette.saveRecord', () => {
-  it('appends one NDJSON line for one saved record', async () => {
+describe('CaseJsonFileCassette.saveRecord', () => {
+  it('persists one v4.1 record into a case JSON document', async () => {
     const cassetteDir = os.tmpdir();
-    const traceId = `softprobe-ndjson-cassette-${Date.now()}`;
+    const traceId = `softprobe-case-cassette-${Date.now()}`;
     await SoftprobeContext.run({ mode: 'CAPTURE', traceId, cassetteDirectory: cassetteDir }, async () => {
       const cassette = SoftprobeContext.getCassette()!;
       const record: SoftprobeCassetteRecord = {
         version: '4.1',
-        traceId: 'trace-append',
+        traceId,
         spanId: 'span-append',
         timestamp: '2025-01-01T00:00:00.000Z',
         type: 'outbound',
@@ -136,11 +137,10 @@ describe('NdjsonCassette.saveRecord', () => {
       };
       await cassette.saveRecord(record);
     });
-    const tmpPath = path.join(cassetteDir, `${traceId}.ndjson`);
-    const content = fs.readFileSync(tmpPath, 'utf8');
-    const lines = content.split('\n').filter((line) => line.length > 0);
-    expect(lines).toHaveLength(1);
-    expect((JSON.parse(lines[0]) as SoftprobeCassetteRecord).spanId).toBe('span-append');
+    const tmpPath = path.join(cassetteDir, `${traceId}.case.json`);
+    const doc = JSON.parse(fs.readFileSync(tmpPath, 'utf8')) as unknown;
+    const records = caseDocumentToCassetteRecords(doc);
+    expect(records.some((r) => r.spanId === 'span-append')).toBe(true);
     try {
       fs.unlinkSync(tmpPath);
     } catch {

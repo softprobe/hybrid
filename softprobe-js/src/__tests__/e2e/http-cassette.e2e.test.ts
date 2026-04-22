@@ -33,7 +33,7 @@ describe('E2E HTTP cassette capture/replay (Task 12.4)', () => {
 
   beforeAll(() => {
     artifacts = new E2eArtifacts();
-    cassettePath = artifacts.createTempFile('softprobe-e2e-cassette-http', '.ndjson');
+    cassettePath = artifacts.createTempFile('softprobe-e2e-cassette-http', '.case.json');
     captureConfigPath = artifacts.createTempFile('softprobe-e2e-http-capture', '.yml');
     replayConfigPath = artifacts.createTempFile('softprobe-e2e-http-replay', '.yml');
   });

@@ -1,0 +1,152 @@
+{
+  "version": "1.0.0",
+  "caseId": "ndjson-cassette-load-trace",
+  "mode": "replay",
+  "createdAt": "2026-04-22T05:30:21.875Z",
+  "traces": [
+    {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "softprobe-js"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "spans": [
+                {
+                  "traceId": "ndjson-cassette-load-trace",
+                  "spanId": "span-1",
+                  "startTimeUnixNano": "1735689600000000000",
+                  "kind": 3,
+                  "attributes": [
+                    {
+                      "key": "sp.traffic.direction",
+                      "value": {
+                        "stringValue": "outbound"
+                      }
+                    },
+                    {
+                      "key": "sp.span.type",
+                      "value": {
+                        "stringValue": "extract"
+                      }
+                    },
+                    {
+                      "key": "softprobe.protocol",
+                      "value": {
+                        "stringValue": "http"
+                      }
+                    },
+                    {
+                      "key": "softprobe.identifier",
+                      "value": {
+                        "stringValue": "GET /users"
+                      }
+                    },
+                    {
+                      "key": "http.request.method",
+                      "value": {
+                        "stringValue": "GET"
+                      }
+                    },
+                    {
+                      "key": "url.path",
+                      "value": {
+                        "stringValue": "/users"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "traceId": "ndjson-cassette-load-trace",
+                  "spanId": "span-2",
+                  "startTimeUnixNano": "1735689601000000000",
+                  "kind": 3,
+                  "attributes": [
+                    {
+                      "key": "sp.traffic.direction",
+                      "value": {
+                        "stringValue": "outbound"
+                      }
+                    },
+                    {
+                      "key": "sp.span.type",
+                      "value": {
+                        "stringValue": "extract"
+                      }
+                    },
+                    {
+                      "key": "softprobe.protocol",
+                      "value": {
+                        "stringValue": "postgres"
+                      }
+                    },
+                    {
+                      "key": "softprobe.identifier",
+                      "value": {
+                        "stringValue": "SELECT 1"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "traceId": "ndjson-cassette-load-trace",
+                  "spanId": "span-3",
+                  "startTimeUnixNano": "1735689602000000000",
+                  "kind": 2,
+                  "attributes": [
+                    {
+                      "key": "sp.traffic.direction",
+                      "value": {
+                        "stringValue": "inbound"
+                      }
+                    },
+                    {
+                      "key": "sp.span.type",
+                      "value": {
+                        "stringValue": "inject"
+                      }
+                    },
+                    {
+                      "key": "softprobe.protocol",
+                      "value": {
+                        "stringValue": "http"
+                      }
+                    },
+                    {
+                      "key": "softprobe.identifier",
+                      "value": {
+                        "stringValue": "GET /orders"
+                      }
+                    },
+                    {
+                      "key": "http.request.method",
+                      "value": {
+                        "stringValue": "GET"
+                      }
+                    },
+                    {
+                      "key": "url.path",
+                      "value": {
+                        "stringValue": "/orders"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "rules": [],
+  "fixtures": []
+}

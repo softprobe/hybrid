@@ -21,7 +21,7 @@ const noOpCassette: Cassette = {
 
 /**
  * Test helper to run code inside a Softprobe scope using the canonical run(options, fn) API.
- * Uses cassetteDirectory + traceId; cassette path is always {cassetteDirectory}/{traceId}.ndjson (Cassette API).
+ * Uses cassetteDirectory + traceId; cassette path is always {cassetteDirectory}/{traceId}.case.json (Cassette API).
  */
 export function runSoftprobeScope<T>(
   scope: ScopeOptions,

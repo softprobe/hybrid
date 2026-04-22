@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CLI entry point for softprobe. Usage: softprobe diff <cassette.ndjson> <targetUrl>
+ * CLI entry point for softprobe. Usage: softprobe diff <case.case.json> <targetUrl>
  * Task 21.3.1: on mismatch, prints colored diff of recorded vs live and exits 1.
  */
 
@@ -13,7 +13,7 @@ const command = args[0];
 const HELP_COMMANDS = new Set(['help', '--help', '-h']);
 const VERSION_COMMANDS = new Set(['version', '--version', '-v']);
 function usage(): void {
-  console.error('Usage: softprobe diff [--ignore-paths <path> ...] <cassette.ndjson> <targetUrl>');
+  console.error('Usage: softprobe diff [--ignore-paths <path> ...] <case.case.json> <targetUrl>');
   console.error('       softprobe capture <url> --trace-id <traceId> [--method <METHOD>] [--data <body>] [--header <k:v> ...] [--output <file>]');
   console.error('       softprobe --help');
   console.error('       softprobe --version');

@@ -1,7 +1,7 @@
 /**
  * Task 12.3.1: Child worker for Redis NDJSON cassette capture E2E.
  * Loads softprobe/init (CAPTURE) first; runs Redis SET/GET inside SoftprobeContext.run
- * with cassetteDirectory + traceId so capture writes to {cassetteDirectory}/{traceId}.ndjson.
+ * with cassetteDirectory + traceId so capture writes to {cassetteDirectory}/{traceId}.case.json.
  *
  * Env: SOFTPROBE_CONFIG_PATH (or legacy SOFTPROBE_CASSETTE_PATH via run-child YAML), REDIS_URL, REDIS_KEY, REDIS_VALUE
  * Stdout: JSON { key, value, reply }
@@ -13,6 +13,8 @@ const { softprobe } = require('../../../api');
 const { SoftprobeContext: softprobeContext } = require('../../../context');
 
 require('../../../init');
+const { applyLegacyFrameworkPatches } = require('../../../legacy');
+applyLegacyFrameworkPatches();
 
 async function main() {
   const configPath = process.env.SOFTPROBE_CONFIG_PATH ?? './.softprobe/config.yml';
@@ -25,7 +27,7 @@ async function main() {
       traceId = cfg.traceId;
     } else if (cfg && typeof cfg.cassettePath === 'string' && cfg.cassettePath) {
       cassetteDirectory = pathNode.dirname(cfg.cassettePath);
-      traceId = pathNode.basename(cfg.cassettePath, '.ndjson');
+      traceId = pathNode.basename(cfg.cassettePath, '.case.json');
     } else {
       cassetteDirectory = undefined;
       traceId = undefined;

@@ -7,14 +7,15 @@ import fs from 'fs';
 import path from 'path';
 import { runChild } from './run-child';
 import { E2eArtifacts } from './helpers/e2e-artifacts';
+import { buildCaseDocumentFromRecords } from '../../core/cassette/case-bridge';
+import type { SoftprobeCassetteRecord } from '../../types/schema';
 
 const STRICT_REPLAY_WORKER = path.join(__dirname, 'helpers', 'http-strict-replay-worker.ts');
 
-/** One outbound HTTP record for a URL that we will NOT request in the worker. */
-function buildMinimalCassetteLine(identifier: string): string {
-  const record = {
+function buildMinimalCaseFile(traceId: string, identifier: string): string {
+  const record: SoftprobeCassetteRecord = {
     version: '4.1',
-    traceId: 'strict-e2e-replay',
+    traceId,
     spanId: 'span-1',
     timestamp: new Date().toISOString(),
     type: 'outbound',
@@ -22,7 +23,7 @@ function buildMinimalCassetteLine(identifier: string): string {
     identifier,
     responsePayload: { statusCode: 200, body: { ok: true } },
   };
-  return JSON.stringify(record) + '\n';
+  return `${JSON.stringify(buildCaseDocumentFromRecords([record], { caseId: traceId, mode: 'replay' }), null, 2)}\n`;
 }
 
 describe('E2E strict mode (Task 13.1)', () => {
@@ -34,14 +35,15 @@ describe('E2E strict mode (Task 13.1)', () => {
 
   beforeAll(() => {
     artifacts = new E2eArtifacts();
-    cassettePath = artifacts.createTempFile('softprobe-e2e-strict', '.ndjson');
+    cassettePath = artifacts.createTempFile('softprobe-e2e-strict', '.case.json');
     replayConfigPath = artifacts.createSoftprobeConfig('softprobe-e2e-strict-replay', {
       mode: 'REPLAY',
       cassetteDirectory: path.dirname(cassettePath),
-      traceId: path.basename(cassettePath, '.ndjson'),
+      traceId: path.basename(cassettePath, '.case.json'),
       strictReplay: true,
     });
-    fs.writeFileSync(cassettePath, buildMinimalCassetteLine(RECORDED_IDENTIFIER), 'utf8');
+    const traceIdForFile = path.basename(cassettePath, '.case.json');
+    fs.writeFileSync(cassettePath, buildMinimalCaseFile(traceIdForFile, RECORDED_IDENTIFIER), 'utf8');
   });
 
   afterAll(() => {
@@ -54,7 +56,6 @@ describe('E2E strict mode (Task 13.1)', () => {
       {
         SOFTPROBE_CONFIG_PATH: replayConfigPath,
         UNRECORDED_URL,
-        REPLAY_TRACE_ID: 'strict-e2e-replay',
       },
       { useTsNode: true }
     );

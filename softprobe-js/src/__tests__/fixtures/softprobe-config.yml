@@ -1,4 +1,4 @@
-cassettePath: "./softprobe-cassettes.ndjson"
+cassettePath: "./softprobe-cassettes.case.json"
 capture:
   maxPayloadSize: 1048576
 

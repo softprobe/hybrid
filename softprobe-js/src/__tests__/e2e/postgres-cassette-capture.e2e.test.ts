@@ -47,11 +47,11 @@ describe('E2E Postgres cassette capture (Task 12.2.1)', () => {
       console.warn('Skipping Postgres E2E: Docker unavailable', e);
       return;
     }
-    cassettePath = artifacts.createTempFile('softprobe-e2e-cassette-pg', '.ndjson');
+    cassettePath = artifacts.createTempFile('softprobe-e2e-cassette-pg', '.case.json');
     captureConfigPath = artifacts.createSoftprobeConfig('softprobe-e2e-pg-capture', {
       mode: 'CAPTURE',
       cassetteDirectory: path.dirname(cassettePath),
-      traceId: path.basename(cassettePath, '.ndjson'),
+      traceId: path.basename(cassettePath, '.case.json'),
     });
   }, 60000);
 
@@ -119,9 +119,9 @@ describe('E2E Postgres cassette replay (Task 12.2.2)', () => {
       console.warn('Skipping Postgres E2E replay: Docker unavailable', e);
       return;
     }
-    cassettePath = artifacts.createTempFile('softprobe-e2e-replay-pg', '.ndjson');
+    cassettePath = artifacts.createTempFile('softprobe-e2e-replay-pg', '.case.json');
     const cassetteDirectory = path.dirname(cassettePath);
-    const traceId = path.basename(cassettePath, '.ndjson');
+    const traceId = path.basename(cassettePath, '.case.json');
     captureConfigPath = artifacts.createSoftprobeConfig('softprobe-e2e-pg-replay-capture', {
       mode: 'CAPTURE',
       cassetteDirectory,

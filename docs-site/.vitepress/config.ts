@@ -66,6 +66,7 @@ export default defineConfig({
           text: 'How-to guides',
           items: [
             { text: 'Capture your first session', link: '/guides/capture-your-first-session' },
+            { text: 'Proxy vs language instrumentation', link: '/guides/proxy-vs-language-instrumentation' },
             { text: 'Generate a Jest session (recommended)', link: '/guides/generate-jest-session' },
             { text: 'Replay in a Jest test', link: '/guides/replay-in-jest' },
             { text: 'Replay in pytest', link: '/guides/replay-in-pytest' },

@@ -1,14 +1,18 @@
 /**
  * Shared Fastify app for inbound capture and replay E2E (Task 14.4.3).
  * Mode is driven by YAML config (SOFTPROBE_CONFIG_PATH).
- * - CAPTURE: cassettePath in config; GET /exit flushes store and exits.
+ * - CAPTURE: cassettePath in config; GET /exit awaits pending case writes then exits.
  * - REPLAY: uses runtime replay wiring from init + middleware/context run path; GET /exit exits.
  * PORT required for both.
  * Same route flow as Express worker: GET / does outbound fetch to httpbin.org.
  */
 
+import path from 'path';
+
 import '../../../init';
 import { ConfigManager } from '../../../config/config-manager';
+import { SoftprobeContext } from '../../../context';
+import { applyLegacyFrameworkPatches } from '../../../legacy';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 
@@ -20,21 +24,28 @@ sdk.start();
 const configPath = process.env.SOFTPROBE_CONFIG_PATH ?? './.softprobe/config.yml';
 let softprobeMode = 'PASSTHROUGH';
 try {
-  const cfg = new ConfigManager(configPath).get();
+  const cfg = new ConfigManager(configPath).get() as {
+    mode?: string;
+    cassettePath?: string;
+    cassetteDirectory?: string;
+    replay?: { strictReplay?: boolean; strictComparison?: boolean };
+  };
   softprobeMode = cfg.mode ?? 'PASSTHROUGH';
+  const cassetteDirectory =
+    cfg.cassetteDirectory ??
+    (typeof cfg.cassettePath === 'string' && cfg.cassettePath ? path.dirname(cfg.cassettePath) : undefined);
+  SoftprobeContext.initGlobal({
+    mode: softprobeMode,
+    cassetteDirectory,
+    strictReplay: cfg.replay?.strictReplay,
+    strictComparison: cfg.replay?.strictComparison,
+  });
 } catch {
   softprobeMode = 'PASSTHROUGH';
 }
-const isReplay = softprobeMode === 'REPLAY';
-
-// #region agent log
-function _dbg(location: string, message: string, data: Record<string, unknown>): void {
-  fetch('http://127.0.0.1:7242/ingest/abae8b62-1eb2-436b-99c9-e8e6a9718ab9', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location, message, data, timestamp: Date.now() }) }).catch(() => {});
-}
-// #endregion
+applyLegacyFrameworkPatches();
 
 async function startServer(): Promise<void> {
-  _dbg('fastify-inbound-worker.ts:startServer', 'startServer entered', { port: process.env.PORT, isReplay });
   const fastify = require('fastify');
   // Disable logger so Fastify does not call os.networkInterfaces() on listen (fails in sandbox/restricted envs).
   const app = await fastify({ logger: false });
@@ -56,15 +67,14 @@ async function startServer(): Promise<void> {
   app.get('/exit', (_req: unknown, reply: { send: (s: string) => unknown }) => {
     reply.send('ok');
     setImmediate(() => {
-      // Background flusher handles flush; direct write needs no explicit flush
-      process.exit(0);
+      void SoftprobeContext.flushPendingCassettes()
+        .then(() => process.exit(0))
+        .catch(() => process.exit(0));
     });
   });
 
   const port = parseInt(process.env.PORT || '0', 10) || 39302;
-  _dbg('fastify-inbound-worker.ts:startServer', 'listen called', { port });
   await app.listen({ port, host: '0.0.0.0' });
-  _dbg('fastify-inbound-worker.ts:startServer', 'listen callback', { port });
   process.stdout.write(JSON.stringify({ port }) + '\n');
 }
 

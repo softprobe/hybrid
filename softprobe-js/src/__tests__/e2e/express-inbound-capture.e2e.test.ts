@@ -40,9 +40,9 @@ describe('E2E Express inbound capture (Task 14.4.1)', () => {
 
   beforeAll(() => {
     artifacts = new E2eArtifacts();
-    cassettePath = artifacts.createTempFile('express-inbound-e2e', '.ndjson');
+    cassettePath = artifacts.createTempFile('express-inbound-e2e', '.case.json');
     const cassetteDirectory = path.dirname(cassettePath);
-    const traceId = path.basename(cassettePath, '.ndjson');
+    const traceId = path.basename(cassettePath, '.case.json');
     captureConfigPath = artifacts.createSoftprobeConfig('express-inbound-capture', {
       mode: 'CAPTURE',
       cassetteDirectory,
@@ -67,7 +67,7 @@ describe('E2E Express inbound capture (Task 14.4.1)', () => {
 
     try {
       await waitForServer(port, 20000);
-      const traceId = path.basename(cassettePath, '.ndjson');
+      const traceId = path.basename(cassettePath, '.case.json');
       const res = await fetch(`http://127.0.0.1:${port}/`, {
         headers: { 'x-softprobe-trace-id': traceId },
       });

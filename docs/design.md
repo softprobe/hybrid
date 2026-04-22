@@ -2,7 +2,7 @@
 
 **Status:** Draft for implementation planning  
 **Audience:** Engineers implementing runtime, proxy extension, SDKs, and CLI  
-**Related contracts:** [platform-architecture.md](./platform-architecture.md), [http-control-api.md](../spec/protocol/http-control-api.md), [proxy-otel-api.md](../spec/protocol/proxy-otel-api.md), [session-headers.md](../spec/protocol/session-headers.md)
+**Related contracts:** [platform-architecture.md](./platform-architecture.md), [http-control-api.md](../spec/protocol/http-control-api.md), [proxy-otel-api.md](../spec/protocol/proxy-otel-api.md), [session-headers.md](../spec/protocol/session-headers.md), [proxy-integration-posture.md](./proxy-integration-posture.md), [language-instrumentation.md](./language-instrumentation.md)
 
 ---
 
@@ -60,6 +60,15 @@ Both handler groups share a **single in-memory session store** (`internal/store/
 **v1 needs no database.** Add Redis/Postgres only for HA or restart survival (see [platform-architecture.md](./platform-architecture.md) §10.2).
 
 **Future split (not v1 scope):** If inject/extract volume requires independent scaling, the two handler groups can be extracted to separate processes sharing a common datastore. The spec boundaries ([http-control-api.md](../spec/protocol/http-control-api.md) vs [proxy-otel-api.md](../spec/protocol/proxy-otel-api.md)) remain valid in that configuration. Neither service is an Istio-style mesh control plane for Envoy routing — see [platform-architecture.md](./platform-architecture.md).
+
+### 2.5 Instrumentation planes (proxy vs language)
+
+Softprobe is intentionally **hybrid**: HTTP capture and inject can run at the **mesh** (Envoy + Softprobe WASM → `softprobe-runtime` per [proxy-otel-api.md](../spec/protocol/proxy-otel-api.md)), while **in-process** instrumentation (today mainly `softprobe-js`) can cover **non-HTTP** dependencies and environments **without** a mesh.
+
+- **Default for HTTP** in documented tutorials and CI: **proxy-first** plus **session + case + rules** on the unified runtime (§3, §3.2). Language SDKs are thin **control-plane** clients; they do not replace the proxy for transparent HTTP interception.
+- **Optional language plane:** Redis, Postgres, and other protocols, or teams that cannot deploy WASM yet. This is **not** the same as making Express/Fastify/`pg` patching **mandatory** for v1 — §3.1 non-goals still forbid that as the default product path. Optional instrumentation is an **advanced** layer for stacks we explicitly support.
+- **Customer APM:** Full request/response bodies from the proxy are sent **out-of-band** to **`sp_backend_url`** (hosted or self-hosted runtime), **not** into the customer’s existing Datadog / Honeycomb / New Relic pipeline by default. See [proxy-integration-posture.md](./proxy-integration-posture.md).
+- **Node legacy:** NDJSON cassettes and `SOFTPROBE_CONFIG_PATH` / YAML-driven init in `softprobe-js` are **legacy**; the target is runtime-backed sessions and **case JSON** only. See [language-instrumentation.md](./language-instrumentation.md).
 
 ---
 

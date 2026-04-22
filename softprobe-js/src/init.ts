@@ -1,56 +1,33 @@
 /**
  * Boot entry: softprobe/init.
- * Must be imported first (before OTel). Reads config from .softprobe/config.yml
- * (or SOFTPROBE_CONFIG_PATH) and seeds global state. Design §4.1, §11.
- * Mode and cassette location come from config only (cassetteDirectory or cassettePath; no env fallback).
- * Task 13.1: when cassetteDirectory is set, init does not create or pass a single-file cassette.
+ * Runtime/session-aligned boot: does not accept mode/data-dir env overrides.
  *
- * Instrumentation is always the same for all modes: mutators and replay patches are applied once.
- * Wrappers (pg, redis, http via MSW) take action at runtime based on SoftprobeContext.getMode().
- * All replay patches are applied here so the app only needs to load init before OTel (one-line init; design §4.1).
+ * For Express/Fastify auto-patching, import `@softprobe/softprobe-js/legacy` after this
+ * module and call `applyLegacyFrameworkPatches()` (PD6.5f).
  */
 
-const pathModule = require('path');
-const { ConfigManager } = require('./config/config-manager');
 const { SoftprobeContext } = require('./context');
 
-const configPath = process.env.SOFTPROBE_CONFIG_PATH ?? './.softprobe/config.yml';
-try {
-  const mgr = new ConfigManager(configPath);
-  const g = mgr.get() as {
-    mode?: string;
-    cassettePath?: string;
-    cassetteDirectory?: string;
-    replay?: { strictReplay?: boolean; strictComparison?: boolean };
-  };
-  const cassetteDirectory =
-    g.cassetteDirectory ??
-    (typeof g.cassettePath === 'string' && g.cassettePath ? pathModule.dirname(g.cassettePath) : undefined);
-  SoftprobeContext.initGlobal({
-    mode: g.mode,
-    cassetteDirectory,
-    storage: undefined,
-    strictReplay: g.replay?.strictReplay,
-    strictComparison: g.replay?.strictComparison,
-  });
-} catch {
-  SoftprobeContext.initGlobal({
-    mode: 'PASSTHROUGH',
-    cassetteDirectory: undefined,
-    storage: undefined,
-    strictReplay: false,
-    strictComparison: false,
-  });
+if (process.env.SOFTPROBE_MODE !== undefined || process.env.SOFTPROBE_DATA_DIR !== undefined) {
+  throw new Error(
+    'softprobe/init does not support SOFTPROBE_MODE or SOFTPROBE_DATA_DIR. ' +
+      'Use runtime sessions (Softprobe/SoftprobeSession) or explicit SoftprobeContext.initGlobal in tests.'
+  );
 }
 
+SoftprobeContext.initGlobal({
+  mode: 'PASSTHROUGH',
+  cassetteDirectory: undefined,
+  storage: undefined,
+  strictReplay: process.env.SOFTPROBE_STRICT_REPLAY === '1',
+  strictComparison: process.env.SOFTPROBE_STRICT_COMPARISON === '1',
+});
+
 const { applyAutoInstrumentationMutator } = require('./bootstrap/otel/mutator');
-const { applyFrameworkMutators } = require('./bootstrap/otel/framework-mutator');
-const { setupHttpReplayInterceptor } = require('./instrumentations/fetch');
 require('./instrumentations/postgres');
 const { setupRedisReplay } = require('./instrumentations/redis');
+const { setupHttpReplayInterceptor } = require('./instrumentations/fetch');
 
 applyAutoInstrumentationMutator();
-applyFrameworkMutators();
-// Redis: wrap attachCommands before redis is ever loaded (e.g. by OTel during sdk.start()).
 setupRedisReplay();
 setupHttpReplayInterceptor();

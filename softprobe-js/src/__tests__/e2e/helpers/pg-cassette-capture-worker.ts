@@ -1,7 +1,7 @@
 /**
  * Task 12.2.1: Child worker for Postgres NDJSON cassette capture E2E.
  * Loads softprobe/init (CAPTURE) first; runs one pg query inside SoftprobeContext.run
- * with cassetteDirectory + traceId so capture writes to {cassetteDirectory}/{traceId}.ndjson.
+ * with cassetteDirectory + traceId so capture writes to {cassetteDirectory}/{traceId}.case.json.
  *
  * Env: SOFTPROBE_CONFIG_PATH (or legacy SOFTPROBE_CASSETTE_PATH via run-child YAML), PG_URL
  * Stdout: JSON { rows, rowCount } from the query (for optional assertions).
@@ -13,6 +13,8 @@ import { softprobe } from '../../../api';
 
 const initPath = path.join(__dirname, '..', '..', '..', 'init.ts');
 require(initPath);
+const { applyLegacyFrameworkPatches } = require('../../../legacy');
+applyLegacyFrameworkPatches();
 
 async function main() {
   const configPath = process.env.SOFTPROBE_CONFIG_PATH ?? './.softprobe/config.yml';
@@ -30,7 +32,7 @@ async function main() {
       const fromPath = cfg.cassettePath;
       if (typeof fromPath === 'string' && fromPath) {
         cassetteDirectory = path.dirname(fromPath);
-        traceId = path.basename(fromPath, '.ndjson');
+        traceId = path.basename(fromPath, '.case.json');
       }
     }
   } catch {

@@ -16,5 +16,6 @@ module.exports = {
     '^@softprobe/softprobe-js$': '<rootDir>/src/index.ts',
     '^@softprobe/softprobe-js/hooks$': '<rootDir>/src/hooks.ts',
     '^@softprobe/softprobe-js/suite$': '<rootDir>/src/suite.ts',
+    '^@softprobe/softprobe-js/legacy$': '<rootDir>/src/legacy.ts',
   },
 };

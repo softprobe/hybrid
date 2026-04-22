@@ -12,9 +12,9 @@ import type { SoftprobeCassetteRecord } from '../../types/schema';
 import { E2eArtifacts } from './helpers/e2e-artifacts';
 
 const WORKER_SCRIPT = path.join(__dirname, 'helpers', 'express-inbound-worker.ts');
-const FIXTURE_CASSETTE = path.join(__dirname, 'fixtures', 'express-replay.ndjson');
+const FIXTURE_CASSETTE = path.join(__dirname, 'fixtures', 'express-replay.case.json');
 
-/** Known traceId in fixtures/express-replay.ndjson (32 hex lowercase). */
+/** Known traceId in fixtures/express-replay.case.json (32 hex lowercase). */
 const FIXTURE_TRACE_ID = '00000000000000000000000000000001';
 
 function getInboundRecords(records: SoftprobeCassetteRecord[]): SoftprobeCassetteRecord[] {
@@ -37,9 +37,9 @@ describe('E2E Express inbound replay (Task 14.4.2)', () => {
 
   beforeAll(async () => {
     artifacts = new E2eArtifacts();
-    cassettePath = artifacts.createTempFile('express-replay-e2e', '.ndjson');
+    cassettePath = artifacts.createTempFile('express-replay-e2e', '.case.json');
     const cassetteDirectory = path.dirname(cassettePath);
-    const traceId = path.basename(cassettePath, '.ndjson');
+    const traceId = path.basename(cassettePath, '.case.json');
     captureConfigPath = artifacts.createSoftprobeConfig('express-inbound-replay-capture', {
       mode: 'CAPTURE',
       cassetteDirectory,
@@ -63,7 +63,7 @@ describe('E2E Express inbound replay (Task 14.4.2)', () => {
     );
     try {
       await waitForServer(port, 30000);
-      const traceId = path.basename(cassettePath, '.ndjson');
+      const traceId = path.basename(cassettePath, '.case.json');
       await fetch(`http://127.0.0.1:${port}/`, { headers: { 'x-softprobe-trace-id': traceId } });
       await new Promise((r) => setTimeout(r, 800));
       await fetch(`http://127.0.0.1:${port}/exit`).catch(() => {});
@@ -93,7 +93,7 @@ describe('E2E Express inbound replay (Task 14.4.2)', () => {
 
   it('REPLAY + strict with fixture cassette succeeds (propagation + matcher)', async () => {
     const fixtureDir = artifacts.createTempDir('express-replay-fixture');
-    const fixtureCopyPath = path.join(fixtureDir, `${FIXTURE_TRACE_ID}.ndjson`);
+    const fixtureCopyPath = path.join(fixtureDir, `${FIXTURE_TRACE_ID}.case.json`);
     fs.copyFileSync(FIXTURE_CASSETTE, fixtureCopyPath);
     const fixtureReplayConfigPath = artifacts.createSoftprobeConfig('express-replay-fixture-config', {
       mode: 'REPLAY',
@@ -149,7 +149,7 @@ describe('E2E Express inbound replay (Task 14.4.2)', () => {
 
     try {
       await waitForServer(port, 30000);
-      const traceIdForFile = path.basename(cassettePath, '.ndjson');
+      const traceIdForFile = path.basename(cassettePath, '.case.json');
       const traceIdHex = String(capturedTraceId).trim().toLowerCase();
       const traceparent = `00-${traceIdHex}-0000000000000001-01`;
       const res = await fetch(`http://127.0.0.1:${port}/`, {

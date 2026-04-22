@@ -6,15 +6,19 @@
  * - Outbound = Calls this app makes TO external backends (e.g. fetch()). Instrumentation records them (type 'outbound').
  *
  * Mode is driven by YAML config (SOFTPROBE_CONFIG_PATH).
- * - CAPTURE: cassettePath in config; GET /exit flushes store and exits.
+ * - CAPTURE: cassettePath in config; GET /exit awaits pending case writes then exits.
  * - REPLAY: uses runtime replay wiring from init + middleware/context run path; GET /exit exits.
  * - SOFTPROBE_E2E_OUTBOUND_URL optionally overrides default outbound URL for deterministic local tests.
  * - SOFTPROBE_E2E_UNRECORDED_URL optionally overrides strict-negative outbound URL.
  * PORT required for both.
  */
 
+import path from 'path';
+
 import '../../../init';
 import { ConfigManager } from '../../../config/config-manager';
+import { SoftprobeContext } from '../../../context';
+import { applyLegacyFrameworkPatches } from '../../../legacy';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 
@@ -26,25 +30,30 @@ sdk.start();
 const configPath = process.env.SOFTPROBE_CONFIG_PATH ?? './.softprobe/config.yml';
 let softprobeMode = 'PASSTHROUGH';
 try {
-  const cfg = new ConfigManager(configPath).get();
+  const cfg = new ConfigManager(configPath).get() as {
+    mode?: string;
+    cassettePath?: string;
+    cassetteDirectory?: string;
+    replay?: { strictReplay?: boolean; strictComparison?: boolean };
+  };
   softprobeMode = cfg.mode ?? 'PASSTHROUGH';
+  const cassetteDirectory =
+    cfg.cassetteDirectory ??
+    (typeof cfg.cassettePath === 'string' && cfg.cassettePath ? path.dirname(cfg.cassettePath) : undefined);
+  SoftprobeContext.initGlobal({
+    mode: softprobeMode,
+    cassetteDirectory,
+    strictReplay: cfg.replay?.strictReplay,
+    strictComparison: cfg.replay?.strictComparison,
+  });
 } catch {
   softprobeMode = 'PASSTHROUGH';
 }
-const isReplay = softprobeMode === 'REPLAY';
+applyLegacyFrameworkPatches();
 const outboundUrl = process.env.SOFTPROBE_E2E_OUTBOUND_URL || 'https://httpbin.org/get';
 const unrecordedUrl = process.env.SOFTPROBE_E2E_UNRECORDED_URL || 'https://httpbin.org/post';
 
-// #region agent log
-function _dbg(location: string, message: string, data: Record<string, unknown>): void {
-  fetch('http://127.0.0.1:7242/ingest/abae8b62-1eb2-436b-99c9-e8e6a9718ab9', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location, message, data, timestamp: Date.now() }) }).catch(() => {});
-}
-// #endregion
-
 async function startServer(): Promise<void> {
-  // #region agent log
-  _dbg('express-inbound-worker.ts:startServer', 'startServer entered', { port: process.env.PORT, isReplay });
-  // #endregion
   const express = require('express');
   const app = express();
 
@@ -69,19 +78,14 @@ async function startServer(): Promise<void> {
   app.get('/exit', (_req: unknown, res: { send: (s: string) => void }) => {
     res.send('ok');
     setImmediate(() => {
-      // Background flusher handles flush; direct write needs no explicit flush
-      process.exit(0);
+      void SoftprobeContext.flushPendingCassettes()
+        .then(() => process.exit(0))
+        .catch(() => process.exit(0));
     });
   });
 
   const port = parseInt(process.env.PORT || '0', 10) || 39301;
-  // #region agent log
-  _dbg('express-inbound-worker.ts:startServer', 'listen called', { port });
-  // #endregion
   app.listen(port, () => {
-    // #region agent log
-    _dbg('express-inbound-worker.ts:startServer', 'listen callback', { port });
-    // #endregion
     process.stdout.write(JSON.stringify({ port }) + '\n');
   });
 }

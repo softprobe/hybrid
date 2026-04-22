@@ -1,17 +1,18 @@
-# Softprobe Design (Main)
+# Softprobe Design (Main) — `softprobe-js` package
 
-This is the primary entry point for Softprobe design.
+This file is the **Node / TypeScript package–local** design index for in-process instrumentation, cassettes, and matchers inside [`softprobe-js/`](./).
 
-Use this file for:
-- system goals and boundaries
-- end-to-end runtime flow
-- links to focused design specifications
+**Canonical hybrid platform design** (proxy + unified runtime + case JSON, CLI-first) lives in the monorepo at **[`docs/design.md`](../docs/design.md)**. Read that first for product scope, goals, and the **instrumentation planes** split ([`docs/language-instrumentation.md`](../docs/language-instrumentation.md), [`docs/proxy-integration-posture.md`](../docs/proxy-integration-posture.md)).
+
+Use **this** file for:
+- Node-specific runtime flow and integration rules
+- links to focused specs below
 
 Use focused specs for implementation details:
 - [Multi-repo and package layout](./design-multi-repo-layout.md)
 - [Proxy-first capture and injection design](./design-proxy-first.md)
 - [Context model](./design-context.md)
-- [Cassette model (NDJSON)](./design-cassette.md)
+- [Cassette model (NDJSON) — legacy baseline](./design-cassette.md)
 - [Matcher model](./design-matcher.md)
 
 ---
@@ -19,6 +20,8 @@ Use focused specs for implementation details:
 ## 1) Scope
 
 Softprobe provides record/replay for backend dependency calls and inbound responses.
+
+**Product direction:** new work should align with **`softprobe-runtime`** sessions, **case JSON** (`*.case.json`), and the thin SDK API (`startSession`, `loadCaseFromFile`, `mockOutbound`, …) per [`docs/design.md`](../docs/design.md). The items below describe the **legacy** in-process stack (NDJSON cassettes, `SOFTPROBE_CONFIG_PATH` / YAML init, per-package patches) slated for removal in the Node port cutover (see [`docs/language-instrumentation.md`](../docs/language-instrumentation.md) §5–6).
 
 Core capabilities:
 - context-scoped execution via OpenTelemetry context

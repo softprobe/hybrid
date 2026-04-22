@@ -6,6 +6,11 @@ Get a real capture-and-replay loop working in **about 10 minutes**. By the end y
 - a captured `*.case.json` file for a sample request,
 - a green Jest test that replays the capture without hitting the live upstream.
 
+::: info Scope
+This quick start is the **proxy instrumentation** path (Envoy + Softprobe WASM).  
+If you are integrating the Node **language instrumentation** path, see [Proxy vs language instrumentation](/guides/proxy-vs-language-instrumentation) first.
+:::
+
 ::: tip Prefer another language?
 After you finish this walkthrough, see [Replay in pytest](/guides/replay-in-pytest), [JUnit](/guides/replay-in-junit), or [Go](/guides/replay-in-go). The capture half is identical; only the test file changes.
 :::

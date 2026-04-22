@@ -47,9 +47,9 @@ describe('E2E Redis cassette capture/replay (Task 12.3)', () => {
       console.warn('Skipping Redis E2E: Docker unavailable', e);
       return;
     }
-    cassettePath = artifacts.createTempFile('softprobe-e2e-cassette-redis', '.ndjson');
+    cassettePath = artifacts.createTempFile('softprobe-e2e-cassette-redis', '.case.json');
     const cassetteDirectory = path.dirname(cassettePath);
-    const traceId = path.basename(cassettePath, '.ndjson');
+    const traceId = path.basename(cassettePath, '.case.json');
     captureConfigPath = artifacts.createSoftprobeConfig('softprobe-e2e-redis-capture', {
       mode: 'CAPTURE',
       cassetteDirectory,

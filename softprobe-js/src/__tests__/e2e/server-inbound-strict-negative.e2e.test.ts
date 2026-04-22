@@ -11,12 +11,12 @@ import { runServer, waitForServer, closeServer } from './run-child';
 import { E2eArtifacts } from './helpers/e2e-artifacts';
 
 const WORKER_SCRIPT = path.join(__dirname, 'helpers', 'fastify-inbound-worker.ts');
-const FIXTURE_CASSETTE = path.join(__dirname, 'fixtures', 'express-replay.ndjson');
+const FIXTURE_CASSETTE = path.join(__dirname, 'fixtures', 'express-replay.case.json');
 
 /** Disable OTel Fastify instrumentation (same as Task 14.4.3). */
 const FASTIFY_WORKER_ENV = { OTEL_NODE_DISABLED_INSTRUMENTATIONS: 'fastify' };
 
-/** TraceId in express-replay.ndjson; fixture has GET / and GET https://httpbin.org/get only (no POST httpbin.org/post). */
+/** TraceId in express-replay.case.json; fixture has GET / and GET https://httpbin.org/get only (no POST httpbin.org/post). */
 const FIXTURE_TRACE_ID = '00000000000000000000000000000001';
 
 describe('E2E Server-side strict negative (Task 14.4.4)', () => {
@@ -56,7 +56,7 @@ describe('E2E Server-side strict negative (Task 14.4.4)', () => {
   it('replay with unrecorded outbound call fails with 500 and x-softprobe-error (passthrough not invoked)', async () => {
     if (!fastifyWorkerAvailable) return;
     const fixtureDir = artifacts.createTempDir('strict-negative');
-    const fixtureCopy = path.join(fixtureDir, `${FIXTURE_TRACE_ID}.ndjson`);
+    const fixtureCopy = path.join(fixtureDir, `${FIXTURE_TRACE_ID}.case.json`);
     fs.copyFileSync(FIXTURE_CASSETTE, fixtureCopy);
     const replayConfigPath = artifacts.createSoftprobeConfig('server-strict-negative-replay', {
       mode: 'REPLAY',

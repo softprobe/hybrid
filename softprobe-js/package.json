@@ -42,6 +42,10 @@
       "types": "./dist/init.d.ts",
       "default": "./dist/init.js"
     },
+    "./legacy": {
+      "types": "./dist/legacy.d.ts",
+      "default": "./dist/legacy.js"
+    },
     "./hooks": {
       "types": "./dist/hooks.d.ts",
       "default": "./dist/hooks.js"

@@ -2,6 +2,9 @@
  * Softprobe init must load before OpenTelemetry starts and before express loads.
  */
 import '../../src/init';
+import { applyLegacyFrameworkPatches } from '../../src/legacy';
+
+applyLegacyFrameworkPatches();
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 

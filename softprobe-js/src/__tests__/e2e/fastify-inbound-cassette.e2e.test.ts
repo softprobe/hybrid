@@ -11,12 +11,12 @@ import type { SoftprobeCassetteRecord } from '../../types/schema';
 import { E2eArtifacts } from './helpers/e2e-artifacts';
 
 const WORKER_SCRIPT = path.join(__dirname, 'helpers', 'fastify-inbound-worker.ts');
-const FIXTURE_CASSETTE = path.join(__dirname, 'fixtures', 'express-replay.ndjson');
+const FIXTURE_CASSETTE = path.join(__dirname, 'fixtures', 'express-replay.case.json');
 
 /** Disable OTel Fastify instrumentation so our framework mutator's wrapper gets the raw factory (Fastify 5 returns Promise; OTel expects sync). */
 const FASTIFY_WORKER_ENV = { OTEL_NODE_DISABLED_INSTRUMENTATIONS: 'fastify' };
 
-/** Known traceId in fixtures/express-replay.ndjson (32 hex lowercase). */
+/** Known traceId in fixtures/express-replay.case.json (32 hex lowercase). */
 const FIXTURE_TRACE_ID = '00000000000000000000000000000001';
 
 function getInboundRecords(records: SoftprobeCassetteRecord[]): SoftprobeCassetteRecord[] {
@@ -49,9 +49,9 @@ describe('E2E Fastify inbound cassette (Task 14.4.3)', () => {
 
   beforeAll(async () => {
     artifacts = new E2eArtifacts();
-    cassettePath = artifacts.createTempFile('fastify-inbound-e2e', '.ndjson');
+    cassettePath = artifacts.createTempFile('fastify-inbound-e2e', '.case.json');
     const cassetteDirectory = path.dirname(cassettePath);
-    const traceId = path.basename(cassettePath, '.ndjson');
+    const traceId = path.basename(cassettePath, '.case.json');
     captureConfigPath = artifacts.createSoftprobeConfig('fastify-inbound-capture', {
       mode: 'CAPTURE',
       cassetteDirectory,
@@ -93,7 +93,7 @@ describe('E2E Fastify inbound cassette (Task 14.4.3)', () => {
 
     try {
       await waitForServer(port, 45000);
-      const traceId = path.basename(cassettePath, '.ndjson');
+      const traceId = path.basename(cassettePath, '.case.json');
       const res = await fetch(`http://127.0.0.1:${port}/`, {
         headers: { 'x-softprobe-trace-id': traceId },
         signal: AbortSignal.timeout(20000),
@@ -128,7 +128,7 @@ describe('E2E Fastify inbound cassette (Task 14.4.3)', () => {
   it('REPLAY + strict with fixture cassette succeeds (no live dependencies)', async () => {
     if (!fastifyWorkerAvailable) return;
     const fixtureDir = artifacts.createTempDir('fastify-fixture');
-    const fixtureCopyPath = path.join(fixtureDir, `${FIXTURE_TRACE_ID}.ndjson`);
+    const fixtureCopyPath = path.join(fixtureDir, `${FIXTURE_TRACE_ID}.case.json`);
     fs.copyFileSync(FIXTURE_CASSETTE, fixtureCopyPath);
     const fixtureReplayConfigPath = artifacts.createSoftprobeConfig('fastify-fixture-replay', {
       mode: 'REPLAY',
@@ -180,7 +180,7 @@ describe('E2E Fastify inbound cassette (Task 14.4.3)', () => {
     );
     try {
       await waitForServer(capturePort, 45000);
-      const traceId = path.basename(cassettePath, '.ndjson');
+      const traceId = path.basename(cassettePath, '.case.json');
       await fetch(`http://127.0.0.1:${capturePort}/`, {
         headers: { 'x-softprobe-trace-id': traceId },
         signal: AbortSignal.timeout(20000),
@@ -210,7 +210,7 @@ describe('E2E Fastify inbound cassette (Task 14.4.3)', () => {
 
     try {
       await waitForServer(replayPort, 45000);
-      const traceIdForFile = path.basename(cassettePath, '.ndjson');
+      const traceIdForFile = path.basename(cassettePath, '.case.json');
       const traceIdHex = String(capturedTraceId).trim().toLowerCase();
       const traceparent = `00-${traceIdHex}-0000000000000001-01`;
       const res = await fetch(`http://127.0.0.1:${replayPort}/`, {

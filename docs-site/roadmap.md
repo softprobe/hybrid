@@ -5,7 +5,7 @@ This page tracks what's **shipped**, what's **in progress**, and what's **planne
 We follow a time-boxed release cadence: a minor release (`v0.N`) every **4–6 weeks**, patch releases as needed. See [Versioning](/versioning) for what "breaking" means for each surface.
 
 ::: info Scope status
-We've accepted that every feature currently documented on this site is a commitment. Items we haven't built yet are in _In progress_ below, each one tied to a delivery task in [`tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md) (prefix `PD`). The _Planned_ section is intentionally short — only work we've explicitly scoped past the current delivery wave belongs there.
+We've accepted that every feature currently documented on this site is a commitment. Items we haven't built yet are in _In progress_ below, each one tied to a delivery task in [`tasks.md`](https://github.com/softprobe/hybrid/blob/main/tasks.md) (prefix `PD`). The _Planned_ section is intentionally short — only work we've explicitly scoped past the current delivery wave belongs there.
 :::
 
 ---
@@ -19,7 +19,7 @@ We've accepted that every feature currently documented on this site is a commitm
 - **Jest codegen** (`softprobe generate jest-session`) for a zero-boilerplate default path.
 - **Envoy + WASM** proxy with ingress / egress listener pair; Docker Compose for local dev.
 - **Strict policy** with observable per-session miss counter and the [debug-strict-miss](/guides/debug-strict-miss) workflow.
-- **CLI**: `doctor`, `session {start,load-case,rules apply,policy set --strict,stats,close}`, `inspect case`, `generate jest-session`, and the new **`suite {run,validate,diff}`** with Node hook sidecar + JUnit/HTML reporters — see the [`e2e/cli-suite-run/`](https://github.com/softprobe/softprobe/tree/main/e2e/cli-suite-run) end-to-end harness.
+- **CLI**: `doctor`, `session {start,load-case,rules apply,policy set --strict,stats,close}`, `inspect {case,session}`, `validate {case,rules,suite}`, `generate {jest-session,test}`, `export otlp`, `scrub`, `completion`, `capture run`, `replay run`, and **`suite {run,validate,diff}`** with Node hook sidecar + JUnit/HTML reporters — see the [`e2e/cli-suite-run/`](https://github.com/softprobe/hybrid/tree/main/e2e/cli-suite-run) end-to-end harness.
 - **Docs site** at `docs.softprobe.dev` (this site).
 - **End-to-end acceptance tests** covering capture, replay, and strict-miss paths across Go, Jest, pytest, and JUnit harnesses.
 
@@ -35,13 +35,13 @@ Each item below is actively scoped in [`tasks.md`](https://github.com/softprobe/
 
 ### Delivering what's already documented (closing the doc-vs-shipped gap)
 
-- **CLI surface parity with `reference/cli.md`** — remaining items are `capture run`, `replay run`, `validate {case,rules,suite}`, `inspect session`, `generate test` for non-Jest frameworks, `export otlp`, `scrub`, and shell `completion`. Stable exit codes (`0/2/3/4/5/10/20`), universal `--json` envelope, and `--verbose`/`--quiet`/`NO_COLOR`. `suite run`/`validate`/`diff` with the Node hook sidecar has landed. Target: **v0.6**. Tracks [tasks.md PD1](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd1--cli-contract-completeness).
-- **Auth plumbing** — CLI and all four SDKs read `SOFTPROBE_API_TOKEN` from the environment and attach `Authorization: Bearer` automatically. The runtime already validates the token (v0.5); the clients don't send it yet. Target: **v0.6**. Tracks [tasks.md PD2](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd2--runtime-auth-plumbing-in-sdks-and-cli).
-- **Runtime observability** — Prometheus `/metrics`, `SOFTPROBE_LOG_LEVEL`, `{sessionId}` template substitution in `SOFTPROBE_CAPTURE_CASE_PATH`. Target: **v0.6**. Tracks [tasks.md PD4](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd4--runtime-observability-and-capture-operations).
-- **Object-storage capture writers** — `s3://`, `gs://`, `azblob://` destinations for capture output (default remains `file://`). Target: **v0.6–v0.7**. Tracks [tasks.md PD4.4a](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd4--runtime-observability-and-capture-operations).
-- **TS SDK reference alignment** — ship the `@softprobe/softprobe-js/hooks` and `@softprobe/softprobe-js/suite` subpath exports, unified `SoftprobeError` base + documented aliases (`RuntimeError`, `CaseLookupError`, `CaseLoadError`), and `setLogger` / `SOFTPROBE_LOG` debug logging. Target: **v0.6**. Tracks [tasks.md PD3](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd3--typescript-sdk-reference-reality-alignment).
-- **Release hygiene** — dual-license `LICENSE` coverage across the repo (Softprobe Source License 1.0 for server-side, Apache-2.0 for SDKs and schemas; see [`LICENSING.md`](https://github.com/softprobe/softprobe/blob/main/LICENSING.md)), runtime container image and WASM OCI bundle on `ghcr.io/softprobe/*`, build-time CLI version string, and automated publish workflows for npm / PyPI / Maven Central / the Go module path. Target: **v0.6**. Tracks [tasks.md PD5](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd5--release-hygiene).
-- **Doc truth banners** — `::: warning Not shipped yet` on the CLI reference, guide pages, and deployment docs for features above that haven't landed. Banners get removed as each delivery task completes. Tracks [tasks.md PD6](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd60--immediate-doc-truth-sync-banners-only).
+- **CLI surface parity with `reference/cli.md`** — `suite {run,validate,diff}`, `validate {case,rules,suite}`, `inspect session`, `generate test`, `export otlp`, `scrub`, `completion`, `capture run`, and `replay run` are **shipped** in the current CLI build. Remaining gaps are mostly **contract polish**: stable exit codes on every path ([PD1.1a](https://github.com/softprobe/hybrid/blob/main/tasks.md)), universal `--json` envelope on every mutating command ([PD1.1c](https://github.com/softprobe/hybrid/blob/main/tasks.md)), and a few session conveniences ([PD1.3](https://github.com/softprobe/hybrid/blob/main/tasks.md)). Tracks [tasks.md PD1](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd1--cli-contract-completeness).
+- **Auth plumbing** — CLI and all four SDKs attach `Authorization: Bearer` when `SOFTPROBE_API_TOKEN` is set ([PD2.1a–e](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd2--runtime-auth-plumbing-in-sdks-and-cli) shipped). Remaining: **e2e auth** wiring across harnesses ([PD2.1f](https://github.com/softprobe/hybrid/blob/main/tasks.md)).
+- **Runtime observability** — Prometheus `/metrics`, `SOFTPROBE_LOG_LEVEL`, `{sessionId}` template substitution in `SOFTPROBE_CAPTURE_CASE_PATH`. Target: **v0.6**. Tracks [tasks.md PD4](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd4--runtime-observability-and-capture-operations).
+- **Object-storage capture writers** — `s3://`, `gs://`, `azblob://` destinations for capture output (default remains `file://`). Target: **v0.6–v0.7**. Tracks [tasks.md PD4.4a](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd4--runtime-observability-and-capture-operations).
+- **TS SDK reference alignment** — **shipped** in current build (hooks + suite subpaths, error aliases, `setLogger` / `SOFTPROBE_LOG`). Tracks [tasks.md PD3](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd3--typescript-sdk-reference-reality-alignment).
+- **Release hygiene** — dual-license `LICENSE` coverage, runtime + WASM images on GHCR, and build-time CLI version string are **landed**; automated **npm / PyPI / Maven / Go module** publishes remain. See [`LICENSING.md`](https://github.com/softprobe/hybrid/blob/main/LICENSING.md). Tracks [tasks.md PD5](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd5--release-hygiene).
+- **Doc truth sync** — CLI reference banners for shipped commands were cleared in [Phase PD6](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd6--doc-truth-sync-after-each-code-phase-lands). Deployment pages still carry `::: warning Not shipped yet` only where the runtime feature is genuinely pending (for example PD4 metrics / capture templates).
 
 ### Scaling and hosted-service track
 
@@ -78,4 +78,4 @@ To keep scope honest, here's what we are **not** planning to build:
 
 ## Contribute
 
-All roadmap items live as issues on [github.com/softprobe/softprobe](https://github.com/softprobe/softprobe). Open a **discussion** first if you want to propose a significant new capability — we'd rather agree on the shape early.
+All roadmap items live in the [hybrid](https://github.com/softprobe/hybrid) monorepo. Open a **discussion** first if you want to propose a significant new capability — we'd rather agree on the shape early.

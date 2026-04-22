@@ -6,7 +6,7 @@ The `dev.softprobe:softprobe-java` Maven artifact. Targets Java 17+.
 The Maven / Gradle coordinates below refer to a **planned** release. This
 monorepo does not yet publish `dev.softprobe:softprobe-java`. To use the SDK
 today, build it from source in the
-[softprobe monorepo](https://github.com/softprobe/softprobe) (`softprobe-java/`)
+[hybrid monorepo](https://github.com/softprobe/hybrid) (`softprobe-java/`)
 and install it to your local Maven cache — see its `README.md` for details.
 :::
 

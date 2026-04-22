@@ -2,6 +2,11 @@
 
 This guide turns a captured `*.case.json` into a passing Jest test in about **5 minutes**. You will write about 20 lines of TypeScript and end with a green check.
 
+::: info Instrumentation mode
+This replay authoring flow is the same for proxy and Node language instrumentation.  
+If you are deciding between those models, see [Proxy vs language instrumentation](/guides/proxy-vs-language-instrumentation).
+:::
+
 **Prerequisites:**
 - A running Softprobe stack ([Installation](/installation)).
 - A captured case file from [Capture your first session](/guides/capture-your-first-session), or use the checked-in `spec/examples/cases/fragment-happy-path.case.json` for this walkthrough.

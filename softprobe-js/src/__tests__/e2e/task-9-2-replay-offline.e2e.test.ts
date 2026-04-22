@@ -7,17 +7,24 @@ import fs from 'fs';
 import path from 'path';
 import { runChild, runServer, waitForServer, closeServer } from './run-child';
 import { E2eArtifacts } from './helpers/e2e-artifacts';
+import { buildCaseDocumentFromRecords } from '../../core/cassette/case-bridge';
+import type { SoftprobeCassetteRecord } from '../../types/schema';
 
 const EXPRESS_WORKER = path.join(__dirname, 'helpers', 'express-inbound-worker.ts');
-const EXPRESS_FIXTURE = path.join(__dirname, 'fixtures', 'express-replay.ndjson');
+const EXPRESS_FIXTURE = path.join(__dirname, 'fixtures', 'express-replay.case.json');
 const PG_REPLAY_WORKER = path.join(__dirname, 'helpers', 'pg-cassette-replay-worker.ts');
 const REDIS_REPLAY_WORKER = path.join(__dirname, 'helpers', 'redis-replay-worker.ts');
 const FIXTURE_TRACE_ID = '00000000000000000000000000000001';
 const PG_TRACE_ID = '00000000000000000000000000000092';
 const REDIS_TRACE_ID = '00000000000000000000000000000093';
 
-function writeFixture(pathname: string, lines: string[]): void {
-  fs.writeFileSync(pathname, `${lines.join('\n')}\n`, 'utf8');
+function writeCaseFixture(pathname: string, records: SoftprobeCassetteRecord[]): void {
+  const caseId = records[0]?.traceId ?? 'trace';
+  fs.writeFileSync(
+    pathname,
+    `${JSON.stringify(buildCaseDocumentFromRecords(records, { caseId, mode: 'replay' }), null, 2)}\n`,
+    'utf8'
+  );
 }
 
 describe('Task 9.2 - replay succeeds with dependencies offline', () => {
@@ -30,13 +37,13 @@ describe('Task 9.2 - replay succeeds with dependencies offline', () => {
   beforeEach(() => {
     artifacts = new E2eArtifacts();
     const now = Date.now();
-    pgCassettePath = artifacts.createTempFile('task-9-2-pg', '.ndjson');
-    redisCassettePath = artifacts.createTempFile('task-9-2-redis', '.ndjson');
+    pgCassettePath = artifacts.createTempFile('task-9-2-pg', '.case.json');
+    redisCassettePath = artifacts.createTempFile('task-9-2-redis', '.case.json');
     redisKey = `task9:redis:key:${now}`;
     redisValue = `task9:redis:value:${now}`;
 
-    writeFixture(pgCassettePath, [
-      JSON.stringify({
+    writeCaseFixture(pgCassettePath, [
+      {
         version: '4.1',
         traceId: PG_TRACE_ID,
         spanId: '0000000000000092',
@@ -45,11 +52,11 @@ describe('Task 9.2 - replay succeeds with dependencies offline', () => {
         protocol: 'postgres',
         identifier: 'SELECT 1 AS num, $1::text AS label',
         responsePayload: { rows: [{ num: 1, label: 'e2e-cassette' }], rowCount: 1 },
-      }),
+      },
     ]);
 
-    writeFixture(redisCassettePath, [
-      JSON.stringify({
+    writeCaseFixture(redisCassettePath, [
+      {
         version: '4.1',
         traceId: REDIS_TRACE_ID,
         spanId: '0000000000000093',
@@ -58,7 +65,7 @@ describe('Task 9.2 - replay succeeds with dependencies offline', () => {
         protocol: 'redis',
         identifier: `GET ${redisKey}`,
         responsePayload: redisValue,
-      }),
+      },
     ]);
   });
 
@@ -68,7 +75,7 @@ describe('Task 9.2 - replay succeeds with dependencies offline', () => {
 
   it('strict replay succeeds for recorded HTTP/Postgres/Redis without live dependencies', async () => {
     const fixtureDir = artifacts.createTempDir('task-9-2-http');
-    const expressFixtureCopy = path.join(fixtureDir, `${FIXTURE_TRACE_ID}.ndjson`);
+    const expressFixtureCopy = path.join(fixtureDir, `${FIXTURE_TRACE_ID}.case.json`);
     fs.copyFileSync(EXPRESS_FIXTURE, expressFixtureCopy);
     const httpReplayConfigPath = artifacts.createSoftprobeConfig('task-9-2-http-replay', {
       mode: 'REPLAY',
@@ -79,13 +86,13 @@ describe('Task 9.2 - replay succeeds with dependencies offline', () => {
     const pgReplayConfigPath = artifacts.createSoftprobeConfig('task-9-2-pg-replay', {
       mode: 'REPLAY',
       cassetteDirectory: path.dirname(pgCassettePath),
-      traceId: path.basename(pgCassettePath, '.ndjson'),
+      traceId: path.basename(pgCassettePath, '.case.json'),
       strictReplay: true,
     });
     const redisReplayConfigPath = artifacts.createSoftprobeConfig('task-9-2-redis-replay', {
       mode: 'REPLAY',
       cassetteDirectory: path.dirname(redisCassettePath),
-      traceId: path.basename(redisCassettePath, '.ndjson'),
+      traceId: path.basename(redisCassettePath, '.case.json'),
       strictReplay: true,
     });
 
@@ -126,7 +133,6 @@ describe('Task 9.2 - replay succeeds with dependencies offline', () => {
       {
         SOFTPROBE_CONFIG_PATH: pgReplayConfigPath,
         PG_URL: 'postgres://127.0.0.1:63999/offline',
-        REPLAY_TRACE_ID: PG_TRACE_ID,
       },
       { useTsNode: true }
     );
@@ -138,7 +144,6 @@ describe('Task 9.2 - replay succeeds with dependencies offline', () => {
       {
         SOFTPROBE_CONFIG_PATH: redisReplayConfigPath,
         REDIS_KEY: redisKey,
-        REPLAY_TRACE_ID: REDIS_TRACE_ID,
       },
       { useTsNode: true }
     );

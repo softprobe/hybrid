@@ -1,5 +1,5 @@
 /**
- * Task 13.7: Cassette and NdjsonCassette have no mode awareness.
+ * Task 13.7: Cassette and CaseJsonFileCassette have no mode awareness.
  * Cassette type and implementation are pure read/write; no CAPTURE, REPLAY, or mode references.
  */
 
@@ -8,7 +8,7 @@ import path from 'path';
 
 const SRC = path.join(__dirname, '..');
 const SCHEMA_PATH = path.join(SRC, 'types', 'schema.ts');
-const NDJSON_CASSETTE_PATH = path.join(SRC, 'core', 'cassette', 'ndjson-cassette.ts');
+const CASE_JSON_CASSETTE_PATH = path.join(SRC, 'core', 'cassette', 'case-json-file-cassette.ts');
 
 const FORBIDDEN = ['CAPTURE', 'REPLAY', 'mode'];
 
@@ -34,7 +34,7 @@ function extractCassetteBlock(content: string): string {
   return lines.slice(start, end).join('\n');
 }
 
-describe('Task 13.7: Cassette and NdjsonCassette have no mode awareness', () => {
+describe('Task 13.7: Cassette and CaseJsonFileCassette have no mode awareness', () => {
   it('Cassette type definition has no CAPTURE, REPLAY, or mode', () => {
     const content = fs.readFileSync(SCHEMA_PATH, 'utf8');
     const block = extractCassetteBlock(content);
@@ -43,9 +43,9 @@ describe('Task 13.7: Cassette and NdjsonCassette have no mode awareness', () => 
     expect(violations).toEqual([]);
   });
 
-  it('NdjsonCassette has no CAPTURE, REPLAY, or mode', () => {
-    const content = fs.readFileSync(NDJSON_CASSETTE_PATH, 'utf8');
-    const violations = FORBIDDEN.filter((s) => content.includes(s));
+  it('CaseJsonFileCassette has no CAPTURE or REPLAY execution semantics (case schema may use the word "mode")', () => {
+    const content = fs.readFileSync(CASE_JSON_CASSETTE_PATH, 'utf8');
+    const violations = ['CAPTURE', 'REPLAY'].filter((s) => content.includes(s));
     expect(violations).toEqual([]);
   });
 });

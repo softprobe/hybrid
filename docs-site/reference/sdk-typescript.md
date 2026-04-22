@@ -1,12 +1,12 @@
 # TypeScript SDK reference
 
 ::: tip Ships in this build (PD3 complete)
-The short error names (`RuntimeError`, `CaseLookupError`, …), `@softprobe/softprobe-js/hooks`, `@softprobe/softprobe-js/suite` + `runSuite`, and `setLogger` / `SOFTPROBE_LOG` are **shipped** — see [Phase PD3](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd3--typescript-sdk-reference-reality-alignment) in `tasks.md`. Canonical source in this monorepo:
+The short error names (`RuntimeError`, `CaseLookupError`, …), `@softprobe/softprobe-js/hooks`, `@softprobe/softprobe-js/suite` + `runSuite`, and `setLogger` / `SOFTPROBE_LOG` are **shipped** — see [Phase PD3](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd3--typescript-sdk-reference-reality-alignment) in `tasks.md`. Canonical source in this monorepo:
 
-- [`softprobe-js/src/errors.ts`](https://github.com/softprobe/softprobe/blob/main/softprobe-js/src/errors.ts) — class hierarchy and legacy aliases (`SoftprobeRuntimeError`, …)
-- [`softprobe-js/src/hooks.ts`](https://github.com/softprobe/softprobe/blob/main/softprobe-js/src/hooks.ts) — hook types for `suite.yaml`
-- [`softprobe-js/src/suite.ts`](https://github.com/softprobe/softprobe/blob/main/softprobe-js/src/suite.ts) — Jest `runSuite` runner
-- [`softprobe-js/src/hook-runner.ts`](https://github.com/softprobe/softprobe/blob/main/softprobe-js/src/hook-runner.ts) — `HookExecutionError` when a hook throws
+- [`softprobe-js/src/errors.ts`](https://github.com/softprobe/hybrid/blob/main/softprobe-js/src/errors.ts) — class hierarchy and legacy aliases (`SoftprobeRuntimeError`, …)
+- [`softprobe-js/src/hooks.ts`](https://github.com/softprobe/hybrid/blob/main/softprobe-js/src/hooks.ts) — hook types for `suite.yaml`
+- [`softprobe-js/src/suite.ts`](https://github.com/softprobe/hybrid/blob/main/softprobe-js/src/suite.ts) — Jest `runSuite` runner
+- [`softprobe-js/src/hook-runner.ts`](https://github.com/softprobe/hybrid/blob/main/softprobe-js/src/hook-runner.ts) — `HookExecutionError` when a hook throws
 
 If an import of `/hooks` or `/suite` fails, ensure your resolver honors `package.json#exports` (Node 16+, current Jest/Vite/esbuild do).
 :::

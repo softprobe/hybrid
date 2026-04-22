@@ -1,6 +1,6 @@
 /**
  * Task 13.10: Test helper to read cassette file at path using Cassette only (no loadNdjson).
- * Uses SoftprobeContext.getOrCreateCassette(dir, traceId).loadTrace() for {dir}/{traceId}.ndjson.
+ * Uses SoftprobeContext.getOrCreateCassette(dir, traceId).loadTrace() for {dir}/{traceId}.case.json.
  */
 
 import path from 'path';
@@ -11,7 +11,7 @@ export async function loadCassetteRecordsByPath(
   filePath: string
 ): Promise<SoftprobeCassetteRecord[]> {
   const dir = path.dirname(filePath);
-  const traceId = path.basename(filePath, '.ndjson');
+  const traceId = path.basename(filePath, '.case.json');
   const cassette = SoftprobeContext.getOrCreateCassette(dir, traceId);
   return cassette.loadTrace();
 }

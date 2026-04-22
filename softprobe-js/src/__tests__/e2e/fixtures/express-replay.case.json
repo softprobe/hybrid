@@ -1,0 +1,151 @@
+{
+  "version": "1.0.0",
+  "caseId": "00000000000000000000000000000001",
+  "mode": "replay",
+  "createdAt": "2025-01-01T00:00:00.000Z",
+  "traces": [
+    {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "softprobe-js"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "spans": [
+                {
+                  "traceId": "00000000000000000000000000000001",
+                  "spanId": "0000000000000001",
+                  "startTimeUnixNano": "1735689600000000000",
+                  "kind": 2,
+                  "attributes": [
+                    {
+                      "key": "sp.traffic.direction",
+                      "value": {
+                        "stringValue": "inbound"
+                      }
+                    },
+                    {
+                      "key": "sp.span.type",
+                      "value": {
+                        "stringValue": "inject"
+                      }
+                    },
+                    {
+                      "key": "softprobe.protocol",
+                      "value": {
+                        "stringValue": "http"
+                      }
+                    },
+                    {
+                      "key": "softprobe.identifier",
+                      "value": {
+                        "stringValue": "GET /"
+                      }
+                    },
+                    {
+                      "key": "http.request.method",
+                      "value": {
+                        "stringValue": "GET"
+                      }
+                    },
+                    {
+                      "key": "url.path",
+                      "value": {
+                        "stringValue": "/"
+                      }
+                    },
+                    {
+                      "key": "http.response.status_code",
+                      "value": {
+                        "intValue": 200
+                      }
+                    },
+                    {
+                      "key": "http.response.body",
+                      "value": {
+                        "stringValue": "{\"ok\":true,\"outbound\":{\"url\":\"https://httpbin.org/get\"}}"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "traceId": "00000000000000000000000000000001",
+                  "spanId": "0000000000000002",
+                  "parentSpanId": "0000000000000001",
+                  "startTimeUnixNano": "1735689600001000000",
+                  "kind": 3,
+                  "attributes": [
+                    {
+                      "key": "sp.traffic.direction",
+                      "value": {
+                        "stringValue": "outbound"
+                      }
+                    },
+                    {
+                      "key": "sp.span.type",
+                      "value": {
+                        "stringValue": "extract"
+                      }
+                    },
+                    {
+                      "key": "softprobe.protocol",
+                      "value": {
+                        "stringValue": "http"
+                      }
+                    },
+                    {
+                      "key": "softprobe.identifier",
+                      "value": {
+                        "stringValue": "GET https://httpbin.org/get"
+                      }
+                    },
+                    {
+                      "key": "http.request.method",
+                      "value": {
+                        "stringValue": "GET"
+                      }
+                    },
+                    {
+                      "key": "url.host",
+                      "value": {
+                        "stringValue": "httpbin.org"
+                      }
+                    },
+                    {
+                      "key": "url.path",
+                      "value": {
+                        "stringValue": "/get"
+                      }
+                    },
+                    {
+                      "key": "http.response.status_code",
+                      "value": {
+                        "intValue": 200
+                      }
+                    },
+                    {
+                      "key": "http.response.body",
+                      "value": {
+                        "stringValue": "{\"url\":\"https://httpbin.org/get\"}"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "rules": [],
+  "fixtures": []
+}

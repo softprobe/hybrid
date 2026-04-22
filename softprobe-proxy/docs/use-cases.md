@@ -1,6 +1,8 @@
 # SP-Istio Agent - Use Cases and Benefits
 
-Real-world scenarios demonstrating the value of SP-Istio Agent for transparent caching and enhanced observability.
+Real-world scenarios demonstrating the value of SP-Istio Agent for transparent caching, capture, and replay.
+
+**Where capture goes:** the WASM plugin sends **full HTTP** capture (headers and bodies) **out-of-band** to **`sp_backend_url`** (your **`softprobe-runtime`** or `https://o.softprobe.ai`), per the proxy OTLP API. It does **not** stream those bodies into your existing Datadog, Honeycomb, or New Relic pipeline by default. See the monorepo note [`docs/proxy-integration-posture.md`](../../docs/proxy-integration-posture.md).
 
 ## Performance Optimization Scenarios
 
@@ -46,7 +48,7 @@ collectionRules:
 - Manual debugging time: 30 minutes per incident (87% improvement)
 
 **Benefits Achieved**:
-- Enhanced tracing shows exact bottlenecks
+- Rich capture in **Softprobe** (session + case) shows exact bottlenecks alongside your existing traces
 - Intelligent caching reduces external API calls
 - Service mesh visibility improves debugging
 
@@ -79,12 +81,12 @@ collectionRules:
 - Manual correlation across multiple monitoring tools
 
 **With SP-Istio Agent**:
-- Complete trace from ingress to database
-- Service mesh routing decisions visible
+- End-to-end HTTP capture available in **Softprobe** (same trace ids as your mesh when W3C context is propagated)
+- Service mesh routing decisions visible in your existing APM; full bodies and replay data in **Softprobe**
 - Envoy proxy processing time breakdown
 - 15 minutes to identify root cause
 
-**Sample Enhanced Trace**:
+**Sample view (Softprobe + your mesh)**:
 ```
 Transaction-12345
 ├── [Istio Ingress] HTTP Request - 12ms
@@ -112,8 +114,8 @@ Transaction-12345
 - Difficult to troubleshoot cross-cloud issues
 
 **SP-Istio Agent Benefits**:
-- Unified tracing across cloud boundaries
-- Network routing visibility in traces
+- Consistent **Softprobe** capture at the Envoy hop in each cluster (egress to the same `sp_backend_url`)
+- Network routing visibility in your existing traces; **full HTTP** payloads in **Softprobe** for replay and diff
 - Service discovery and identity tracking
 - Performance comparison between cloud regions
 
@@ -148,8 +150,8 @@ Transaction-12345
 - Zero code changes (regulatory constraint)
 
 **SP-Istio Agent Solution**:
-- Automatic capture of all HTTP traffic
-- Integration with compliance monitoring systems
+- Automatic capture of all HTTP traffic into **Softprobe** (`sp_backend_url`)
+- Export or retain cases from **Softprobe** for your audit and compliance workflows (you control downstream storage)
 - mTLS certificate visibility in traces
 - Transparent operation (no app changes)
 

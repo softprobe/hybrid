@@ -10,7 +10,7 @@ import type { Cassette, SoftprobeCassetteRecord, SoftprobeRunOptions } from './t
 import type { SemanticMatcher } from './core/matcher/matcher';
 import { SoftprobeMatcher } from './core/matcher/softprobe-matcher';
 import { createDefaultMatcher } from './core/matcher/extract-key';
-import { NdjsonCassette } from './core/cassette/ndjson-cassette';
+import { CaseJsonFileCassette } from './core/cassette/case-json-file-cassette';
 
 /** Context key under which softprobe state is stored in OTel Context. Exported for tests. */
 export const SOFTPROBE_CONTEXT_KEY = createContextKey('softprobe_context');
@@ -50,15 +50,24 @@ const cassetteByPath = new Map<string, Cassette>();
 
 /**
  * Returns a cached cassette for a given (cassetteDirectory, traceId) pair.
- * Task 13.5/13.6: only this module creates NdjsonCassette; request-storage and middleware call this.
+ * Task 13.5/13.6: only this module creates CaseJsonFileCassette; request-storage and middleware call this.
  */
 function getOrCreateCassette(cassetteDirectory: string, traceId: string): Cassette {
   const key = `${cassetteDirectory}::${traceId}`;
   const existing = cassetteByPath.get(key);
   if (existing) return existing;
-  const created = new NdjsonCassette(cassetteDirectory, traceId);
+  const created = new CaseJsonFileCassette(cassetteDirectory, traceId);
   cassetteByPath.set(key, created);
   return created;
+}
+
+/** Await every cached cassette's persist chain (used before process.exit in long-lived servers). */
+async function flushPendingCassettes(): Promise<void> {
+  await Promise.all(
+    [...cassetteByPath.values()].map((cassette) =>
+      typeof cassette.flush === 'function' ? cassette.flush!() : Promise.resolve()
+    )
+  );
 }
 
 function merge(base: Stored, partial: PartialData): Stored {
@@ -94,7 +103,7 @@ function withData(otelContext: Context, data: PartialData): Context {
 
 /**
  * Seeds the global default from config. Call at boot.
- * Task 13.1: accepts cassetteDirectory; when set, runtime cassette paths are derived as {cassetteDirectory}/{traceId}.ndjson.
+ * Task 13.1: accepts cassetteDirectory; when set, paths are {cassetteDirectory}/{traceId}.case.json.
  */
 function initGlobal(config: {
   mode?: string;
@@ -160,7 +169,7 @@ function getCassette(otelContext?: Context): Cassette | undefined {
   return active(otelContext).storage;
 }
 
-/** Task 13.1: directory for per-trace cassette files; paths are {cassetteDirectory}/{traceId}.ndjson. */
+/** Task 13.1: directory for per-trace case files; paths are {cassetteDirectory}/{traceId}.case.json. */
 function getCassetteDirectory(otelContext?: Context): string | undefined {
   return active(otelContext).cassetteDirectory;
 }
@@ -232,6 +241,18 @@ function run<T>(options: SoftprobeRunOptions, fn: () => T | Promise<T>): T | Pro
   const storage = resolveStorage(mergedBase, withTraceId.traceId!);
   const finalStored = storage ? merge(withTraceId, { storage }) : withTraceId;
   const ctxWith = withData(context.active(), finalStored);
+  // Case JSON persistence chains async work after outbound hooks (e.g. fetch tap); flush before leaving run().
+  if (storage?.flush) {
+    const flush = storage.flush.bind(storage);
+    const exec = async (): Promise<T> => {
+      try {
+        return await Promise.resolve(fn());
+      } finally {
+        await flush();
+      }
+    };
+    return context.with(ctxWith, exec) as Promise<T>;
+  }
   return context.with(ctxWith, fn) as T | Promise<T>;
 }
 
@@ -253,4 +274,5 @@ export const SoftprobeContext = {
   run,
   /** Task 13.6: Obtain cassette for (directory, traceId) without constructing; used by request-storage/middleware. */
   getOrCreateCassette,
+  flushPendingCassettes,
 };

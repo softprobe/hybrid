@@ -1,15 +1,18 @@
 # Softprobe Proxy-First Capture and Injection Design
 
-This document defines the target design for combining `softprobe-js` and `proxy` into one proxy-first product.
+This document defines the target design for combining `softprobe-js` and `proxy` into one **hybrid** product: **proxy-first** for HTTP (default), **optional** language-level instrumentation for non-HTTP deps and environments without a mesh.
+
+**Canonical platform spec:** [`docs/design.md`](../docs/design.md) (including **§2.5 Instrumentation planes**). **Language-plane roadmap** (NDJSON + YAML as legacy; runtime + case JSON as target): [`docs/language-instrumentation.md`](../docs/language-instrumentation.md). **Proxy vs customer APM (OOB OTLP to Softprobe):** [`docs/proxy-integration-posture.md`](../docs/proxy-integration-posture.md).
 
 Transition note:
-- canonical shared architecture is moving to `../spec/`
+- canonical shared architecture is moving to `../spec/` and `../docs/design.md`
 - this file remains a repo-local working copy for the JavaScript implementation until the migration is complete
 
 Status:
 - proposed architecture for the next major implementation phase
 - intended to replace NDJSON-first HTTP replay as the default path
 - intended to keep language-level patching optional, not foundational
+- NDJSON + cassette layout in [`design-cassette.md`](./design-cassette.md) is a **legacy** implementation slated for removal as part of the Node language-plane cutover to runtime-backed case artifacts
 
 Related docs:
 - [Main design](./design.md)

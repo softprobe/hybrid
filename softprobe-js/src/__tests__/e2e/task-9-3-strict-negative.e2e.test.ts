@@ -10,7 +10,7 @@ import { E2eArtifacts } from './helpers/e2e-artifacts';
 
 const EXPRESS_WORKER = path.join(__dirname, 'helpers', 'express-inbound-worker.ts');
 const PROBE_WORKER = path.join(__dirname, 'helpers', 'network-probe-server.ts');
-const FIXTURE_CASSETTE = path.join(__dirname, 'fixtures', 'express-replay.ndjson');
+const FIXTURE_CASSETTE = path.join(__dirname, 'fixtures', 'express-replay.case.json');
 const FIXTURE_TRACE_ID = '00000000000000000000000000000001';
 
 describe('Task 9.3 - strict negative replay for unrecorded outbound call', () => {
@@ -26,7 +26,7 @@ describe('Task 9.3 - strict negative replay for unrecorded outbound call', () =>
 
   it('fails deterministically and does not hit network for unrecorded outbound', async () => {
     const fixtureDir = artifacts.createTempDir('task-9-3');
-    const fixtureCopy = path.join(fixtureDir, `${FIXTURE_TRACE_ID}.ndjson`);
+    const fixtureCopy = path.join(fixtureDir, `${FIXTURE_TRACE_ID}.case.json`);
     fs.copyFileSync(FIXTURE_CASSETTE, fixtureCopy);
     const replayConfigPath = artifacts.createSoftprobeConfig('task-9-3-replay', {
       mode: 'REPLAY',

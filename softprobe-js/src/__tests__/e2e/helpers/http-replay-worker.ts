@@ -5,13 +5,16 @@
  */
 
 import path from 'path';
+
 import '../../../init';
+import { applyLegacyFrameworkPatches } from '../../../legacy';
 import { ConfigManager } from '../../../config/config-manager';
 import { softprobe } from '../../../api';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 
 async function main(): Promise<void> {
+  applyLegacyFrameworkPatches();
   const replayUrl = process.env.REPLAY_URL;
   const replayTraceId = process.env.REPLAY_TRACE_ID ?? 'http-e2e-replay';
   const configPath = process.env.SOFTPROBE_CONFIG_PATH ?? './.softprobe/config.yml';
@@ -29,7 +32,7 @@ async function main(): Promise<void> {
       const fromPath = cfg.cassettePath;
       if (typeof fromPath === 'string' && fromPath) {
         cassetteDirectory = path.dirname(fromPath);
-        traceId = path.basename(fromPath, '.ndjson');
+        traceId = path.basename(fromPath, '.case.json');
       }
     }
   } catch {

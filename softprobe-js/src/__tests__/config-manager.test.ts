@@ -27,7 +27,7 @@ describe('ConfigManager', () => {
   it('exposes cassettePath from YAML at get().cassettePath', () => {
     const manager = new ConfigManager(FIXTURE_PATH);
     const cfg = manager.get();
-    expect(cfg.cassettePath).toBe('./softprobe-cassettes.ndjson');
+    expect(cfg.cassettePath).toBe('./softprobe-cassettes.case.json');
   });
 
   it('Task 13.1: exposes cassetteDirectory from YAML at get().cassetteDirectory', () => {

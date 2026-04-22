@@ -5,6 +5,8 @@ proxy-first platform. It reflects the current design source of truth in
 [`design.md`](./design.md): one unified runtime, one proxy data plane, and
 language SDKs that all drive the same JSON control API.
 
+Additional design notes (monorepo `docs/`): [proxy-integration-posture.md](./proxy-integration-posture.md) (proxy OTLP **out-of-band** from customer APM), [language-instrumentation.md](./language-instrumentation.md) (proxy vs optional language plane, Node legacy roadmap).
+
 ---
 
 ## 1) Target repos / packages

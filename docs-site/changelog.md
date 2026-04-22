@@ -10,6 +10,14 @@ All notable changes to the Softprobe platform are listed here.
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Docs:** CLI reference (`reference/cli.md`) aligned with the shipped binary — removed stale “not shipped yet” callouts for `inspect session`, `validate`, `generate test`, `export otlp`, `scrub`, and `completion`; expanded the `--json` field-stability table; refreshed `roadmap.md` and SDK reference links to the `hybrid` monorepo.
+
+---
+
 ## [v0.5] — 2026-04-12
 
 Unified-runtime release. The platform now ships as **one binary** (`softprobe-runtime`) that serves both the JSON control API and the proxy OTLP API from a shared in-memory store.

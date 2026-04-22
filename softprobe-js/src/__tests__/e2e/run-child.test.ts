@@ -33,7 +33,7 @@ describe('runChild (Task 12.1.1)', () => {
 
   it('throws when legacy softprobe env is provided without explicit config path', () => {
     expect(() =>
-      runChild(FIXTURE_ECHO, { SOFTPROBE_CASSETTE_PATH: '/tmp/a.ndjson' })
+      runChild(FIXTURE_ECHO, { SOFTPROBE_CASSETTE_PATH: '/tmp/a.case.json' })
     ).toThrow('SOFTPROBE_CONFIG_PATH is required for E2E workers');
   });
 

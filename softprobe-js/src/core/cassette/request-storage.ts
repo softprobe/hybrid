@@ -4,7 +4,7 @@ import type { Cassette } from '../../types/schema';
 /**
  * Resolves request-scoped cassette storage from existing storage, configured cassette,
  * or global cassetteDirectory + traceId (Task 13.11). Cassette path is always
- * {cassetteDirectory}/{traceId}.ndjson; no header is used.
+ * {cassetteDirectory}/{traceId}.case.json; no header is used.
  */
 export function resolveRequestStorage(input: {
   existingCassette?: Cassette;

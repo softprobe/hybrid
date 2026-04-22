@@ -2,9 +2,14 @@
 
 This page is the **mental model** you need to debug anything in Softprobe. No CLI flags, no SDK signatures — just what-talks-to-what and why.
 
+Softprobe supports two instrumentation placements:
+
+- **Proxy instrumentation (canonical)**: Envoy + Softprobe WASM sits on ingress/egress.
+- **Language instrumentation (Node compatibility path)**: interception runs in-process, but still uses the same runtime/session control plane.
+
 ## The topology
 
-Softprobe sits **under** your application, not inside it. Your app and its HTTP dependencies are unchanged; a single sidecar proxy sees every request and response on both directions.
+In the canonical deployment, Softprobe sits **under** your application, not inside it. Your app and its HTTP dependencies are unchanged; a single sidecar proxy sees every request and response on both directions.
 
 ```text
   ┌───────────────┐                                    ┌───────────────┐
@@ -41,13 +46,30 @@ Each numbered edge is one of the two HTTP flows:
 In a real Istio mesh, `ingress` and `egress` are the **same** sidecar — the routing layer just invokes it twice. In the local Docker Compose harness we model this with **one** Envoy with **two** listeners (`:8082` for ingress, `:8084` for egress) to avoid iptables redirection.
 :::
 
+## Two instrumentation models, one control plane
+
+Both models share the same runtime APIs, session lifecycle, and case schema.
+
+| Dimension | Proxy instrumentation (canonical) | Language instrumentation (Node compatibility) |
+|---|---|---|
+| Interception point | Envoy/WASM on ingress + egress | In-process Node hooks/interceptors |
+| Test authoring APIs | `startSession` / `loadCaseFromFile` / `mockOutbound` / `close` | Same |
+| Runtime | Required | Required |
+| Session semantics | `x-softprobe-session-id` + runtime session state | Same runtime session state; app wiring may differ |
+| Capture artifact | `*.case.json` | `*.case.json` |
+| Recommended for new deployments | Yes | Only when sidecar proxying is not available yet |
+
+For a side-by-side setup walkthrough, see [Proxy vs language instrumentation](/guides/proxy-vs-language-instrumentation).
+
 ## The four moving parts
 
 ### 1. The application under test (SUT)
 
 Ordinary HTTP service. It knows nothing about Softprobe. The only requirement is that **outbound** HTTP calls propagate standard W3C `traceparent` / `tracestate` — which any OpenTelemetry HTTP client does by default.
 
-You do not add Softprobe imports, mock wrappers, or test hooks to your application code.
+In proxy mode, you do not add Softprobe imports, mock wrappers, or test hooks to your application code.
+
+In language instrumentation mode, Node apps load `@softprobe/softprobe-js/init` first; optional framework auto-patches are opt-in via `@softprobe/softprobe-js/legacy`.
 
 ### 2. The proxy (data plane)
 
@@ -173,7 +195,7 @@ A **case file** is one JSON document on disk, typically named `cases/<scenario>.
 }
 ```
 
-Each entry in `traces[]` is an OTLP-compatible JSON trace describing a single HTTP hop (one request + its response). The schema is defined in [`spec/schemas/case.schema.json`](/reference/case-schema) and exported to OpenTelemetry collectors when you want to feed replay data into your observability pipeline.
+Each entry in `traces[]` is an OTLP-compatible JSON trace describing a single HTTP hop (one request + its response). The schema is defined in [`spec/schemas/case.schema.json`](/reference/case-schema). You can export case-shaped traces to an OpenTelemetry collector for analysis when you choose (for example via `softprobe export otlp` when available). Separately, the **Envoy WASM** filter sends live capture OTLP to **Softprobe runtime** at **`sp_backend_url`** by default — that stream is **out-of-band** from your production APM; see [Proxy integration posture](https://github.com/softprobe/hybrid/blob/main/docs/proxy-integration-posture.md).
 
 Because the file is plain JSON, you can:
 

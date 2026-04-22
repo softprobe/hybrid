@@ -1,6 +1,6 @@
 # CLI reference
 
-The `softprobe` CLI is the primary interface for humans, CI, and AI agents. It speaks only HTTP to the runtime — no local state, no config files to manage. Every command supports `--json` for machine-readable output and returns stable exit codes.
+The `softprobe` CLI is the primary interface for humans, CI, and AI agents. It speaks only HTTP to the runtime — no local state, no config files to manage. Commands that emit structured results support `--json` for machine-readable output (not `completion`, which prints a shell script). All commands return stable exit codes.
 
 ## Global options
 
@@ -227,7 +227,7 @@ Diagnostic: reports inject statistics for a live session. Usually more useful th
 ## `softprobe suite`
 
 ::: tip Ships in this build
-`softprobe suite run`, `validate`, and `diff` are implemented. `suite run` spawns a Node sidecar per invocation to resolve `RequestHook` / `MockResponseHook` / `BodyAssertHook` / `HeadersAssertHook` references from your `suite.yaml`, and emits JUnit XML + a standalone HTML report. A worked end-to-end harness — docker-compose + two cases off one capture file (one hook-driven, one YAML-only `source: inline`) — lives at [`e2e/cli-suite-run/`](https://github.com/softprobe/softprobe/tree/main/e2e/cli-suite-run).
+`softprobe suite run`, `validate`, and `diff` are implemented. `suite run` spawns a Node sidecar per invocation to resolve `RequestHook` / `MockResponseHook` / `BodyAssertHook` / `HeadersAssertHook` references from your `suite.yaml`, and emits JUnit XML + a standalone HTML report. A worked end-to-end harness — docker-compose + two cases off one capture file (one hook-driven, one YAML-only `source: inline`) — lives at [`e2e/cli-suite-run/`](https://github.com/softprobe/hybrid/tree/main/e2e/cli-suite-run).
 :::
 
 Read one or more case files and run them as a test suite.
@@ -305,23 +305,16 @@ Prints a table of spans: direction, method, URL, status, body size. Add `--json`
 
 ### `inspect session`
 
-::: warning Not shipped yet
-`softprobe inspect session` is **planned** for v0.6. Tracked as [PD1.3d in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd13-session-subcommand-completeness). Until it lands, call `softprobe session stats --session $SESSION_ID --json` for live counters; rules and policy are only visible in runtime logs.
-:::
-
 ```bash
-softprobe inspect session --session $SESSION_ID
+softprobe inspect session --runtime-url $SOFTPROBE_RUNTIME_URL --session $SESSION_ID
+softprobe inspect session --session $SESSION_ID --json
 ```
 
-Dumps the current session's policy, rules, loaded case summary, and statistics.
+Dumps the current session's policy, rules, loaded case summary, and statistics. Uses `GET /v1/sessions/{id}/state` on the runtime when available; older runtimes fall back to stats-only.
 
 ---
 
 ## `softprobe validate`
-
-::: warning Not shipped yet
-`softprobe validate {case,rules}` is **planned** for v0.6. Tracked as [PD1.4 in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd14-validate-subcommand). Until it lands, run the schemas directly: `npx ajv -s spec/schemas/case.schema.json -d cases/checkout.case.json` (or equivalent for `rule.schema.json`). Suite YAML already has a first-class validator — use `softprobe suite validate suites/checkout.suite.yaml` (shipped in PD1.7e), which uses the bundled `spec/schemas/suite.schema.json`.
-:::
 
 Schema validation for any of the supported artifact types.
 
@@ -347,7 +340,7 @@ softprobe generate jest-session \
   --out test/generated/checkout.replay.session.ts
 ```
 
-Emits a TypeScript module that creates a replay session, loads the case, and registers one `findInCase` + `mockOutbound` pair per unique outbound hop — using only `@softprobe/softprobe-js`. No hand-rolled `fetch` is emitted. See the [generate-jest-session guide](/guides/generate-jest-session) for the full workflow and [design doc §3.2](https://github.com/softprobe/softprobe/blob/main/docs/design.md#32-default-happy-path-replay--jest-codegen-first) for the rationale.
+Emits a TypeScript module that creates a replay session, loads the case, and registers one `findInCase` + `mockOutbound` pair per unique outbound hop — using only `@softprobe/softprobe-js`. No hand-rolled `fetch` is emitted. See the [generate-jest-session guide](/guides/generate-jest-session) for the full workflow and [design doc §3.2](https://github.com/softprobe/hybrid/blob/main/docs/design.md#32-default-happy-path-replay--jest-codegen-first) for the rationale.
 
 **Flags:**
 
@@ -373,11 +366,7 @@ Emits a TypeScript module that creates a replay session, loads the case, and reg
 
 **Regenerate after every capture refresh.** See [generate-jest-session → regeneration workflow](/guides/generate-jest-session#regeneration-workflow).
 
-### `generate test` (preview)
-
-::: warning Not shipped yet
-`softprobe generate test` is **planned** for v0.6. Tracked as [PD1.8a in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd18-auxiliary-generate-test-export-otlp-scrub-completion). The `jest-session` generator above is the only `generate` subcommand shipped in v0.5.
-:::
+### `generate test`
 
 ```bash
 softprobe generate test \
@@ -386,7 +375,7 @@ softprobe generate test \
   --out test/checkout.replay.test.ts
 ```
 
-Emits a **full test file** (not just a session helper) for the chosen framework. Experimental in v0.5 — signatures may change. Currently supports:
+Emits a **full test file** (not just a session helper) for the chosen framework. Currently supports:
 
 | `--framework` | Status |
 |---|---|
@@ -401,10 +390,6 @@ For stable codegen, prefer `generate jest-session` and write the `describe` / `i
 
 ## `softprobe export`
 
-::: warning Not shipped yet
-`softprobe export otlp` is **planned** for v0.6. Tracked as [PD1.8b in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd18-auxiliary-generate-test-export-otlp-scrub-completion). Until it lands, the proxy's passthrough OTLP upload path already writes live traces to any collector you point `sp_backend_url` at — this command is only needed for streaming **captured** case files post-hoc.
-:::
-
 ### `export otlp`
 
 ```bash
@@ -413,17 +398,13 @@ softprobe export otlp \
   --endpoint http://otel-collector:4318/v1/traces
 ```
 
-Streams captured traces to an OpenTelemetry Collector (JSON protocol). Useful for integrating replay data with your observability pipeline.
+Streams **case file** traces to an OTLP/HTTP JSON endpoint (for example a collector). This is separate from live proxy capture, which posts to **`sp_backend_url`** on the Softprobe runtime; see [Proxy integration posture](https://github.com/softprobe/hybrid/blob/main/docs/proxy-integration-posture.md).
 
 ---
 
 ## `softprobe scrub`
 
-::: warning Not shipped yet
-`softprobe scrub` is **planned** for v0.6. Tracked as [PD1.8c in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd18-auxiliary-generate-test-export-otlp-scrub-completion). Until it lands, redaction rules passed at capture time (via the SDK's `setAuthFixtures` or a future `capture run --redact-file`) are the only scrubbing path.
-:::
-
-Redact sensitive fields from an on-disk case file, producing an updated file with a changelog comment. Intended for post-capture review workflows.
+Redact sensitive fields from an on-disk case file in place (optional `--rules` file; otherwise conservative defaults). Intended for post-capture review workflows.
 
 ```bash
 softprobe scrub cases/checkout.case.json
@@ -451,12 +432,12 @@ CI pipelines and AI agents depend on the JSON shape being stable. The following 
 
 ### Common envelope
 
-Every `--json` response carries these fields (at the top level or nested under `data` depending on the command):
+Every `--json` response carries these fields (at the top level or nested under `data` depending on the command). **`softprobe completion`** does not use this envelope — it prints a shell script only.
 
 | Field | Type | Present on | Purpose |
 |---|---|---|---|
-| `status` | `"ok"` \| `"fail"` \| `"drift"` | all `--json` commands | Outcome marker |
-| `exitCode` | integer | all `--json` commands | Mirrors the process exit code |
+| `status` | `"ok"` \| `"fail"` \| `"drift"` | structured `--json` commands | Outcome marker |
+| `exitCode` | integer | structured `--json` commands | Mirrors the process exit code |
 | `error` | object \| null | on failure | `{ "code": "…", "message": "…" }` |
 
 ### Per-command stable fields
@@ -475,8 +456,15 @@ Every `--json` response carries these fields (at the top level or nested under `
 | `replay run --json` | `sessionId`, `exitCode`, `stats` |
 | `suite run --json` | `suite`, `total`, `passed`, `failed`, `cases[]` (each: `caseId`, `status`, `durationMs`, `error?`) |
 | `suite validate --json` | `suite`, `errors[]` |
+| `suite diff --json` | `added[]`, `removed[]` (outbound span signature strings) |
 | `generate jest-session --json` | `outputPath`, `rulesEmitted`, `caseId` |
+| `generate test --json` | `outputPath`, `framework`, `rulesEmitted`, `caseId` |
 | `validate case --json` | `path`, `valid`, `errors[]` |
+| `validate rules --json` | `path`, `valid`, `errors[]` |
+| `validate suite --json` | `path`, `valid`, `errors[]` |
+| `inspect session --json` | `sessionId`, `sessionRevision`, `mode`, `policy?`, `rules?`, `caseSummary`, `stats` |
+| `export otlp --json` | `sent`, `failed` |
+| `scrub --json` | `files[]` (each: `path`, `replaced`, `error?`, `updatedAtMs?`) |
 
 ### Stability contract
 
@@ -489,10 +477,6 @@ The full schemas are published in `spec/schemas/cli-*.response.schema.json`.
 ---
 
 ## Shell integration
-
-::: warning `softprobe completion` not shipped yet
-Shell-completion script generation is **planned** for v0.6. Tracked as [PD1.8d in `tasks.md`](https://github.com/softprobe/softprobe/blob/main/tasks.md#pd18-auxiliary-generate-test-export-otlp-scrub-completion). The session-in-subshell pattern below works today without completion; completion just adds tab-expansion on top.
-:::
 
 ### Bash / zsh completion
 

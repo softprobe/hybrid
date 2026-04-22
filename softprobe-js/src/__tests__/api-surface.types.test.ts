@@ -24,6 +24,6 @@ describe('softprobe API surface', () => {
     );
 
     // @ts-expect-error legacy cassettePath option is not supported
-    await softprobe.run({ mode: 'CAPTURE', cassettePath: '/tmp/a.ndjson', traceId: 'trace-1' }, async () => {});
+    await softprobe.run({ mode: 'CAPTURE', cassettePath: '/tmp/a.case.json', traceId: 'trace-1' }, async () => {});
   });
 });

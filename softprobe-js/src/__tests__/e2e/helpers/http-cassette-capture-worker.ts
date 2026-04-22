@@ -7,11 +7,14 @@
  */
 
 import path from 'path';
+
 import '../../../init';
+import { applyLegacyFrameworkPatches } from '../../../legacy';
 import { ConfigManager } from '../../../config/config-manager';
 import { softprobe } from '../../../api';
 
 async function main(): Promise<void> {
+  applyLegacyFrameworkPatches();
   const url = process.env.CAPTURE_URL;
   if (!url) throw new Error('CAPTURE_URL is required');
 
@@ -30,7 +33,7 @@ async function main(): Promise<void> {
       const fromPath = cfg.cassettePath;
       if (typeof fromPath === 'string' && fromPath) {
         cassetteDirectory = path.dirname(fromPath);
-        traceId = path.basename(fromPath, '.ndjson');
+        traceId = path.basename(fromPath, '.case.json');
       }
     }
   } catch {

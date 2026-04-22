@@ -10,7 +10,7 @@ The **proxy OTLP API** is the wire contract between the Softprobe proxy (Envoy +
 
 Most users interact with the runtime through [SDKs](/reference/sdk-typescript) and the [CLI](/reference/cli). Tests never call these endpoints directly.
 
-The normative source is [`spec/protocol/proxy-otel-api.md`](https://github.com/softprobe/softprobe/blob/main/spec/protocol/proxy-otel-api.md). This page summarizes it in user-oriented form.
+The normative source is [`spec/protocol/proxy-otel-api.md`](https://github.com/softprobe/hybrid/blob/main/spec/protocol/proxy-otel-api.md). This page summarizes it in user-oriented form.
 
 ## Transport
 
@@ -137,7 +137,7 @@ The proxy ignores span identity (`traceId`, `spanId`, timestamps) on the respons
 
 Called **after** the proxy forwards a passthrough request and has the real upstream's response. The proxy uploads the full request/response pair so the runtime can record it (capture mode) or ignore it (replay mode, depending on policy).
 
-This endpoint follows the **standard OTLP traces ingest** contract — you can point any OpenTelemetry collector at the same route and receive the same payloads.
+The request body uses the **standard OTLP `TracesData`** shape. In production the proxy sends these payloads **out-of-band** to **`sp_backend_url`** (the Softprobe runtime), not into your existing vendor APM pipeline by default — large `http.*.body` attributes would be truncated or rejected there. See [Proxy integration posture](https://github.com/softprobe/hybrid/blob/main/docs/proxy-integration-posture.md). (You may optionally **tee** a filtered copy to a collector in advanced setups; that is not the default install path.)
 
 ### Request body
 
@@ -178,7 +178,7 @@ This means the runtime only ever sees session id via OTLP attribute — it never
 
 ## Error handling
 
-The runtime returns machine-readable errors per [`spec/schemas/session-error.response.schema.json`](https://github.com/softprobe/softprobe/blob/main/spec/schemas/session-error.response.schema.json). Common cases:
+The runtime returns machine-readable errors per [`spec/schemas/session-error.response.schema.json`](https://github.com/softprobe/hybrid/blob/main/spec/schemas/session-error.response.schema.json). Common cases:
 
 | Condition | Status | Proxy behavior |
 |---|---|---|

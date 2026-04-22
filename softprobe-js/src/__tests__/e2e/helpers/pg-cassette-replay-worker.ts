@@ -1,9 +1,9 @@
 /**
  * Task 12.2.2: Child worker for Postgres NDJSON replay E2E (DB disconnected).
- * Loads softprobe/init (REPLAY), then runs query under softprobe.run(REPLAY) with NdjsonCassette;
- * which is mocked from the cassette — no real DB connection.
+ * Loads softprobe/init (REPLAY), then runs query under softprobe.run(REPLAY); responses are
+ * mocked from the case JSON cassette — no real DB connection.
  *
- * Env: SOFTPROBE_CONFIG_PATH, REPLAY_TRACE_ID
+ * Env: SOFTPROBE_CONFIG_PATH
  * Stdout: JSON { rows, rowCount } from replayed query.
  */
 
@@ -13,6 +13,8 @@ import { softprobe } from '../../../api';
 
 const initPath = path.join(__dirname, '..', '..', '..', 'init.ts');
 require(initPath);
+const { applyLegacyFrameworkPatches } = require('../../../legacy');
+applyLegacyFrameworkPatches();
 
 async function main() {
   const { NodeSDK } = require('@opentelemetry/sdk-node');
@@ -21,22 +23,24 @@ async function main() {
   sdk.start();
 
   const configPath = process.env.SOFTPROBE_CONFIG_PATH ?? './.softprobe/config.yml';
-  const replayTraceId = process.env.REPLAY_TRACE_ID ?? 'pg-replay-e2e';
   let cassetteDirectory: string | undefined;
   let traceId: string | undefined;
+  let strictReplay = false;
   try {
     const cfg = new ConfigManager(configPath).get() as {
       cassetteDirectory?: string;
       traceId?: string;
       cassettePath?: string;
+      replay?: { strictReplay?: boolean };
     };
+    strictReplay = cfg.replay?.strictReplay === true;
     cassetteDirectory = cfg.cassetteDirectory;
     traceId = cfg.traceId;
     if (!cassetteDirectory || !traceId) {
       const fromPath = cfg.cassettePath;
       if (typeof fromPath === 'string' && fromPath) {
         cassetteDirectory = path.dirname(fromPath);
-        traceId = path.basename(fromPath, '.ndjson');
+        traceId = path.basename(fromPath, '.case.json');
       }
     }
   } catch {
@@ -54,6 +58,7 @@ async function main() {
       mode: 'REPLAY',
       traceId,
       cassetteDirectory,
+      strictReplay,
     },
     async () => {
     const { Client } = require('pg');

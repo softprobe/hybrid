@@ -187,7 +187,18 @@ describe('Task 21.1.1: Header extraction in Fastify — SoftprobeContext.active(
     const cassetteDir = path.join(os.tmpdir(), `softprobe-header-fastify-${Date.now()}`);
     fs.mkdirSync(cassetteDir, { recursive: true });
     const traceId = 'header-trace-99';
-    fs.writeFileSync(path.join(cassetteDir, `${traceId}.ndjson`), '', 'utf8');
+    fs.writeFileSync(
+      path.join(cassetteDir, `${traceId}.case.json`),
+      JSON.stringify({
+        version: '1.0.0',
+        caseId: traceId,
+        mode: 'replay',
+        traces: [],
+        rules: [],
+        fixtures: [],
+      }),
+      'utf8'
+    );
     SoftprobeContext.initGlobal({ mode: 'PASSTHROUGH', cassetteDirectory: cassetteDir });
     const res = await app.inject({
       method: 'GET',
@@ -204,7 +215,7 @@ describe('Task 21.1.1: Header extraction in Fastify — SoftprobeContext.active(
     expect(body.traceId).toBe(traceId);
     expect(body.storage).toBeDefined();
     try {
-      fs.unlinkSync(path.join(cassetteDir, `${traceId}.ndjson`));
+      fs.unlinkSync(path.join(cassetteDir, `${traceId}.case.json`));
       fs.rmdirSync(cassetteDir);
     } catch {
       // ignore cleanup errors

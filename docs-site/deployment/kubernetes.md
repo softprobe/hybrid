@@ -107,6 +107,10 @@ spec:
     sp_backend_url: http://softprobe-runtime.softprobe-system:8080
 ```
 
+::: tip Out-of-band capture (`sp_backend_url`)
+The WASM filter POSTs inject/extract OTLP to **`sp_backend_url`** — the **Softprobe runtime** (`softprobe-runtime`), for example the in-cluster URL above or `https://o.softprobe.ai`. That path is **out-of-band** from your production OpenTelemetry export to Datadog, Honeycomb, New Relic, or similar: full HTTP bodies are not streamed into your existing APM by default. Rationale: [Proxy integration posture](https://github.com/softprobe/hybrid/blob/main/docs/proxy-integration-posture.md). Hybrid proxy vs language instrumentation: [Language instrumentation](https://github.com/softprobe/hybrid/blob/main/docs/language-instrumentation.md).
+:::
+
 ::: tip GHCR WASM image (PD5.3b)
 CI publishes a **scratch** OCI image at `ghcr.io/<github-org>/softprobe-proxy` with the module at **`/plugin.wasm`** (same layout Istio expects for `oci://` URLs). Tags: `latest` on `main`, `sha-<short>` on every push, and the git tag name on `v*` releases. Replace `softprobe` in the URL with your `repository_owner` on forks.
 
@@ -184,7 +188,7 @@ Or expose via an `Ingress` / `Gateway` — protect it with auth.
 ## 5. Capture to object storage
 
 ::: warning Not shipped yet
-Object-storage case writers (`s3://`, `gs://`, `azblob://`) and the `{sessionId}` / `{ts}` / `{mode}` path templates are **planned** for v0.6. Tracked as [PD4.3a](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd4--runtime-observability-and-capture-operations) (templates) and [PD4.4a](https://github.com/softprobe/softprobe/blob/main/tasks.md#phase-pd4--runtime-observability-and-capture-operations) (object-storage schemes). Today only `file://` (the default) works; mount a `PersistentVolumeClaim` and point `SOFTPROBE_CAPTURE_CASE_PATH` at a plain path on that volume.
+Object-storage case writers (`s3://`, `gs://`, `azblob://`) and the `{sessionId}` / `{ts}` / `{mode}` path templates are **planned** for v0.6. Tracked as [PD4.3a](https://github.com/softprobe/hybrid/blob/main/tasks.md) (templates) and [PD4.4a](https://github.com/softprobe/hybrid/blob/main/tasks.md) (object-storage schemes); see [`tasks.md`](https://github.com/softprobe/hybrid/blob/main/tasks.md) Phase PD4. Today only `file://` (the default) works; mount a `PersistentVolumeClaim` and point `SOFTPROBE_CAPTURE_CASE_PATH` at a plain path on that volume.
 :::
 
 For large-scale captures (thousands of sessions per night), once PD4 lands you'll be able to write straight to S3/GCS instead of a local volume:

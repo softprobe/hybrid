@@ -16,8 +16,19 @@ import { AsyncHooksContextManager } from '@opentelemetry/context-async-hooks';
 
 import { softprobe } from '../api';
 import { SOFTPROBE_CONTEXT_KEY, SoftprobeContext } from '../context';
+import { buildCaseDocumentFromRecords } from '../core/cassette/case-bridge';
 import type { SoftprobeMatcher } from '../core/matcher/softprobe-matcher';
+import type { SoftprobeCassetteRecord } from '../types/schema';
 import { runSoftprobeScope } from './helpers/run-softprobe-scope';
+
+function writeCaseRecords(filePath: string, records: SoftprobeCassetteRecord[]): void {
+  const traceId = path.basename(filePath, '.case.json');
+  const normalized = records.map((r) => ({ ...r, traceId }));
+  fs.writeFileSync(
+    filePath,
+    JSON.stringify(buildCaseDocumentFromRecords(normalized, { caseId: traceId, mode: 'replay' }))
+  );
+}
 
 describe('softprobe API (AsyncLocalStorage trace isolation)', () => {
   beforeAll(() => {
@@ -30,7 +41,7 @@ describe('softprobe API (AsyncLocalStorage trace isolation)', () => {
     const legacyShape = {
       mode: 'REPLAY',
       traceId: 'trace-72',
-      cassettePath: '/legacy.ndjson',
+      cassettePath: '/legacy.case.json',
     };
     const activeSpy = jest.spyOn(SoftprobeContext, 'active').mockReturnValue(legacyShape as never);
     const modeSpy = jest.spyOn(SoftprobeContext, 'getMode').mockReturnValue('REPLAY');
@@ -89,12 +100,18 @@ describe('softprobe API (AsyncLocalStorage trace isolation)', () => {
   it('run scope sets OTel context visible inside callback (traceId and storage)', async () => {
     const traceId = 'prod-trace-345';
     const cassetteDirectory = os.tmpdir();
-    const filePath = path.join(cassetteDirectory, `${traceId}.ndjson`);
-    fs.writeFileSync(
-      filePath,
-      '{"version":"4.1","traceId":"' + traceId + '","spanId":"s1","timestamp":"2025-01-01T00:00:00.000Z","type":"outbound","protocol":"http","identifier":"GET /"}\n',
-      'utf8'
-    );
+    const filePath = path.join(cassetteDirectory, `${traceId}.case.json`);
+    writeCaseRecords(filePath, [
+      {
+        version: '4.1',
+        traceId,
+        spanId: 's1',
+        timestamp: '2025-01-01T00:00:00.000Z',
+        type: 'outbound',
+        protocol: 'http',
+        identifier: 'GET /',
+      },
+    ]);
 
     const storeInside = await runSoftprobeScope(
       { traceId, cassetteDirectory },
@@ -139,10 +156,18 @@ describe('softprobe API (AsyncLocalStorage trace isolation)', () => {
   it('runWithContext loads records and sets into matcher so matcher fn sees records', async () => {
     const cassetteDirectory = os.tmpdir();
     const traceId = 't1';
-    const filePath = path.join(cassetteDirectory, `${traceId}.ndjson`);
-    const oneRecord =
-      '{"version":"4.1","traceId":"t1","spanId":"s1","timestamp":"2025-01-01T00:00:00.000Z","type":"outbound","protocol":"postgres","identifier":"SELECT 1"}\n';
-    fs.writeFileSync(filePath, oneRecord, 'utf8');
+    const filePath = path.join(cassetteDirectory, `${traceId}.case.json`);
+    writeCaseRecords(filePath, [
+      {
+        version: '4.1',
+        traceId: 't1',
+        spanId: 's1',
+        timestamp: '2025-01-01T00:00:00.000Z',
+        type: 'outbound',
+        protocol: 'postgres',
+        identifier: 'SELECT 1',
+      },
+    ]);
 
     let recordsLength = 0;
     await runSoftprobeScope({ cassetteDirectory, traceId }, async () => {
@@ -180,8 +205,8 @@ describe('softprobe API (AsyncLocalStorage trace isolation)', () => {
       responsePayload: { status: 200, body: { id: 1, name: 'Alice' } },
     };
     const cassetteDirectory = os.tmpdir();
-    const filePath = path.join(cassetteDirectory, `${traceId}.ndjson`);
-    fs.writeFileSync(filePath, JSON.stringify(inboundRecord) + '\n', 'utf8');
+    const filePath = path.join(cassetteDirectory, `${traceId}.case.json`);
+    writeCaseRecords(filePath, [inboundRecord]);
 
     let recorded: ReturnType<typeof softprobe.getRecordedInboundResponse>;
     await runSoftprobeScope({ traceId, cassetteDirectory }, async () => {
@@ -193,7 +218,7 @@ describe('softprobe API (AsyncLocalStorage trace isolation)', () => {
     expect(recorded!.type).toBe('inbound');
     expect(recorded!.protocol).toBe('http');
     expect(recorded!.identifier).toBe('GET /users/1');
-    expect(recorded!.responsePayload).toEqual({ status: 200, body: { id: 1, name: 'Alice' } });
+    expect(recorded!.responsePayload).toMatchObject({ status: 200, body: { id: 1, name: 'Alice' } });
 
     try {
       fs.unlinkSync(filePath);
@@ -216,8 +241,8 @@ describe('softprobe API (AsyncLocalStorage trace isolation)', () => {
         responsePayload: { status: 200, body: { id: 1, name: 'Alice' } },
       };
       const cassetteDirectory = os.tmpdir();
-      const filePath = path.join(cassetteDirectory, `${traceId}.ndjson`);
-      fs.writeFileSync(filePath, JSON.stringify(inboundRecord) + '\n', 'utf8');
+      const filePath = path.join(cassetteDirectory, `${traceId}.case.json`);
+      writeCaseRecords(filePath, [inboundRecord]);
 
       await runSoftprobeScope({ traceId, cassetteDirectory }, async () => {
         softprobe.compareInbound({ status: 200, body: { id: 1, name: 'Alice' } });
@@ -243,8 +268,8 @@ describe('softprobe API (AsyncLocalStorage trace isolation)', () => {
         responsePayload: { status: 200, body: {} },
       };
       const cassetteDirectory = os.tmpdir();
-      const filePath = path.join(cassetteDirectory, `${traceId}.ndjson`);
-      fs.writeFileSync(filePath, JSON.stringify(inboundRecord) + '\n', 'utf8');
+      const filePath = path.join(cassetteDirectory, `${traceId}.case.json`);
+      writeCaseRecords(filePath, [inboundRecord]);
 
       await runSoftprobeScope({ traceId, cassetteDirectory }, async () => {
         expect(() => {
@@ -272,8 +297,8 @@ describe('softprobe API (AsyncLocalStorage trace isolation)', () => {
         responsePayload: { status: 200, body: { x: 1 } },
       };
       const cassetteDirectory = os.tmpdir();
-      const filePath = path.join(cassetteDirectory, `${traceId}.ndjson`);
-      fs.writeFileSync(filePath, JSON.stringify(inboundRecord) + '\n', 'utf8');
+      const filePath = path.join(cassetteDirectory, `${traceId}.case.json`);
+      writeCaseRecords(filePath, [inboundRecord]);
 
       await runSoftprobeScope({ traceId, cassetteDirectory }, async () => {
         expect(() => {
@@ -291,12 +316,18 @@ describe('softprobe API (AsyncLocalStorage trace isolation)', () => {
     it('throws when no recorded inbound exists', async () => {
       const cassetteDirectory = os.tmpdir();
       const traceId = 't1';
-      const filePath = path.join(cassetteDirectory, `${traceId}.ndjson`);
-      fs.writeFileSync(
-        filePath,
-        '{"version":"4.1","traceId":"t1","spanId":"s1","timestamp":"2025-01-01T00:00:00.000Z","type":"outbound","protocol":"http","identifier":"GET /"}\n',
-        'utf8'
-      );
+      const filePath = path.join(cassetteDirectory, `${traceId}.case.json`);
+      writeCaseRecords(filePath, [
+        {
+          version: '4.1',
+          traceId: 't1',
+          spanId: 's1',
+          timestamp: '2025-01-01T00:00:00.000Z',
+          type: 'outbound',
+          protocol: 'http',
+          identifier: 'GET /',
+        },
+      ]);
 
       await runSoftprobeScope({ traceId, cassetteDirectory }, async () => {
         expect(() => {
@@ -331,8 +362,8 @@ describe('softprobe API (AsyncLocalStorage trace isolation)', () => {
 
     it('when strict, mismatched headers cause failure', async () => {
       const cassetteDirectory = os.tmpdir();
-      const filePath = path.join(cassetteDirectory, `${traceId}.ndjson`);
-      fs.writeFileSync(filePath, JSON.stringify(inboundWithHeaders) + '\n', 'utf8');
+      const filePath = path.join(cassetteDirectory, `${traceId}.case.json`);
+      writeCaseRecords(filePath, [inboundWithHeaders]);
       try {
         await runSoftprobeScope(
           { traceId, cassetteDirectory, strictComparison: true },
@@ -357,8 +388,8 @@ describe('softprobe API (AsyncLocalStorage trace isolation)', () => {
 
     it('when strict, matching headers do not cause failure', async () => {
       const cassetteDirectory = os.tmpdir();
-      const filePath = path.join(cassetteDirectory, `${traceId}.ndjson`);
-      fs.writeFileSync(filePath, JSON.stringify(inboundWithHeaders) + '\n', 'utf8');
+      const filePath = path.join(cassetteDirectory, `${traceId}.case.json`);
+      writeCaseRecords(filePath, [inboundWithHeaders]);
       try {
         await runSoftprobeScope(
           { traceId, cassetteDirectory, strictComparison: true },
@@ -381,8 +412,8 @@ describe('softprobe API (AsyncLocalStorage trace isolation)', () => {
 
     it('when off, only status and body matter (mismatched headers do not cause failure)', async () => {
       const cassetteDirectory = os.tmpdir();
-      const filePath = path.join(cassetteDirectory, `${traceId}.ndjson`);
-      fs.writeFileSync(filePath, JSON.stringify(inboundWithHeaders) + '\n', 'utf8');
+      const filePath = path.join(cassetteDirectory, `${traceId}.case.json`);
+      writeCaseRecords(filePath, [inboundWithHeaders]);
       try {
         await runSoftprobeScope(
           { traceId, cassetteDirectory, strictComparison: false },
@@ -407,7 +438,7 @@ describe('softprobe API (AsyncLocalStorage trace isolation)', () => {
   it('Task 2.8: runWithContext cleanup preserves legacy fields and seeds replay matcher/inbound before callback', async () => {
     const traceId = 'trace-cleanup-28';
     const cassetteDirectory = os.tmpdir();
-    const filePath = path.join(cassetteDirectory, `${traceId}.ndjson`);
+    const filePath = path.join(cassetteDirectory, `${traceId}.case.json`);
     const inboundRecord = {
       version: '4.1' as const,
       traceId,
@@ -418,11 +449,17 @@ describe('softprobe API (AsyncLocalStorage trace isolation)', () => {
       identifier: 'GET /cleanup',
       responsePayload: { status: 200, body: { ok: true } },
     };
-    const outboundRecord =
-      '{"version":"4.1","traceId":"' +
-      traceId +
-      '","spanId":"out-1","timestamp":"2025-01-01T00:00:01.000Z","type":"outbound","protocol":"http","identifier":"GET /users","responsePayload":{"value":1}}\n';
-    fs.writeFileSync(filePath, JSON.stringify(inboundRecord) + '\n' + outboundRecord, 'utf8');
+    const outboundRecord: SoftprobeCassetteRecord = {
+      version: '4.1',
+      traceId,
+      spanId: 'out-1',
+      timestamp: '2025-01-01T00:00:01.000Z',
+      type: 'outbound',
+      protocol: 'http',
+      identifier: 'GET /users',
+      responsePayload: { value: 1 },
+    };
+    writeCaseRecords(filePath, [inboundRecord, outboundRecord]);
 
     let seenStorageDefined = false;
     let seenStrictReplay = false;

@@ -4,6 +4,9 @@
  * Uses repo-relative path so the example works without building the package (design §4.1).
  */
 import '../../src/init';
+import { applyLegacyFrameworkPatches } from '../../src/legacy';
+
+applyLegacyFrameworkPatches();
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 

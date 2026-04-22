@@ -2,6 +2,12 @@
 
 Enterprise-grade deployment for SP-Istio Agent in production environments.
 
+## OpenTelemetry and where capture goes
+
+Your applications should keep using **OpenTelemetry** as they do today: exporters to Datadog, Honeycomb, Grafana Cloud, an in-cluster **OpenTelemetry Collector**, and so on are **unchanged** by Softprobe.
+
+The Softprobe WASM plugin sends **full HTTP** capture (including bodies) **only** to **`sp_backend_url`** — the **Softprobe runtime** ([`proxy-otel-api.md`](../../spec/protocol/proxy-otel-api.md)), for example `https://o.softprobe.ai` or your self-hosted URL. That path is **out-of-band** with respect to your vendor pipeline so large payloads are not dropped or truncated by APM limits. See [`docs/proxy-integration-posture.md`](../../docs/proxy-integration-posture.md).
+
 ## Prerequisites
 
 ### Infrastructure Requirements
