@@ -113,7 +113,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCS_CREDENTIALS_JSON }}
+          credentials_json: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
 
       - name: Upload WASM to GCS
         if: github.event_name != 'pull_request'
