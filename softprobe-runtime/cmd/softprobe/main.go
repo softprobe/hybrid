@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,6 +30,16 @@ const (
 	exitDoctorFail         = 10
 	exitSuiteFail          = 20
 )
+
+// defaultRuntimeURL returns the value of SOFTPROBE_RUNTIME_URL when set,
+// falling back to the local default. Used as the flag default so users can
+// point every subcommand at the hosted runtime with one env var.
+func defaultRuntimeURL() string {
+	if u := strings.TrimSpace(os.Getenv("SOFTPROBE_RUNTIME_URL")); u != "" {
+		return u
+	}
+	return "https://runtime.softprobe.dev"
+}
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -96,6 +107,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runExport(args[1:], stdout, stderr)
 	case "completion":
 		return runCompletion(args[1:], stdout, stderr)
+	case "cases":
+		return runCases(args[1:], stdout, stderr)
 	default:
 		printUsage(stderr)
 		return exitInvalidArgs
@@ -261,7 +274,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	runtimeURL := fs.String("runtime-url", "http://127.0.0.1:8080", "control runtime base URL")
+	runtimeURL := fs.String("runtime-url", defaultRuntimeURL(), "control runtime base URL")
 	jsonOutput := fs.Bool("json", false, "emit JSON output")
 	if err := fs.Parse(args); err != nil {
 		return exitInvalidArgs
@@ -428,7 +441,7 @@ func runSessionStart(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session start", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	runtimeURL := fs.String("runtime-url", "http://127.0.0.1:8080", "control runtime base URL")
+	runtimeURL := fs.String("runtime-url", defaultRuntimeURL(), "control runtime base URL")
 	mode := fs.String("mode", "replay", "session mode")
 	jsonOutput := fs.Bool("json", false, "emit JSON output")
 	shellOutput := fs.Bool("shell", false, "emit only a shell export line")
@@ -579,7 +592,7 @@ func runSessionStats(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session stats", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	runtimeURL := fs.String("runtime-url", "http://127.0.0.1:8080", "control runtime base URL")
+	runtimeURL := fs.String("runtime-url", defaultRuntimeURL(), "control runtime base URL")
 	sessionID := fs.String("session", "", "session ID")
 	jsonOutput := fs.Bool("json", false, "emit JSON output")
 	if err := fs.Parse(args); err != nil {
@@ -657,7 +670,7 @@ func runSessionClose(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session close", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	runtimeURL := fs.String("runtime-url", "http://127.0.0.1:8080", "control runtime base URL")
+	runtimeURL := fs.String("runtime-url", defaultRuntimeURL(), "control runtime base URL")
 	sessionID := fs.String("session", "", "session ID")
 	jsonOutput := fs.Bool("json", false, "emit JSON output")
 	outPath := fs.String("out", "", "override capture output path (capture sessions only)")
@@ -704,10 +717,20 @@ func runSessionClose(args []string, stdout, stderr io.Writer) int {
 		SessionID   string `json:"sessionId"`
 		Closed      bool   `json:"closed"`
 		CapturePath string `json:"capturePath,omitempty"`
+		CaseRef     string `json:"caseRef,omitempty"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&closed); err != nil {
 		_, _ = fmt.Fprintf(stderr, "session close failed: invalid body: %v\n", err)
 		return exitGeneric
+	}
+
+	// If --out was given and the runtime did not return a local capturePath,
+	// fetch the case via GET /v1/cases/{id} (hosted runtime path).
+	trimmedOut := strings.TrimSpace(*outPath)
+	if trimmedOut != "" && closed.CapturePath == "" {
+		if code := downloadCase(*runtimeURL, *sessionID, trimmedOut, stderr); code != exitOK {
+			return code
+		}
 	}
 
 	if *jsonOutput {
@@ -722,10 +745,46 @@ func runSessionClose(args []string, stdout, stderr io.Writer) int {
 		return exitOK
 	}
 
-	if closed.CapturePath != "" {
+	if trimmedOut != "" && closed.CapturePath == "" {
+		_, _ = fmt.Fprintf(stdout, "session %s closed\nwrote %s\n", closed.SessionID, trimmedOut)
+	} else if closed.CapturePath != "" {
 		_, _ = fmt.Fprintf(stdout, "session %s closed\ncapturePath: %s\n", closed.SessionID, closed.CapturePath)
 	} else {
 		_, _ = fmt.Fprintf(stdout, "session %s closed\n", closed.SessionID)
+	}
+	return exitOK
+}
+
+// downloadCase fetches GET /v1/cases/{sessionID} and writes the body to outPath.
+func downloadCase(runtimeURL, sessionID, outPath string, stderr io.Writer) int {
+	client := newHTTPClient(10 * time.Second)
+	req, err := newRuntimeRequest(
+		http.MethodGet,
+		strings.TrimRight(runtimeURL, "/")+"/v1/cases/"+sessionID,
+		nil,
+	)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "cases get failed: %v\n", err)
+		return exitGeneric
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "cases get failed: %v\n", err)
+		return classifyTransportError(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		_, _ = fmt.Fprintf(stderr, "cases get failed: status %d: %s\n", resp.StatusCode, strings.TrimSpace(string(body)))
+		return classifyHTTPError(resp.StatusCode, body)
+	}
+	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+		_, _ = fmt.Fprintf(stderr, "cases get: mkdir: %v\n", err)
+		return exitGeneric
+	}
+	if err := os.WriteFile(outPath, body, 0o600); err != nil {
+		_, _ = fmt.Fprintf(stderr, "cases get: write: %v\n", err)
+		return exitGeneric
 	}
 	return exitOK
 }
@@ -734,7 +793,7 @@ func runSessionLoadCase(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session load-case", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	runtimeURL := fs.String("runtime-url", "http://127.0.0.1:8080", "control runtime base URL")
+	runtimeURL := fs.String("runtime-url", defaultRuntimeURL(), "control runtime base URL")
 	sessionID := fs.String("session", "", "session ID")
 	filePath := fs.String("file", "", "case file path")
 	jsonOutput := fs.Bool("json", false, "emit JSON output")
@@ -806,7 +865,7 @@ func runSessionRulesApply(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session rules apply", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	runtimeURL := fs.String("runtime-url", "http://127.0.0.1:8080", "control runtime base URL")
+	runtimeURL := fs.String("runtime-url", defaultRuntimeURL(), "control runtime base URL")
 	sessionID := fs.String("session", "", "session ID")
 	filePath := fs.String("file", "", "rules file path")
 	jsonOutput := fs.Bool("json", false, "emit JSON output")
@@ -884,7 +943,7 @@ func runSessionPolicySet(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session policy set", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	runtimeURL := fs.String("runtime-url", "http://127.0.0.1:8080", "control runtime base URL")
+	runtimeURL := fs.String("runtime-url", defaultRuntimeURL(), "control runtime base URL")
 	sessionID := fs.String("session", "", "session ID")
 	strict := fs.Bool("strict", false, "enable strict policy")
 	filePath := fs.String("file", "", "policy file (YAML or JSON)")
@@ -976,8 +1035,70 @@ func runSessionPolicySet(args []string, stdout, stderr io.Writer) int {
 	return exitOK
 }
 
+func runCases(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 || args[0] != "get" {
+		_, _ = fmt.Fprintln(stderr, "usage: softprobe cases get <sessionID> [--runtime-url URL] [--out PATH]")
+		return exitInvalidArgs
+	}
+	return runCasesGet(args[1:], stdout, stderr)
+}
+
+func runCasesGet(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("cases get", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	runtimeURL := fs.String("runtime-url", defaultRuntimeURL(), "control runtime base URL")
+	outPath := fs.String("out", "", "write case JSON to file instead of stdout")
+	if err := fs.Parse(args); err != nil {
+		return exitInvalidArgs
+	}
+	if fs.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "cases get: expected one session ID argument")
+		return exitInvalidArgs
+	}
+	sessionID := fs.Arg(0)
+
+	client := newHTTPClient(10 * time.Second)
+	req, err := newRuntimeRequest(
+		http.MethodGet,
+		strings.TrimRight(*runtimeURL, "/")+"/v1/cases/"+sessionID,
+		nil,
+	)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "cases get failed: %v\n", err)
+		return exitGeneric
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "cases get failed: %v\n", err)
+		return classifyTransportError(err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		_, _ = fmt.Fprintf(stderr, "cases get failed: status %d: %s\n", resp.StatusCode, strings.TrimSpace(string(body)))
+		return classifyHTTPError(resp.StatusCode, body)
+	}
+
+	if *outPath != "" {
+		if err := os.MkdirAll(filepath.Dir(*outPath), 0o755); err != nil {
+			_, _ = fmt.Fprintf(stderr, "cases get: mkdir: %v\n", err)
+			return exitGeneric
+		}
+		if err := os.WriteFile(*outPath, body, 0o600); err != nil {
+			_, _ = fmt.Fprintf(stderr, "cases get: write file: %v\n", err)
+			return exitGeneric
+		}
+		_, _ = fmt.Fprintf(stdout, "wrote %s\n", *outPath)
+		return exitOK
+	}
+
+	_, _ = stdout.Write(body)
+	return exitOK
+}
+
 func printUsage(w io.Writer) {
-	_, _ = fmt.Fprintln(w, "usage: softprobe [--version|version|doctor|inspect case|generate jest-session|session start|session load-case|session policy set --file PATH|session close --out PATH|validate case|validate rules|validate suite|replay run|suite run|suite validate]")
+	_, _ = fmt.Fprintln(w, "usage: softprobe [--version|version|doctor|inspect case|generate jest-session|session start|session load-case|session policy set --file PATH|session close --out PATH|cases get|validate case|validate rules|validate suite|replay run|suite run|suite validate]")
 }
 
 // normalizeRulesPayload accepts JSON straight through, and translates
@@ -1056,7 +1177,7 @@ func classifyTransportError(err error) int {
 func classifyHTTPError(status int, body []byte) int {
 	switch status {
 	case http.StatusNotFound:
-		if matchesErrorCode(body, "unknown_session") {
+		if matchesErrorCode(body, "unknown_session") || matchesErrorCode(body, "session_not_found") {
 			return exitSessionNotFound
 		}
 	case http.StatusBadRequest, http.StatusUnprocessableEntity:

@@ -10,7 +10,7 @@
 
 The OSS `softprobe-runtime` is a single-process server with an in-memory store that vanishes on restart. The hosted service (`app.softprobe.dev`) makes it durable and multi-tenant so users can sign up, get an API key, and run `softprobe` against `https://runtime.softprobe.dev` rather than a local process.
 
-The existing `otel-server` (Java/Spring, deployed at `o.softprobe.ai`) already handles durable span storage in BigQuery/GCS with a working multi-tenant API key model. We build on top of it rather than replacing it.
+The existing `otel-server` (Java/Spring, deployed at `runtime.softprobe.dev`) already handles durable span storage in BigQuery/GCS with a working multi-tenant API key model. We build on top of it rather than replacing it.
 
 **What changes vs. OSS:**
 - Sessions and their attached state (rules, policy, fixtures, loaded case) are persisted in Redis and survive restarts.
@@ -21,7 +21,7 @@ The existing `otel-server` (Java/Spring, deployed at `o.softprobe.ai`) already h
 **What does not change:**
 - The control API wire contract (`spec/protocol/http-control-api.md`) is identical — the hosted runtime is the same binary with a persistence backend wired in.
 - The proxy OTLP API (`spec/protocol/proxy-otel-api.md`) is identical — the WASM plugin points at the hosted URL instead of `localhost`.
-- All SDK code is unchanged; users swap `SOFTPROBE_RUNTIME_URL` and `SOFTPROBE_API_KEY`.
+- All SDK code is unchanged; users swap `SOFTPROBE_RUNTIME_URL` and `SOFTPROBE_API_TOKEN`.
 
 ---
 
@@ -50,7 +50,7 @@ test / CI ──────────────▶│  control API  │  OT
 ```
 
 The runtime talks to three external systems:
-1. **Supabase** (`auth.softprobe.ai`) — API key → tenant ID. Already running; the existing `/api/api-key/validate` endpoint is unchanged.
+1. **Supabase** (`auth.softprobe.dev`) — API key → tenant ID. Already running; the existing `/api/api-key/validate` endpoint is unchanged.
 2. **Redis** — session control state (rules, policy, fixtures, revision, mode, loaded case ref). TTL-native, shared with otel-server.
 3. **GCS** — case file blobs and extract payloads.
 
@@ -68,7 +68,7 @@ Every request to the hosted runtime carries:
 Authorization: Bearer <api-key>
 ```
 
-The runtime validates the key against `auth.softprobe.ai/api/api-key/validate`. The response gives `tenantId` plus the GCS bucket name for that tenant. Cache the result in-process with a short TTL (60 s) — identical to what otel-server already does.
+The runtime validates the key against `auth.softprobe.dev/api/api-key/validate`. The response gives `tenantId` plus the GCS bucket name for that tenant. Cache the result in-process with a short TTL (60 s) — identical to what otel-server already does.
 
 The OSS self-hosted runtime keeps the existing `SOFTPROBE_API_TOKEN` env var (single static token, no tenancy). Zero changes to OSS behavior.
 
@@ -86,11 +86,10 @@ An API key can only read/write sessions belonging to its own tenant. Cross-tenan
 
 Goal: working `softprobe doctor` in under 5 minutes.
 
-1. User visits `app.softprobe.dev` → signs up with Google/GitHub via **Supabase Auth** (already powers `auth.softprobe.ai`).
+1. User visits `app.softprobe.dev` → signs up with Google/GitHub via **Supabase Auth** (already powers `auth.softprobe.dev`).
 2. After signup, the dashboard shows one command:
    ```bash
-   export SOFTPROBE_RUNTIME_URL=https://runtime.softprobe.dev
-   export SOFTPROBE_API_KEY=sk_live_...
+   export SOFTPROBE_API_TOKEN=sk_live_...
    softprobe doctor
    ```
 3. `softprobe doctor` passes → user follows existing quickstart docs unchanged.
@@ -98,7 +97,7 @@ Goal: working `softprobe doctor` in under 5 minutes.
 No credit card on sign-up. Free tier: 10 sessions/day, 7-day case retention.
 
 **3rd-party services used:**
-- **Supabase** for identity, API key storage, and tenant metadata. Already running as `auth.softprobe.ai`. The dashboard is a thin UI on top of existing Supabase tables.
+- **Supabase** for identity, API key storage, and tenant metadata. Already running as `auth.softprobe.dev`. The dashboard is a thin UI on top of existing Supabase tables.
 
 ---
 
@@ -192,7 +191,7 @@ otel-server's `/v1/inject` endpoint is not used in the current architecture (sof
 | `otel-server` | Cloud Run (already deployed) |
 | Session store | Redis — Cloud Memorystore (shared with otel-server) |
 | Case/extract blobs | GCS (already provisioned per tenant) |
-| Auth/identity/API keys | Supabase (already running as `auth.softprobe.ai`) |
+| Auth/identity/API keys | Supabase (already running as `auth.softprobe.dev`) |
 | Web dashboard | Next.js on Vercel or Cloudflare Pages |
 | Custom domain routing | Cloudflare (already used for docs) |
 
@@ -216,13 +215,12 @@ gcloud compute networks vpc-access connectors create softprobe-connector \
 gcloud run deploy softprobe-runtime \
   --project=coral-smoke-455007-j2 \
   --region=us-central1 \
-  --image=ghcr.io/softprobe/softprobe-runtime:latest \
+  --image=ghcr.io/softprobe/softprobe-runtime:v0.5.0 \
   --service-account=softprobe-runtime@coral-smoke-455007-j2.iam.gserviceaccount.com \
   --vpc-connector=softprobe-connector \
   --allow-unauthenticated \
-  --set-env-vars="SOFTPROBE_HOSTED=true,\
-SOFTPROBE_LISTEN_ADDR=:8080,\
-SOFTPROBE_AUTH_URL=https://auth.softprobe.ai/api/api-key/validate,\
+  --set-env-vars="SOFTPROBE_LISTEN_ADDR=:8080,\
+SOFTPROBE_AUTH_URL=https://auth.softprobe.dev/api/api-key/validate,\
 REDIS_HOST=10.42.202.91,\
 REDIS_PORT=6379,\
 GCS_BUCKET=softprobe-otel-data,\
@@ -232,7 +230,7 @@ GCS_PROJECT=coral-smoke-455007-j2"
 SOFTPROBE_RUNTIME_URL=$(gcloud run services describe softprobe-runtime \
   --project=coral-smoke-455007-j2 --region=us-central1 \
   --format="value(status.url)") \
-SOFTPROBE_API_KEY=<your-key> \
+SOFTPROBE_API_TOKEN=<your-key> \
 go test ./e2e/hosted/ -v -count=1
 ```
 
@@ -244,7 +242,7 @@ go test ./e2e/hosted/ -v -count=1
 
 Goal: an engineer can point `SOFTPROBE_RUNTIME_URL` at the hosted instance, authenticate with an API key, and run the full capture/replay workflow end-to-end with sessions that survive restarts.
 
-1. Add `Authorization: Bearer` middleware to softprobe-runtime; call `auth.softprobe.ai` to resolve tenant. Feature-flagged by `SOFTPROBE_HOSTED=true` env var — OSS behavior unchanged when flag is absent.
+1. Add `Authorization: Bearer` middleware to softprobe-runtime; call `auth.softprobe.dev` to resolve tenant. Hosted mode activates automatically when `SOFTPROBE_AUTH_URL`, `REDIS_HOST`, and `GCS_BUCKET` are all set — OSS behavior unchanged when absent.
 2. Implement `RedisStore` satisfying the same `Store` interface as the current in-memory store.
 3. Wire extract payloads to GCS writes instead of in-memory append.
 4. Wire `close` (capture mode) to GCS case file write and BigQuery ingestion via otel-server.

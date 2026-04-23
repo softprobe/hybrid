@@ -9,7 +9,7 @@
 - **`softprobe-runtime` (OSS, unified)** — serves **both** the HTTP control API ([`spec/protocol/http-control-api.md`](spec/protocol/http-control-api.md)) **and** the proxy OTLP API ([`spec/protocol/proxy-otel-api.md`](spec/protocol/proxy-otel-api.md)) from **one Go process** with a shared session store. OSS uses in-memory; hosted uses Redis.
 - **Internal package layout:** `internal/store/` (shared session/case/rules state), `internal/controlapi/` (JSON control handlers), `internal/proxybackend/` (OTLP inject/extract handlers).
 - **Hosted service design:** [`docs/hosted-service.md`](docs/hosted-service.md). Infrastructure credentials: `.env.hosted`, `.gcp-softprobe-runtime.json` (gitignored).
-- **Hosted feature flag:** `SOFTPROBE_HOSTED=true` gates all hosted-only behavior. OSS behavior is unchanged when absent.
+- **Hosted auto-detection:** Hosted mode activates automatically when `SOFTPROBE_AUTH_URL`, `REDIS_HOST`, and `GCS_BUCKET` are all set. No explicit feature flag needed.
 
 ## Legend
 
@@ -29,19 +29,19 @@ Design doc: [`docs/hosted-service.md`](docs/hosted-service.md)
 
 - [x] **HD1.1 — Auth service client.** Add `internal/authn/` package. `Resolve(apiKey) → (tenantID, bucketName, error)` calls `auth.softprobe.ai/api/api-key/validate` with `Authorization: Bearer <key>`. Cache responses in-process with 60 s TTL. Failing tests use a fake auth server.
 
-- [x] **HD1.2 — Bearer middleware.** When `SOFTPROBE_HOSTED=true`, all `/v1/*` routes require `Authorization: Bearer <api-key>`. Middleware calls `authn.Resolve`, injects `tenantID` and `bucketName` into the request context. Returns `401` on missing header, `403` on invalid key. Tests cover missing, invalid, and valid key paths.
+- [x] **HD1.2 — Bearer middleware.** When hosted mode is active (SOFTPROBE_AUTH_URL + REDIS_HOST + GCS_BUCKET set), all `/v1/*` routes require `Authorization: Bearer <api-key>`. Middleware calls `authn.Resolve`, injects `tenantID` and `bucketName` into the request context. Returns `401` on missing header, `403` on invalid key. Tests cover missing, invalid, and valid key paths.
 
 ### HD2 — Redis session store
 
 - [x] **HD2.1 — `Store` interface.** Extract the current concrete `store.Store` struct into a `Store` interface in `internal/store/`. `MemoryStore` is the existing implementation renamed. All callers updated to use the interface. No behavior change; tests stay green.
 
-- [x] **HD2.2 — `RedisStore` implementation.** Implement `Store` interface backed by Redis. Session document serialized as JSON under key `session:{tenantID}:{sessionID}`. Extract GCS paths stored in a Redis list `session:{tenantID}:{sessionID}:extracts`. Both keys TTL 24 h, reset on every write. Atomic revision increment via `WATCH`/`MULTI`/`EXEC`. Activated when `SOFTPROBE_HOSTED=true`; `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` env vars configure the connection. Failing tests run against `miniredis`.
+- [x] **HD2.2 — `RedisStore` implementation.** Implement `Store` interface backed by Redis. Session document serialized as JSON under key `session:{tenantID}:{sessionID}`. Extract GCS paths stored in a Redis list `session:{tenantID}:{sessionID}:extracts`. Both keys TTL 24 h, reset on every write. Atomic revision increment via `WATCH`/`MULTI`/`EXEC`. Activated when `SOFTPROBE_AUTH_URL`, `REDIS_HOST`, and `GCS_BUCKET` are all set; `REDIS_PORT`, `REDIS_PASSWORD` are optional. Failing tests run against `miniredis`.
 
 - [x] **HD2.3 — Tenant-scoped session access.** Session create, read, and write operations assert that the `tenantID` in the request context matches the session's stored `tenantID`. Cross-tenant reads return `404`. Tests cover the isolation invariant.
 
 ### HD3 — GCS case and extract storage
 
-- [x] **HD3.1 — GCS client.** Add `internal/gcs/` package wrapping `cloud.google.com/go/storage`. `Put(ctx, bucket, object, data)` and `Get(ctx, bucket, object) → []byte`. Credentials from `GOOGLE_APPLICATION_CREDENTIALS` or workload identity. Activated only when `SOFTPROBE_HOSTED=true`. Tests use a fake GCS server (`fsouza/fake-gcs-server` or httptest stub).
+- [x] **HD3.1 — GCS client.** Add `internal/gcs/` package wrapping `cloud.google.com/go/storage`. `Put(ctx, bucket, object, data)` and `Get(ctx, bucket, object) → []byte`. Credentials from `GOOGLE_APPLICATION_CREDENTIALS` or workload identity. Activated when hosted mode is detected. Tests use a fake GCS server (`fsouza/fake-gcs-server` or httptest stub).
 
 - [x] **HD3.2 — Extract writes to GCS.** In the hosted path, `POST /v1/traces` (extract) writes the OTLP payload to `gs://{tenantBucket}/extracts/{sessionID}/{uuid}.otlp.json` and appends the object path to the Redis extracts list rather than buffering in memory. Tests verify the GCS write and list append; OSS path is unchanged.
 
@@ -51,9 +51,9 @@ Design doc: [`docs/hosted-service.md`](docs/hosted-service.md)
 
 ### HD4 — Hosted-only endpoints
 
-- [x] **HD4.1 — `GET /v1/cases/{caseId}`.** Returns the case JSON by reading `loadedCaseRef` from the session document and fetching from GCS. `404` if no case loaded. Only registered when `SOFTPROBE_HOSTED=true`. Tests cover hit, miss, and auth failure.
+- [x] **HD4.1 — `GET /v1/cases/{caseId}`.** Returns the case JSON by reading `loadedCaseRef` from the session document and fetching from GCS. `404` if no case loaded. Only registered in hosted mode. Tests cover hit, miss, and auth failure.
 
-- [x] **HD4.2 — `GET /v1/sessions`.** Returns a JSON array of open sessions for the authenticated tenant (reads from Redis by tenant key prefix). Paginated with `?limit=` and `?cursor=`. Only registered when `SOFTPROBE_HOSTED=true`. Tests cover empty, populated, and cross-tenant isolation.
+- [x] **HD4.2 — `GET /v1/sessions`.** Returns a JSON array of open sessions for the authenticated tenant (reads from Redis by tenant key prefix). Paginated with `?limit=` and `?cursor=`. Only registered in hosted mode. Tests cover empty, populated, and cross-tenant isolation.
 
 ### HD5 — Cloud Run deployment
 

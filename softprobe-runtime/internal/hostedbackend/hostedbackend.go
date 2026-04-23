@@ -1,6 +1,6 @@
 // Package hostedbackend wires GCS persistence into the extract, close, and load-case paths.
-// It is only active when SOFTPROBE_HOSTED=true. OSS paths in proxybackend and controlapi
-// are unchanged.
+// Active when SOFTPROBE_AUTH_URL, REDIS_HOST, and GCS_BUCKET are all set. OSS paths in
+// proxybackend and controlapi are unchanged.
 package hostedbackend
 
 import (

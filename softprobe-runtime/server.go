@@ -17,15 +17,15 @@ import (
 
 const defaultListenAddr = "127.0.0.1:8080"
 
-// newMux returns the HTTP mux. When SOFTPROBE_HOSTED=true it builds the
-// multi-tenant hosted mux (Redis store, GCS blobs, bearer auth). Otherwise
-// it returns the OSS in-memory mux unchanged.
+// newMux returns the HTTP mux. Hosted mode activates automatically when
+// SOFTPROBE_AUTH_URL, REDIS_HOST, and GCS_BUCKET are all set. Otherwise
+// the OSS in-memory mux is used (local / self-hosted).
 func newMux() http.Handler {
 	level := controlapi.ParseLogLevel(os.Getenv("SOFTPROBE_LOG_LEVEL"))
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
 
-	if os.Getenv("SOFTPROBE_HOSTED") != "true" {
+	if os.Getenv("SOFTPROBE_AUTH_URL") == "" || os.Getenv("REDIS_HOST") == "" || os.Getenv("GCS_BUCKET") == "" {
 		return controlapi.NewMuxWithLogger(store.NewStore(), logger)
 	}
 	return newHostedMux()

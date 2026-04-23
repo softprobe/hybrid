@@ -8,8 +8,8 @@ It serves both API surfaces from one process and one in-memory session store:
 - **JSON control API** for SDKs, tests, and the CLI
 - **OTLP proxy API** for the Envoy/WASM data plane
 
-In local and self-hosted setups, both `SOFTPROBE_RUNTIME_URL` and the proxy's
-`sp_backend_url` should point at this same base URL.
+By default the CLI and SDKs talk to the hosted runtime at `https://runtime.softprobe.dev`.
+Set `SOFTPROBE_RUNTIME_URL` to a local address when running the server yourself.
 
 ## Default address
 
@@ -32,15 +32,18 @@ In local and self-hosted setups, both `SOFTPROBE_RUNTIME_URL` and the proxy's
 - `POST /v1/inject`
 - `POST /v1/traces`
 
-## Canonical local setup
+## Hosted mode (auto-detected)
 
-For the OSS reference layout:
+When `SOFTPROBE_AUTH_URL`, `REDIS_HOST`, and `GCS_BUCKET` are all set the server
+boots in hosted mode: multi-tenant bearer auth, Redis session store, GCS case storage.
+The `SOFTPROBE_LISTEN_ADDR` should be `:8080` for Cloud Run.
 
-- CLI / SDKs use `SOFTPROBE_RUNTIME_URL=http://127.0.0.1:8080`
-- the proxy uses `sp_backend_url=http://softprobe-runtime:8080` inside Docker
-  Compose or the same runtime base URL in other local/self-hosted deployments
+## Local / self-hosted setup
 
-No second local "backend" service is required.
+Run the server with no extra env vars — it uses the in-memory OSS store.
+Point the CLI and SDKs at it with `SOFTPROBE_RUNTIME_URL=http://127.0.0.1:8080`
+and set the proxy's `sp_backend_url` to `http://softprobe-runtime:8080` inside
+Docker Compose.
 
 ## Current CLI surface
 
