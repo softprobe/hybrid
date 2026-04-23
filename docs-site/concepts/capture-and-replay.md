@@ -27,7 +27,7 @@ POST /v1/sessions/sess_X/close → flushes buffered traces to e2e/captured.case.
 
 ### What gets captured
 
-Every HTTP hop that passes through the proxy with `x-softprobe-session-id: $SESSION_ID` attached. For each hop, the case file stores:
+Every HTTP hop that passes through the proxy with `x-softprobe-session-id: $SOFTPROBE_SESSION_ID` attached. For each hop, the case file stores:
 
 - method, URL, and all normalized headers (minus those redacted by policy)
 - request and response bodies (subject to size limits configured on the runtime)

@@ -86,6 +86,7 @@ func newMuxWithOverrides(overrides *SessionCommandOverrides, stores ...store.Sto
 	mux.Handle("/v1/inject", withOptionalBearerAuth(authToken, proxybackend.HandleInject(st)))
 	mux.Handle("/v1/traces", withOptionalBearerAuth(authToken, tracesHandler))
 	mux.HandleFunc("/metrics", handleMetrics)
+	registerAPIDocs(mux)
 	return mux
 }
 

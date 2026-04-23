@@ -123,6 +123,9 @@ fn build_backend_request(
         ("content-length".to_string(), content_length.to_string()),
         ("x-public-key".to_string(), public_key.to_string()),
     ];
+    if !public_key.is_empty() {
+        headers.push(("authorization".to_string(), format!("Bearer {}", public_key)));
+    }
 
     if include_accept {
         headers.insert(
@@ -351,6 +354,7 @@ mod tests {
                 ("accept".to_string(), "application/x-protobuf".to_string()),
                 ("content-length".to_string(), "123".to_string()),
                 ("x-public-key".to_string(), "pubkey".to_string()),
+                ("authorization".to_string(), "Bearer pubkey".to_string()),
             ]
         );
     }
@@ -370,8 +374,15 @@ mod tests {
                 ("content-type".to_string(), "application/x-protobuf".to_string()),
                 ("content-length".to_string(), "456".to_string()),
                 ("x-public-key".to_string(), "pubkey".to_string()),
+                ("authorization".to_string(), "Bearer pubkey".to_string()),
             ]
         );
+    }
+
+    #[test]
+    fn test_build_backend_request_omits_authorization_when_key_empty() {
+        let request = build_inject_backend_request("https://o.softprobe.ai", "", 10);
+        assert!(!request.headers.iter().any(|(k, _)| k == "authorization"));
     }
 
     #[test]

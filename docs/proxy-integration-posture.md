@@ -8,7 +8,7 @@
 
 ## 1. Executive summary
 
-The Envoy / Istio **Softprobe WASM** plugin sends **full HTTP capture** (headers and bodies) to **`softprobe-runtime`** over the **proxy OTLP API** (`POST /v1/inject`, `POST /v1/traces`) as configured by **`sp_backend_url`** (for example `https://o.softprobe.ai`). That stream is **out-of-band (OOB)** with respect to the customer’s **existing** OpenTelemetry export path (Datadog, Honeycomb, New Relic, Sentry, an in-house collector, and so on).
+The Envoy / Istio **Softprobe WASM** plugin sends **full HTTP capture** (headers and bodies) to **`softprobe-runtime`** over the **proxy OTLP API** (`POST /v1/inject`, `POST /v1/traces`) as configured by **`sp_backend_url`** (for example `https://runtime.softprobe.dev`). That stream is **out-of-band (OOB)** with respect to the customer’s **existing** OpenTelemetry export path (Datadog, Honeycomb, New Relic, Sentry, an in-house collector, and so on).
 
 We **do not** position the plugin as “drop spans into your existing APM unchanged.” Customer backends **truncate** large span attributes, enforce **payload size limits** (for example HTTP 413), and bill by **ingested span volume**. Full request/response bodies belong in **Softprobe’s** store and UI, not as unbounded tags on the customer’s production traces.
 

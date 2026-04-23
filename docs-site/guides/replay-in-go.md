@@ -36,10 +36,9 @@ import (
 )
 
 func TestChargesTheCapturedCard(t *testing.T) {
-	runtimeURL := envOr("SOFTPROBE_RUNTIME_URL", "http://127.0.0.1:8080")
 	appURL := envOr("APP_URL", "http://127.0.0.1:8082")
 
-	sp := softprobe.New(softprobe.Config{BaseURL: runtimeURL})
+	sp := softprobe.New(softprobe.Config{})  // reads SOFTPROBE_RUNTIME_URL; defaults to https://runtime.softprobe.dev
 	ctx := context.Background()
 
 	session, err := sp.StartSession(ctx, softprobe.SessionSpec{Mode: "replay"})

@@ -1,0 +1,410 @@
+{
+  "version": "1.0.0",
+  "caseId": "sess_RME13ujtb3uiYUE1",
+  "mode": "capture",
+  "createdAt": "2026-04-23T06:56:11Z",
+  "traces": [
+    {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "sp.public.key",
+                "value": {
+                  "stringValue": "dev-public-key"
+                }
+              },
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "checkout"
+                }
+              },
+              {
+                "key": "sp.resource.type",
+                "value": {
+                  "stringValue": "sp-envoy-proxy"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "spans": [
+                {
+                  "traceId": "AAAAAGnpwoMAAAAABctiGA==",
+                  "spanId": "GKjqBXrASP4=",
+                  "parentSpanId": "fdh1/slGVXw=",
+                  "name": "/fragment",
+                  "kind": "SPAN_KIND_SERVER",
+                  "startTimeUnixNano": "1776927363150714000",
+                  "endTimeUnixNano": "1776927363156079000",
+                  "attributes": [
+                    {
+                      "key": "sp.service.name",
+                      "value": {
+                        "stringValue": "checkout"
+                      }
+                    },
+                    {
+                      "key": "sp.traffic.direction",
+                      "value": {
+                        "stringValue": "outbound"
+                      }
+                    },
+                    {
+                      "key": "sp.span.type",
+                      "value": {
+                        "stringValue": "extract"
+                      }
+                    },
+                    {
+                      "key": "sp.session.id",
+                      "value": {
+                        "stringValue": "sess_RME13ujtb3uiYUE1"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.:method",
+                      "value": {
+                        "stringValue": "GET"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.accept-encoding",
+                      "value": {
+                        "stringValue": "gzip"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.:path",
+                      "value": {
+                        "stringValue": "/fragment"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.x-request-id",
+                      "value": {
+                        "stringValue": "62ba26de-b435-41cf-a622-1b9694b48732"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.traceparent",
+                      "value": {
+                        "stringValue": "00-0000000069e9c2830000000005cb6218-7dd875fec946557c-01"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.user-agent",
+                      "value": {
+                        "stringValue": "Go-http-client/1.1"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.:scheme",
+                      "value": {
+                        "stringValue": "http"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.x-forwarded-proto",
+                      "value": {
+                        "stringValue": "http"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.x-sp-num",
+                      "value": {
+                        "stringValue": "1"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.tracestate",
+                      "value": {
+                        "stringValue": "x-softprobe-session-id=sess_RME13ujtb3uiYUE1"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.:authority",
+                      "value": {
+                        "stringValue": "softprobe-proxy:8084"
+                      }
+                    },
+                    {
+                      "key": "url.path",
+                      "value": {
+                        "stringValue": "/fragment"
+                      }
+                    },
+                    {
+                      "key": "url.full",
+                      "value": {
+                        "stringValue": "http://softprobe-proxy:8084/fragment"
+                      }
+                    },
+                    {
+                      "key": "url.host",
+                      "value": {
+                        "stringValue": "softprobe-proxy:8084"
+                      }
+                    },
+                    {
+                      "key": "http.response.header.x-envoy-upstream-service-time",
+                      "value": {
+                        "stringValue": "0"
+                      }
+                    },
+                    {
+                      "key": "http.response.header.content-length",
+                      "value": {
+                        "stringValue": "13"
+                      }
+                    },
+                    {
+                      "key": "http.response.header.:status",
+                      "value": {
+                        "stringValue": "200"
+                      }
+                    },
+                    {
+                      "key": "http.response.header.content-type",
+                      "value": {
+                        "stringValue": "application/json"
+                      }
+                    },
+                    {
+                      "key": "http.response.header.date",
+                      "value": {
+                        "stringValue": "Thu, 23 Apr 2026 06:56:03 GMT"
+                      }
+                    },
+                    {
+                      "key": "http.response.status_code",
+                      "value": {
+                        "intValue": "200"
+                      }
+                    },
+                    {
+                      "key": "http.response.body",
+                      "value": {
+                        "stringValue": "{\"dep\":\"ok\"}\n"
+                      }
+                    }
+                  ],
+                  "status": {
+                    "code": "STATUS_CODE_OK"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "sp.public.key",
+                "value": {
+                  "stringValue": "dev-public-key"
+                }
+              },
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "checkout"
+                }
+              },
+              {
+                "key": "sp.resource.type",
+                "value": {
+                  "stringValue": "sp-envoy-proxy"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "spans": [
+                {
+                  "traceId": "AAAAAGnpwoMAAAAABctiGA==",
+                  "spanId": "GKjqBXpZZx4=",
+                  "parentSpanId": "GKjqBWESpCY=",
+                  "name": "/hello",
+                  "kind": "SPAN_KIND_SERVER",
+                  "startTimeUnixNano": "1776927363095598000",
+                  "endTimeUnixNano": "1776927363157196000",
+                  "attributes": [
+                    {
+                      "key": "sp.service.name",
+                      "value": {
+                        "stringValue": "checkout"
+                      }
+                    },
+                    {
+                      "key": "sp.traffic.direction",
+                      "value": {
+                        "stringValue": "outbound"
+                      }
+                    },
+                    {
+                      "key": "sp.span.type",
+                      "value": {
+                        "stringValue": "extract"
+                      }
+                    },
+                    {
+                      "key": "sp.session.id",
+                      "value": {
+                        "stringValue": "sess_RME13ujtb3uiYUE1"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.:authority",
+                      "value": {
+                        "stringValue": "127.0.0.1:8082"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.x-softprobe-session-id",
+                      "value": {
+                        "stringValue": "sess_RME13ujtb3uiYUE1"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.:method",
+                      "value": {
+                        "stringValue": "GET"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.x-request-id",
+                      "value": {
+                        "stringValue": "249e280b-c786-4f03-88a3-09b0ebdf976c"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.:path",
+                      "value": {
+                        "stringValue": "/hello"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.traceparent",
+                      "value": {
+                        "stringValue": "00-0000000069e9c2830000000005cb6218-18a8ea056112a426-01"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.user-agent",
+                      "value": {
+                        "stringValue": "curl/8.7.1"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.:scheme",
+                      "value": {
+                        "stringValue": "http"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.x-forwarded-proto",
+                      "value": {
+                        "stringValue": "http"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.x-sp-num",
+                      "value": {
+                        "stringValue": "1"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.tracestate",
+                      "value": {
+                        "stringValue": "x-softprobe-session-id=sess_RME13ujtb3uiYUE1"
+                      }
+                    },
+                    {
+                      "key": "http.request.header.accept",
+                      "value": {
+                        "stringValue": "*/*"
+                      }
+                    },
+                    {
+                      "key": "url.path",
+                      "value": {
+                        "stringValue": "/hello"
+                      }
+                    },
+                    {
+                      "key": "url.full",
+                      "value": {
+                        "stringValue": "http://127.0.0.1:8082/hello"
+                      }
+                    },
+                    {
+                      "key": "url.host",
+                      "value": {
+                        "stringValue": "127.0.0.1:8082"
+                      }
+                    },
+                    {
+                      "key": "http.response.header.x-envoy-upstream-service-time",
+                      "value": {
+                        "stringValue": "13"
+                      }
+                    },
+                    {
+                      "key": "http.response.header.content-length",
+                      "value": {
+                        "stringValue": "31"
+                      }
+                    },
+                    {
+                      "key": "http.response.header.:status",
+                      "value": {
+                        "stringValue": "200"
+                      }
+                    },
+                    {
+                      "key": "http.response.header.content-type",
+                      "value": {
+                        "stringValue": "application/json"
+                      }
+                    },
+                    {
+                      "key": "http.response.header.date",
+                      "value": {
+                        "stringValue": "Thu, 23 Apr 2026 06:56:03 GMT"
+                      }
+                    },
+                    {
+                      "key": "http.response.status_code",
+                      "value": {
+                        "intValue": "200"
+                      }
+                    },
+                    {
+                      "key": "http.response.body",
+                      "value": {
+                        "stringValue": "{\"dep\":\"ok\",\"message\":\"hello\"}\n"
+                      }
+                    }
+                  ],
+                  "status": {
+                    "code": "STATUS_CODE_OK"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

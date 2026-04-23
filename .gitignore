@@ -56,5 +56,12 @@ e2e/junit-replay/target/
 # CLI suite-run harness artifacts
 e2e/cli-suite-run/out/
 
+# Go (softprobe-runtime local build outputs)
+softprobe-runtime/softprobe
+softprobe-runtime/softprobe-runtime
+
 # Top-level CLI binary produced by `go build -o ../softprobe`
 /softprobe
+
+# Cross-compiled CLI binaries (produced by softprobe-cli-release workflow)
+/dist/

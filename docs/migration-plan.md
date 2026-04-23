@@ -37,7 +37,7 @@ Create `spec` and move the shared concerns there:
 3. Add real JSON Schemas and an OpenAPI contract to `spec`.
    Keep this limited to test/session control APIs and artifact schemas; do not replace the proxy OTEL/protobuf wire protocol with JSON.
 4. Make `proxy` and `softprobe-js` validate against `spec`.
-5. Introduce **`softprobe-runtime`** (see [repo layout](./repo-layout.md)) as the home for the HTTP service that implements the **control API** only; **proxy OTEL API** is implemented by the **proxy backend** (e.g. `https://o.softprobe.ai`). Proxy continues to depend on **`spec` only**, not on runtime source code.
+5. Introduce **`softprobe-runtime`** (see [repo layout](./repo-layout.md)) as the home for the HTTP service that implements the **control API** only; **proxy OTEL API** is implemented by the **proxy backend** (e.g. `https://runtime.softprobe.dev`). Proxy continues to depend on **`spec` only**, not on runtime source code.
 6. Add `softprobe-python` and `softprobe-java` against the same contracts.
 
 ---

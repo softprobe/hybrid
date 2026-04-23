@@ -42,7 +42,7 @@ Instrumenting every framework is not viable as the **default** product for a sta
 | Layer | Responsibility |
 |--------|-----------------|
 | **Proxy (data plane)** | Intercept inbound and outbound HTTP; normalize request identity; call **`softprobe-runtime`** for inject/extract per [proxy-otel-api.md](../spec/protocol/proxy-otel-api.md); enforce passthrough / mock / error. |
-| **Softprobe Runtime** | **Unified service** (`softprobe-runtime`): serves **both** the HTTP control API (sessions, rules, cases, policy, fixtures) **and** the proxy OTLP API (`/v1/inject`, `/v1/traces`) from one process with a **shared in-memory session store**. `https://o.softprobe.ai` is the hosted instance of this same service. |
+| **Softprobe Runtime** | **Unified service** (`softprobe-runtime`): serves **both** the HTTP control API (sessions, rules, cases, policy, fixtures) **and** the proxy OTLP API (`/v1/inject`, `/v1/traces`) from one process with a **shared in-memory session store**. `https://runtime.softprobe.dev` is the hosted instance of this same service. |
 | **Language SDKs** | Thin clients: create session, set policy, load case, register rules, attach headers; optional helpers for codegen and assertions. |
 | **CLI** | **Canonical** human, CI, and agent interface: doctor, sessions, capture, replay, inspect, export, codegen; **calls** the same HTTP control API as SDKs (it does not replace the runtime). |
 
@@ -55,7 +55,7 @@ Instrumenting every framework is not viable as the **default** product for a sta
 
 Both handler groups share a **single in-memory session store** (`internal/store/`). When a test calls `load-case` or `rules`, the inject handler immediately sees the updated state — no sync, no external backend needed.
 
-**Deployment:** `SOFTPROBE_RUNTIME_URL` (CLI/SDK config) and `sp_backend_url` (proxy WASM config) both point to the **same** `softprobe-runtime` base URL in local and self-hosted setups. The hosted service (`https://o.softprobe.ai`) is the same unified service with durable storage behind it.
+**Deployment:** `SOFTPROBE_RUNTIME_URL` (CLI/SDK config) and `sp_backend_url` (proxy WASM config) both point to the **same** `softprobe-runtime` base URL in local and self-hosted setups. The hosted service (`https://runtime.softprobe.dev`) is the same unified service with durable storage behind it.
 
 **v1 needs no database.** Add Redis/Postgres only for HA or restart survival (see [platform-architecture.md](./platform-architecture.md) §10.2).
 
@@ -978,6 +978,6 @@ Sources under **`docs-site/`** (VitePress) are the **canonical user-facing** doc
 | 0.1 | 2026-04-05 | Initial hybrid design: case JSON + OTLP traces, proxy-first, cross-language control, rules/CLI revision |
 | 0.2 | 2026-04-11 | CLI-first and simplicity: canonical `softprobe` binary, default happy path, agent/CI JSON + exit codes, OTLP JSON profile direction |
 | 0.3 | 2026-04-11 | Softprobe Runtime service: single process for control + proxy APIs; Go/Rust recommendation; CLI as client; K8s Deployment pattern (see `docs/platform-architecture.md`, `docs/repo-layout.md`) |
-| 0.4 | 2026-04-11 | Split **control runtime** (OSS JSON API, in-memory OK) vs **proxy backend** (inject/extract, e.g. `https://o.softprobe.ai`); datastore guidance; open integration question |
+| 0.4 | 2026-04-11 | Split **control runtime** (OSS JSON API, in-memory OK) vs **proxy backend** (inject/extract, e.g. `https://runtime.softprobe.dev`); datastore guidance; open integration question |
 | 0.5 | 2026-04-12 | **Unified service**: `softprobe-runtime` serves both control JSON API and proxy OTLP API (`/v1/inject`, `/v1/traces`) from one process with a shared in-memory store; `sp_backend_url` = `SOFTPROBE_RUNTIME_URL` for local/OSS; control↔backend sync open question resolved |
 | 0.6 | 2026-04-20 | Added §15 (user-facing documentation site `docs.softprobe.dev`) and the normative mapping between internal design and the `docs-site/` tree |

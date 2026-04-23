@@ -40,9 +40,7 @@ Create `checkout.replay.test.ts`:
 import path from 'path';
 import { Softprobe } from '@softprobe/softprobe-js';
 
-const softprobe = new Softprobe({
-  baseUrl: process.env.SOFTPROBE_RUNTIME_URL ?? 'http://127.0.0.1:8080',
-});
+const softprobe = new Softprobe();  // reads SOFTPROBE_RUNTIME_URL; defaults to https://runtime.softprobe.dev
 
 describe('checkout replay', () => {
   let sessionId = '';

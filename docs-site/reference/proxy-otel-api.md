@@ -6,7 +6,7 @@ The **proxy OTLP API** is the wire contract between the Softprobe proxy (Envoy +
 
 - building or auditing a custom proxy integration,
 - debugging inject/extract traffic at the OTLP layer, or
-- implementing a hosted backend (like `o.softprobe.ai`) against the same contract.
+- implementing a hosted backend (like `runtime.softprobe.dev`) against the same contract.
 
 Most users interact with the runtime through [SDKs](/reference/sdk-typescript) and the [CLI](/reference/cli). Tests never call these endpoints directly.
 

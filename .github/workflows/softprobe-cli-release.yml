@@ -1,0 +1,109 @@
+name: softprobe CLI release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-binaries:
+    name: Build ${{ matrix.os }}/${{ matrix.arch }}
+    runs-on: [self-hosted, Linux]
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            goarch: amd64
+            goos: linux
+          - os: linux
+            arch: arm64
+            goarch: arm64
+            goos: linux
+          - os: darwin
+            arch: amd64
+            goarch: amd64
+            goos: darwin
+          - os: darwin
+            arch: arm64
+            goarch: arm64
+            goos: darwin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: softprobe-runtime/go.mod
+          cache-dependency-path: softprobe-runtime/go.sum
+
+      - name: Build
+        working-directory: softprobe-runtime
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+          VERSION: ${{ github.ref_name }}
+        run: |
+          go build -trimpath \
+            -ldflags "-s -w -X softprobe-runtime/internal/version.Version=${VERSION}" \
+            -o ../dist/softprobe-${{ matrix.os }}-${{ matrix.arch }} \
+            ./cmd/softprobe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: softprobe-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/softprobe-${{ matrix.os }}-${{ matrix.arch }}
+          retention-days: 1
+
+  release:
+    name: Attach binaries to release
+    needs: build-binaries
+    runs-on: [self-hosted, Linux]
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Attach to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release upload "$TAG" dist/softprobe-* \
+            --repo ${{ github.repository }} \
+            --clobber
+
+  publish-npm:
+    name: Publish @softprobe/cli to npm
+    needs: build-binaries
+    runs-on: [self-hosted, Linux]
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Align package version with release tag
+        working-directory: softprobe-cli
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm version "$VERSION" --no-git-tag-version
+
+      - name: Publish
+        working-directory: softprobe-cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          SOFTPROBE_SKIP_INSTALL: "1"
+        run: npm publish --access public --provenance

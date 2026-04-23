@@ -5,7 +5,7 @@
 // Usage:
 //
 //	SOFTPROBE_RUNTIME_URL=https://runtime.softprobe.dev \
-//	SOFTPROBE_API_KEY=sk_live_... \
+//	SOFTPROBE_API_KEY=... \
 //	go test ./e2e/hosted/ -v -count=1
 package hosted_test
 

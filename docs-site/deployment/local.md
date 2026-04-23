@@ -217,7 +217,7 @@ Case files are written to the runtime's mounted `./cases/` directory. By default
 For a per-session path:
 
 ```bash
-softprobe session close --session $SESSION_ID --out cases/checkout-$(date +%Y%m%d).case.json
+softprobe session close --session $SOFTPROBE_SESSION_ID --out cases/checkout-$(date +%Y%m%d).case.json
 ```
 
 ## CI variant
@@ -254,5 +254,5 @@ See [CI integration](/guides/ci-integration) for full workflows.
 ## Next
 
 - [Kubernetes deployment](/deployment/kubernetes) — production-grade with Istio.
-- [Hosted deployment](/deployment/hosted) — `o.softprobe.ai`.
+- [Hosted deployment](/deployment/hosted) — `runtime.softprobe.dev`.
 - [Troubleshooting](/guides/troubleshooting) — when `docker compose up` doesn't go smoothly.

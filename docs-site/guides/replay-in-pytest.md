@@ -27,10 +27,9 @@ import urllib.request
 
 from softprobe import Softprobe
 
-RUNTIME_URL = os.environ.get("SOFTPROBE_RUNTIME_URL", "http://127.0.0.1:8080")
 APP_URL = os.environ.get("APP_URL", "http://127.0.0.1:8082")
 
-softprobe = Softprobe(base_url=RUNTIME_URL)
+softprobe = Softprobe()  # reads SOFTPROBE_RUNTIME_URL; defaults to https://runtime.softprobe.dev
 
 
 @pytest.fixture(scope="module")

@@ -760,9 +760,9 @@ softprobe case inspect payment/checkout-happy-path
 softprobe case export-otlp payment/checkout-happy-path
 
 softprobe session start --case payment/checkout-happy-path --mode replay
-softprobe session policy --session $SESSION_ID --network blocked --unmatched error
-softprobe rule add http --session $SESSION_ID --file rules/stripe-success.json
-softprobe session close --session $SESSION_ID
+softprobe session policy --session $SOFTPROBE_SESSION_ID --network blocked --unmatched error
+softprobe rule add http --session $SOFTPROBE_SESSION_ID --file rules/stripe-success.json
+softprobe session close --session $SOFTPROBE_SESSION_ID
 
 softprobe generate test --case payment/checkout-happy-path --framework vitest
 softprobe generate test --case payment/checkout-happy-path --framework pytest

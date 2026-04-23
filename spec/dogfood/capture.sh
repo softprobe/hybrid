@@ -18,23 +18,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 echo "Starting capture session..."
-SESSION_ID=$(softprobe session start \
+SOFTPROBE_SESSION_ID=$(softprobe session start \
   --runtime-url "$RUNTIME_URL" \
   --mode capture \
   --json | jq -r .sessionId)
-echo "Session: $SESSION_ID"
+echo "Session: $SOFTPROBE_SESSION_ID"
 
 echo "Running canonical CLI flow..."
 # Drive one request through the proxy so the ingress and egress spans are captured.
-curl -sf -H "x-softprobe-session-id: $SESSION_ID" "$PROXY_URL/hello" > /dev/null
+curl -sf -H "x-softprobe-session-id: $SOFTPROBE_SESSION_ID" "$PROXY_URL/hello" > /dev/null
 
 echo "Closing session..."
 softprobe session close \
   --runtime-url "$RUNTIME_URL" \
-  --session "$SESSION_ID"
+  --session "$SOFTPROBE_SESSION_ID"
 
 echo "Fetching case..."
-softprobe cases get "$SESSION_ID" \
+softprobe cases get "$SOFTPROBE_SESSION_ID" \
   --runtime-url "$RUNTIME_URL" \
   --out "$REPO_ROOT/$OUT"
 
@@ -43,7 +43,7 @@ echo "Canonicalizing trace IDs..."
 # is deterministic across runs. sed is safe here because trace IDs are hex.
 PLACEHOLDER_SESSION="dogfood-session-00000000"
 sed -i.bak \
-  "s/$SESSION_ID/$PLACEHOLDER_SESSION/g" \
+  "s/$SOFTPROBE_SESSION_ID/$PLACEHOLDER_SESSION/g" \
   "$REPO_ROOT/$OUT"
 rm -f "$REPO_ROOT/$OUT.bak"
 

@@ -70,7 +70,7 @@ Every strict-miss creates one line. Copy the `method`, `host`, and `path` — th
 ### Or inspect session stats
 
 ```bash
-curl -s http://127.0.0.1:8080/v1/sessions/$SESSION_ID/stats | jq
+curl -s $SOFTPROBE_RUNTIME_URL/v1/sessions/$SOFTPROBE_SESSION_ID/stats | jq
 ```
 
 ```json
@@ -153,7 +153,7 @@ Because policy is a priority-0 synthesized rule, any explicit rule with `priorit
 Re-run the test. Check the session stats:
 
 ```bash
-curl -s http://127.0.0.1:8080/v1/sessions/$SESSION_ID/stats | jq '.strictMisses'
+curl -s $SOFTPROBE_RUNTIME_URL/v1/sessions/$SOFTPROBE_SESSION_ID/stats | jq '.strictMisses'
 ```
 
 Should be `0`.

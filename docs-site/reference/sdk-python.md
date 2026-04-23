@@ -26,7 +26,7 @@ from softprobe.types import CapturedHit, CapturedResponse, CaseSpanPredicate, Mo
 ### `Softprobe(base_url=None, timeout=5.0)`
 
 ```python
-softprobe = Softprobe(base_url="http://127.0.0.1:8080", timeout=5.0)
+softprobe = Softprobe(base_url="https://runtime.softprobe.dev", timeout=5.0)
 ```
 
 Falls back to `SOFTPROBE_RUNTIME_URL` env var.

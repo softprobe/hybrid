@@ -36,7 +36,7 @@ func runCaptureRun(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("capture run", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	runtimeURL := fs.String("runtime-url", "http://127.0.0.1:8080", "control runtime base URL")
+	runtimeURL := fs.String("runtime-url", defaultRuntimeURL(), "control runtime base URL")
 	driver := fs.String("driver", "", "shell command to run (receives SOFTPROBE_SESSION_ID)")
 	target := fs.String("target", "", "target base URL (informational)")
 	outPath := fs.String("out", "", "override capture output path")

@@ -9,10 +9,16 @@ Record real HTTP traffic through Envoy once, commit the case file, then replay i
 
 ## 1. Get an API token
 
-Sign up at [app.softprobe.dev](https://app.softprobe.dev) and copy your API token. Then set it in your shell:
+Sign up at [https://dashboard.softprobe.ai](https://dashboard.softprobe.ai) and create your API token.
+
+::: tip Where to create the token
+If you have no organization yet, create one first. Then select that organization, open **Settings** → **Public Key** → **Create Public Key**. That value is your API token (public key).
+:::
+
+Then set it in your shell:
 
 ```bash
-export SOFTPROBE_API_TOKEN=sk_live_...
+export SOFTPROBE_API_TOKEN=...
 ```
 
 Add this to your shell profile (`.zshrc`, `.bashrc`) or CI secret store — every command in this guide reads it.
@@ -336,11 +342,11 @@ Re-run the capture steps (and commit the updated `cases/hello.case.json`) when:
 
 ## Troubleshooting
 
-**`docker compose up` exits with "SOFTPROBE_API_TOKEN is not set"** — export the variable before running compose: `export SOFTPROBE_API_TOKEN=sk_live_...`
+**`docker compose up` exits with "SOFTPROBE_API_TOKEN is not set"** — export the variable before running compose: `export SOFTPROBE_API_TOKEN=...`
 
 **Proxy logs show WASM fetch timeout** — Envoy fetches the WASM filter from GCS on startup. Ensure the container has outbound internet access.
 
-**`softprobe doctor` fails** — your token may be invalid or expired. Get a fresh one at [app.softprobe.dev](https://app.softprobe.dev).
+**`softprobe doctor` fails** — your token may be invalid or expired. Get a fresh one at [https://dashboard.softprobe.ai](https://https://dashboard.softprobe.ai).
 
 **Replay test: `dep` field is `""` instead of `"ok"`** — the session ID is not reaching the egress proxy. Verify the app propagates OpenTelemetry trace context (`traceparent` / `tracestate`) on outbound calls. The session ID travels in `tracestate`; if the app strips it, the egress proxy sees a different session and misses the mock rule.
 

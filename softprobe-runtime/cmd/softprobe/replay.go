@@ -31,7 +31,7 @@ func runReplayRun(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("replay run", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	runtimeURL := fs.String("runtime-url", "http://127.0.0.1:8080", "control runtime base URL")
+	runtimeURL := fs.String("runtime-url", defaultRuntimeURL(), "control runtime base URL")
 	sessionID := fs.String("session", "", "session ID")
 	jsonOutput := fs.Bool("json", false, "emit JSON output")
 	if err := fs.Parse(args); err != nil {

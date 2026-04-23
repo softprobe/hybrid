@@ -34,7 +34,7 @@ Use this when your SUT is reached through Envoy:
 import path from 'path';
 import { Softprobe } from '@softprobe/softprobe-js';
 
-const softprobe = new Softprobe({ baseUrl: 'http://127.0.0.1:8080' });
+const softprobe = new Softprobe();  // reads SOFTPROBE_RUNTIME_URL; defaults to https://runtime.softprobe.dev
 
 const session = await softprobe.startSession({ mode: 'replay' });
 await session.loadCaseFromFile(path.resolve('cases/fragment-happy-path.case.json'));

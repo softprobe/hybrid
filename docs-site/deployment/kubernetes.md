@@ -108,7 +108,7 @@ spec:
 ```
 
 ::: tip Out-of-band capture (`sp_backend_url`)
-The WASM filter POSTs inject/extract OTLP to **`sp_backend_url`** — the **Softprobe runtime** (`softprobe-runtime`), for example the in-cluster URL above or `https://o.softprobe.ai`. That path is **out-of-band** from your production OpenTelemetry export to Datadog, Honeycomb, New Relic, or similar: full HTTP bodies are not streamed into your existing APM by default. Rationale: [Proxy integration posture](https://github.com/softprobe/hybrid/blob/main/docs/proxy-integration-posture.md). Hybrid proxy vs language instrumentation: [Language instrumentation](https://github.com/softprobe/hybrid/blob/main/docs/language-instrumentation.md).
+The WASM filter POSTs inject/extract OTLP to **`sp_backend_url`** — the **Softprobe runtime** (`softprobe-runtime`), for example the in-cluster URL above or `https://runtime.softprobe.dev`. That path is **out-of-band** from your production OpenTelemetry export to Datadog, Honeycomb, New Relic, or similar: full HTTP bodies are not streamed into your existing APM by default. Rationale: [Proxy integration posture](https://github.com/softprobe/hybrid/blob/main/docs/proxy-integration-posture.md). Hybrid proxy vs language instrumentation: [Language instrumentation](https://github.com/softprobe/hybrid/blob/main/docs/language-instrumentation.md).
 :::
 
 ::: tip GHCR WASM image (PD5.3b)

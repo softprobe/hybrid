@@ -15,14 +15,14 @@ wired.
 
 In local OSS setups, `SOFTPROBE_RUNTIME_URL` (for CLI/SDK) and `sp_backend_url` (for the proxy WASM) both point at the **same** runtime base URL. For the reference Docker Compose, that is `http://127.0.0.1:8080` from the host and `http://softprobe-runtime:8080` from inside the compose network.
 
-Hosted deployments use `https://o.softprobe.ai`.
+Hosted deployments use `https://runtime.softprobe.dev`.
 
 ## Health and metadata
 
 ### `GET /health`
 
 ```bash
-curl http://127.0.0.1:8080/health
+curl $SOFTPROBE_RUNTIME_URL/health
 ```
 
 Example response:
@@ -260,7 +260,7 @@ docker run -e SOFTPROBE_API_TOKEN=sp_secret ghcr.io/softprobe/softprobe-runtime:
 When set, every `/v1/...` request must carry the header:
 
 ```bash
-curl -H "Authorization: Bearer sp_secret" http://127.0.0.1:8080/v1/sessions
+curl -H "Authorization: Bearer sp_secret" $SOFTPROBE_RUNTIME_URL/v1/sessions
 ```
 
 `/health` is always unauthenticated so orchestrators can probe it. The CLI and

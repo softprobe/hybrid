@@ -46,7 +46,7 @@ Each item below is actively scoped in [`tasks.md`](https://github.com/softprobe/
 ### Scaling and hosted-service track
 
 - **Redis-backed session store** so `softprobe-runtime` can run multi-replica in Kubernetes. See [Kubernetes deployment — HA and scaling](/deployment/kubernetes). Target: **v0.6–v0.7**.
-- **Hosted service GA** on `o.softprobe.ai` with documented [SLA](/deployment/hosted#sla) and regional availability. Target: **v0.6–v0.7**.
+- **Hosted service GA** on `runtime.softprobe.dev` with documented [SLA](/deployment/hosted#sla) and regional availability. Target: **v0.6–v0.7**.
 - **Multi-process runtime split** — separate the control API and OTLP backend into two deployables for clouds that want to scale them independently. Target: **v0.7**. Depends on the Redis store landing first.
 - **Hook runtime v1** — TypeScript/JavaScript hooks executed in a Node sidecar from the Go CLI for data transformations and custom assertions. Shipped in the current build: `RequestHook`, `MockResponseHook`, `BodyAssertHook`, `HeadersAssertHook` are resolved from `--hooks *.ts` files via the embedded sidecar; end-to-end harness at [`e2e/cli-suite-run/`](https://github.com/softprobe/softprobe/tree/main/e2e/cli-suite-run). Remaining hook runtime work (Python/Java sidecars for those CLIs, hook sandboxing options) is tracked in PD3+.
 

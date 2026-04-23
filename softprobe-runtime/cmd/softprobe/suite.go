@@ -53,7 +53,7 @@ func runSuiteRun(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("suite run", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	runtimeURL := fs.String("runtime-url", "http://127.0.0.1:8080", "control runtime base URL")
+	runtimeURL := fs.String("runtime-url", defaultRuntimeURL(), "control runtime base URL")
 	appURL := fs.String("app-url", "", "URL of the SUT (defaults to $APP_URL, then http://127.0.0.1:8081)")
 	parallel := fs.Int("parallel", defaultSuiteParallelism(), "concurrent cases")
 	var hookFiles stringSliceFlag

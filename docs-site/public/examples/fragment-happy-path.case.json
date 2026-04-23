@@ -1,0 +1,95 @@
+{
+  "version": "1.0.0",
+  "caseId": "fragment-happy-path",
+  "suite": "dependencies",
+  "mode": "replay",
+  "createdAt": "2026-04-05T12:00:00Z",
+  "traces": [
+    {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "api"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "spans": [
+                {
+                  "traceId": "5b8efff798038103d269b633813fc60c",
+                  "spanId": "051581bf3cb55c13",
+                  "name": "HTTP GET",
+                  "kind": 2,
+                  "attributes": [
+                    {
+                      "key": "sp.session.id",
+                      "value": {
+                        "stringValue": "sess_fragment_001"
+                      }
+                    },
+                    {
+                      "key": "sp.traffic.direction",
+                      "value": {
+                        "stringValue": "outbound"
+                      }
+                    },
+                    {
+                      "key": "sp.span.type",
+                      "value": {
+                        "stringValue": "extract"
+                      }
+                    },
+                    {
+                      "key": "url.host",
+                      "value": {
+                        "stringValue": "softprobe-proxy:8084"
+                      }
+                    },
+                    {
+                      "key": "url.path",
+                      "value": {
+                        "stringValue": "/fragment"
+                      }
+                    },
+                    {
+                      "key": "http.request.method",
+                      "value": {
+                        "stringValue": "GET"
+                      }
+                    },
+                    {
+                      "key": "http.request.body",
+                      "value": {
+                        "stringValue": ""
+                      }
+                    },
+                    {
+                      "key": "http.response.status_code",
+                      "value": {
+                        "intValue": 200
+                      }
+                    },
+                    {
+                      "key": "http.response.body",
+                      "value": {
+                        "stringValue": "{\"dep\":\"ok\"}\n"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "rules": [],
+  "fixtures": []
+}

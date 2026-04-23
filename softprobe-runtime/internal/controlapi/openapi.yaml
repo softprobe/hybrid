@@ -1,0 +1,614 @@
+openapi: 3.0.3
+info:
+  title: Softprobe Runtime API
+  description: |
+    HTTP surface served by **softprobe-runtime**: JSON control API for CLI/SDKs,
+    OTLP-shaped proxy endpoints (`/v1/inject`, `/v1/traces`), health, and Prometheus metrics.
+
+    **Authentication**
+    - **OSS (default):** No auth unless `SOFTPROBE_API_TOKEN` is set; then all `/v1/*`
+      routes require `Authorization: Bearer <token>`.
+    - **Hosted:** All `/v1/*` routes require a valid bearer token (tenant API key).
+      The proxy compatibility header `x-public-key` is also accepted until clients migrate.
+
+    **Hosted-only:** `GET /v1/cases/{caseId}` is registered only when the server runs
+    in hosted mode (GCS + Redis + auth). It does not exist on the default OSS binary layout
+    unless that stack is enabled.
+
+    Interactive docs: `GET /docs` (Swagger UI). Machine-readable spec: `GET /openapi.yaml`.
+  version: 1.0.0
+
+servers:
+  - url: /
+    description: Runtime base URL (e.g. http://127.0.0.1:8080)
+
+tags:
+  - name: Health
+  - name: Metadata
+  - name: Sessions
+  - name: Proxy OTLP
+  - name: Metrics
+  - name: Hosted
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: OSS optional API token or hosted API key (see top-level description).
+
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, specVersion, schemaVersion]
+      properties:
+        status:
+          type: string
+          example: ok
+        specVersion:
+          type: string
+          example: http-control-api@v1
+        schemaVersion:
+          type: string
+          example: "1"
+
+    MetaResponse:
+      type: object
+      required: [runtimeVersion, specVersion, schemaVersion]
+      properties:
+        runtimeVersion:
+          type: string
+        specVersion:
+          type: string
+        schemaVersion:
+          type: string
+
+    APIError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+
+    CreateSessionRequest:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          description: Session mode, e.g. `capture` or `replay`.
+          example: replay
+
+    SessionMutationResponse:
+      type: object
+      required: [sessionId, sessionRevision]
+      properties:
+        sessionId:
+          type: string
+        sessionRevision:
+          type: integer
+
+    SessionSummary:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        mode:
+          type: string
+        sessionRevision:
+          type: integer
+
+    ListSessionsResponse:
+      type: object
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionSummary'
+
+    SessionStatsResponse:
+      type: object
+      required: [sessionId, sessionRevision, mode, stats]
+      properties:
+        sessionId:
+          type: string
+        sessionRevision:
+          type: integer
+        mode:
+          type: string
+        stats:
+          type: object
+          properties:
+            injectedSpans:
+              type: integer
+            extractedSpans:
+              type: integer
+            strictMisses:
+              type: integer
+
+    SessionStateResponse:
+      type: object
+      description: |
+        Composite snapshot for operators (`softprobe inspect session`). `policy` and `rules`
+        echo stored JSON when present. `caseSummary` summarizes the loaded case.
+      properties:
+        sessionId:
+          type: string
+        sessionRevision:
+          type: integer
+        mode:
+          type: string
+        policy:
+          description: Opaque JSON object when policy has been applied.
+        rules:
+          description: Opaque JSON object when rules have been applied.
+        caseSummary:
+          type: object
+          properties:
+            caseId:
+              type: string
+            traceCount:
+              type: integer
+        stats:
+          type: object
+          properties:
+            injectedSpans:
+              type: integer
+            extractedSpans:
+              type: integer
+            strictMisses:
+              type: integer
+
+    CloseSessionResponse:
+      type: object
+      required: [sessionId, closed]
+      properties:
+        sessionId:
+          type: string
+        closed:
+          type: boolean
+        capturePath:
+          type: string
+          description: OSS capture mode — filesystem path written when closing (optional).
+        caseRef:
+          type: string
+          description: Hosted capture mode — GCS object path for the merged case (optional).
+
+    InjectSimpleError:
+      type: object
+      properties:
+        error:
+          type: string
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Process is running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+
+  /v1/meta:
+    get:
+      tags: [Metadata]
+      summary: Runtime and contract metadata
+      description: Used by `softprobe doctor` for version alignment checks.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaResponse'
+        '401':
+        '403':
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+
+  /v1/sessions:
+    post:
+      tags: [Sessions]
+      summary: Create a session
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionMutationResponse'
+        '400':
+        '401':
+        '403':
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+    get:
+      tags: [Sessions]
+      summary: List sessions
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSessionsResponse'
+        '401':
+        '403':
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+
+  /v1/sessions/{sessionId}/load-case:
+    post:
+      tags: [Sessions]
+      summary: Load a case document into the session
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Case JSON (same shape as a `*.case.json` file on disk).
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionMutationResponse'
+        '400':
+        '401':
+        '403':
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+
+  /v1/sessions/{sessionId}/policy:
+    post:
+      tags: [Sessions]
+      summary: Replace session policy document
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Policy JSON (e.g. `externalHttp`, allowlists).
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionMutationResponse'
+        '400':
+        '401':
+        '403':
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+
+  /v1/sessions/{sessionId}/rules:
+    post:
+      tags: [Sessions]
+      summary: Replace session rules document
+      description: Wholesale replace — runtime stores the payload as the new rules document.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Rules document (see product rule schema).
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionMutationResponse'
+        '400':
+        '401':
+        '403':
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+
+  /v1/sessions/{sessionId}/fixtures/auth:
+    post:
+      tags: [Sessions]
+      summary: Replace auth fixtures document
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Tokens, cookies, and metadata for replay.
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionMutationResponse'
+        '400':
+        '401':
+        '403':
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+
+  /v1/sessions/{sessionId}/stats:
+    get:
+      tags: [Sessions]
+      summary: Read session counters
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionStatsResponse'
+        '401':
+        '403':
+        '404':
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+
+  /v1/sessions/{sessionId}/state:
+    get:
+      tags: [Sessions]
+      summary: Session snapshot for inspection
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionStateResponse'
+        '401':
+        '403':
+        '404':
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+
+  /v1/sessions/{sessionId}/close:
+    post:
+      tags: [Sessions]
+      summary: Close a session
+      description: |
+        In **capture** mode the runtime may persist a case before deleting the session.
+        OSS accepts optional query `out` as the output path override for the written case file.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: out
+          in: query
+          required: false
+          schema:
+            type: string
+          description: OSS capture mode — override path for the written case file.
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloseSessionResponse'
+        '401':
+        '403':
+        '404':
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+
+  /v1/inject:
+    post:
+      tags: [Proxy OTLP]
+      summary: OTLP inject lookup (proxy data plane)
+      description: |
+        Request body is OTLP **JSON** (`TracesData`) containing an **inject** span
+        (`sp.span.type=inject`). On a **mock** rule hit, the response body is OTLP
+        **protobuf** (`Content-Type: application/x-protobuf`). Misses and some errors
+        return JSON with `Content-Type: application/json` or plain text from `http.Error`.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: OTLP trace JSON (see OpenTelemetry OTLP trace JSON encoding).
+      responses:
+        '200':
+          description: Rule matched with mock response — protobuf OTLP body.
+          content:
+            application/x-protobuf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Bad payload or missing session id
+        '404':
+          description: Unknown session or no inject match (JSON body for miss)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InjectSimpleError'
+        '405':
+        '500':
+          description: Server error — may be JSON or plain text
+
+  /v1/traces:
+    post:
+      tags: [Proxy OTLP]
+      summary: OTLP extract upload (proxy data plane)
+      description: |
+        Accepts OTLP **JSON** with **extract** spans. Buffers extracts for **capture**
+        sessions and updates counters. Returns **204 No Content** on success.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: OTLP trace JSON containing extract spans.
+      responses:
+        '204':
+          description: Accepted
+        '400':
+        '404':
+        '405':
+          description: Errors may be plain text
+
+  /metrics:
+    get:
+      tags: [Metrics]
+      summary: Prometheus metrics
+      security: []
+      responses:
+        '200':
+          description: Prometheus text exposition format
+          content:
+            text/plain:
+              schema:
+                type: string
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+
+  /v1/cases/{caseId}:
+    get:
+      tags: [Hosted]
+      summary: Download a stored case (hosted only)
+      description: |
+        Returns the case JSON object from tenant-scoped GCS storage.
+        Not served by the default OSS-only mux unless hosted backends are wired.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Case JSON document
+        '400':
+        '401':
+        '404':
+        '405':
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'

@@ -5,12 +5,19 @@ package com.softprobe;
  * {@code docs/design.md} §3.2). Mirrors the TypeScript and Python counterparts.
  */
 public final class Softprobe {
-  private static final String DEFAULT_BASE_URL = "http://127.0.0.1:8080";
+  private static final String DEFAULT_BASE_URL = "https://runtime.softprobe.dev";
 
   private final Client client;
 
   public Softprobe() {
-    this(DEFAULT_BASE_URL);
+    this(resolveBaseUrl(null));
+  }
+
+  private static String resolveBaseUrl(String explicit) {
+    if (explicit != null && !explicit.isEmpty()) return explicit;
+    String env = System.getenv("SOFTPROBE_RUNTIME_URL");
+    if (env != null && !env.isEmpty()) return env;
+    return DEFAULT_BASE_URL;
   }
 
   public Softprobe(String baseUrl) {

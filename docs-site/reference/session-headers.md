@@ -58,7 +58,7 @@ If you're not using OpenTelemetry today, propagate manually: read `traceparent` 
 ### Verify the test client sets the header
 
 ```bash
-curl -v -H "x-softprobe-session-id: $SESSION_ID" http://127.0.0.1:8082/checkout
+curl -v -H "x-softprobe-session-id: $SOFTPROBE_SESSION_ID" http://127.0.0.1:8082/checkout
 # Look for: > x-softprobe-session-id: sess_...
 ```
 
@@ -72,7 +72,7 @@ docker logs softprobe-proxy-1 | grep softprobe-session
 
 ```bash
 # In the app container, log incoming request headers briefly:
-curl -v -H "x-softprobe-session-id: $SESSION_ID" http://127.0.0.1:8082/echo-headers
+curl -v -H "x-softprobe-session-id: $SOFTPROBE_SESSION_ID" http://127.0.0.1:8082/echo-headers
 # Expect: tracestate: sp=sess_01H...,<revision>
 ```
 

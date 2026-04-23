@@ -1,0 +1,23 @@
+{
+  "name": "@softprobe/cli",
+  "version": "0.5.0",
+  "description": "The softprobe CLI — capture and replay HTTP interactions in tests",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/softprobe/softprobe-runtime"
+  },
+  "bin": {
+    "softprobe": "bin/softprobe.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install-binary.js"
+  },
+  "files": [
+    "bin/",
+    "scripts/"
+  ],
+  "engines": {
+    "node": ">=16"
+  }
+}

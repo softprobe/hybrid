@@ -44,9 +44,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CheckoutReplayTest {
 
-    private final Softprobe softprobe = new Softprobe(
-        System.getenv().getOrDefault("SOFTPROBE_RUNTIME_URL", "http://127.0.0.1:8080")
-    );
+    private final Softprobe softprobe = new Softprobe();  // reads SOFTPROBE_RUNTIME_URL; defaults to https://runtime.softprobe.dev
     private final String appUrl =
         System.getenv().getOrDefault("APP_URL", "http://127.0.0.1:8082");
 

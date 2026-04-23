@@ -1,4 +1,4 @@
-// Package authn resolves API keys to tenant identity by calling auth.softprobe.ai.
+// Package authn resolves API keys to tenant identity by calling auth.softprobe.dev.
 package authn
 
 import (

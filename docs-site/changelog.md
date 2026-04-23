@@ -44,7 +44,7 @@ Unified-runtime release. The platform now ships as **one binary** (`softprobe-ru
 
 ## [v0.4] — 2026-04-11
 
-Split-topology release that drew the line between a control runtime (OSS, in-memory OK) and a proxy backend ("e.g. `https://o.softprobe.ai`"). Superseded by v0.5's unified runtime, but the deployment patterns (single-replica vs HA) carry forward.
+Split-topology release that drew the line between a control runtime (OSS, in-memory OK) and a proxy backend ("e.g. `https://runtime.softprobe.dev`"). Superseded by v0.5's unified runtime, but the deployment patterns (single-replica vs HA) carry forward.
 
 ### Added
 - Initial datastore guidance for HA deployments (Redis/Postgres).

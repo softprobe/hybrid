@@ -1,0 +1,94 @@
+name: softprobe demo images
+
+on:
+  pull_request:
+    paths:
+      - "e2e/app/**"
+      - "e2e/upstream/**"
+      - "e2e/go.mod"
+      - "e2e/go.sum"
+      - ".github/workflows/softprobe-demo-images.yml"
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+env:
+  APP_IMAGE: softprobe/demo-app
+  UPSTREAM_IMAGE: softprobe/demo-upstream
+
+jobs:
+  demo-images:
+    runs-on: [self-hosted,Linux]
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ---- PR: build only, no push ----
+      - name: Build app image (PR)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./e2e/app
+          push: false
+
+      - name: Build upstream image (PR)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./e2e/upstream
+          push: false
+
+      # ---- main / tag: push to Docker Hub ----
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker metadata (app)
+        if: github.event_name != 'pull_request'
+        id: meta-app
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.APP_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+
+      - name: Docker metadata (upstream)
+        if: github.event_name != 'pull_request'
+        id: meta-upstream
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.UPSTREAM_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+
+      - name: Build and push app
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./e2e/app
+          push: true
+          tags: ${{ steps.meta-app.outputs.tags }}
+          labels: ${{ steps.meta-app.outputs.labels }}
+
+      - name: Build and push upstream
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./e2e/upstream
+          push: true
+          tags: ${{ steps.meta-upstream.outputs.tags }}
+          labels: ${{ steps.meta-upstream.outputs.labels }}

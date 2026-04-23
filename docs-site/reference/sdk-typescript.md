@@ -38,7 +38,7 @@ The client / factory.
 
 ```ts
 const softprobe = new Softprobe({
-  baseUrl: 'http://127.0.0.1:8080',
+  baseUrl: 'https://runtime.softprobe.dev',
   timeoutMs: 5000,
   fetch: customFetch,  // optional; defaults to global fetch
 });
@@ -46,7 +46,7 @@ const softprobe = new Softprobe({
 
 | Option | Type | Default | Purpose |
 |---|---|---|---|
-| `baseUrl` | string | `process.env.SOFTPROBE_RUNTIME_URL` or `http://127.0.0.1:8080` | Runtime base URL |
+| `baseUrl` | string | `process.env.SOFTPROBE_RUNTIME_URL` or `https://runtime.softprobe.dev` | Runtime base URL |
 | `timeoutMs` | number | `5000` | HTTP timeout for control-plane calls |
 | `fetch` | `typeof fetch` | global | Override HTTP client (e.g. for proxies, keep-alive tuning) |
 

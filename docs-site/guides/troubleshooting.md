@@ -27,7 +27,7 @@ Your traffic didn't carry the session header, or it didn't pass through the prox
 **Check 1: is the header set?**
 
 ```bash
-curl -v -H "x-softprobe-session-id: $SESSION_ID" http://127.0.0.1:8082/hello
+curl -v -H "x-softprobe-session-id: $SOFTPROBE_SESSION_ID" http://127.0.0.1:8082/hello
 # Look for: > x-softprobe-session-id: sess_...
 ```
 
@@ -35,10 +35,10 @@ curl -v -H "x-softprobe-session-id: $SESSION_ID" http://127.0.0.1:8082/hello
 
 ```bash
 # WRONG: this skips the proxy
-curl -H "x-softprobe-session-id: $SESSION_ID" http://127.0.0.1:8081/hello
+curl -H "x-softprobe-session-id: $SOFTPROBE_SESSION_ID" http://127.0.0.1:8081/hello
 
 # RIGHT: through the ingress listener
-curl -H "x-softprobe-session-id: $SESSION_ID" http://127.0.0.1:8082/hello
+curl -H "x-softprobe-session-id: $SOFTPROBE_SESSION_ID" http://127.0.0.1:8082/hello
 ```
 
 **Check 3: is the proxy actually calling the runtime?**
@@ -68,7 +68,7 @@ The app likely called the dependency directly, not through the egress proxy. Two
 You're running a `capture_only` redaction rule. Check your applied rules:
 
 ```bash
-curl -s "http://127.0.0.1:8080/v1/sessions/$SESSION_ID/rules" | jq
+curl -s "http://127.0.0.1:8080/v1/sessions/$SOFTPROBE_SESSION_ID/rules" | jq
 ```
 
 Adjust or remove the redaction rule if you want the raw body.

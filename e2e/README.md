@@ -174,9 +174,7 @@ cd e2e/junit-replay && mvn test
 The four SDK replay harnesses and the `hosted/` smoke tests all work against the hosted runtime without any code changes. You only need a runtime URL and an API key.
 
 ```bash
-export SOFTPROBE_RUNTIME_URL=https://runtime.softprobe.dev
-export SOFTPROBE_API_KEY=<your-api-key>
-export SOFTPROBE_API_TOKEN=$SOFTPROBE_API_KEY   # SDKs and CLI read SOFTPROBE_API_TOKEN
+export SOFTPROBE_API_TOKEN=<your-api-key>
 ```
 
 Then run the smoke tests first to verify connectivity:

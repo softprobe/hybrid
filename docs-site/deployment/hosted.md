@@ -8,17 +8,15 @@ The hosted runtime speaks the **same HTTP control API and OTLP trace API** as th
 
 ### 1. Sign up and get an API key
 
-Visit [app.softprobe.dev](https://app.softprobe.dev), sign in with Google or GitHub, and copy your API key from the dashboard. It looks like `sk_live_…`.
+Visit [https://dashboard.softprobe.ai](https://https://dashboard.softprobe.ai), sign in with Google or GitHub, and copy your API key from the dashboard. It looks like `…`.
 
 ### 2. Set environment variables
 
 ```bash
-export SOFTPROBE_RUNTIME_URL=https://runtime.softprobe.dev
-export SOFTPROBE_API_KEY=sk_live_...
-export SOFTPROBE_API_TOKEN=$SOFTPROBE_API_KEY   # SDKs and CLI read SOFTPROBE_API_TOKEN
+export SOFTPROBE_API_TOKEN=...
 ```
 
-Add these three lines to your shell profile (`.zshrc`, `.bashrc`) or your CI secret store. `SOFTPROBE_API_TOKEN` is the name the SDKs and CLI use internally; setting both ensures everything works.
+Add this to your shell profile (`.zshrc`, `.bashrc`) or your CI secret store. All SDKs and the CLI read `SOFTPROBE_API_TOKEN` directly.
 
 ### 3. Verify connectivity
 
@@ -40,7 +38,7 @@ The rest of the [Quick start](/quickstart) works unchanged — replace the `dock
 Every request to the hosted runtime must carry:
 
 ```
-Authorization: Bearer sk_live_...
+Authorization: Bearer ...
 ```
 
 All SDKs pick this up from `SOFTPROBE_API_TOKEN`. The CLI reads the same variable. The Softprobe WASM proxy reads `sp_api_key` from its plugin config (inject via Kubernetes secret; see [Kubernetes deployment](/deployment/kubernetes)).
@@ -82,10 +80,9 @@ No code changes needed. Just swap the two environment variables:
 # Before (self-hosted)
 export SOFTPROBE_RUNTIME_URL=http://my-runtime:8080
 
-# After (hosted)
-export SOFTPROBE_RUNTIME_URL=https://runtime.softprobe.dev
-export SOFTPROBE_API_KEY=sk_live_...
-export SOFTPROBE_API_TOKEN=$SOFTPROBE_API_KEY
+# After (hosted) — unset SOFTPROBE_RUNTIME_URL or remove it; just set the token
+unset SOFTPROBE_RUNTIME_URL
+export SOFTPROBE_API_TOKEN=...
 ```
 
 Then run `softprobe doctor` to confirm. If you have case files on disk, they continue to work — load them with `session load-case` as usual.

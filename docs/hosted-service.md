@@ -8,7 +8,7 @@
 
 ## 1. What we're building
 
-The OSS `softprobe-runtime` is a single-process server with an in-memory store that vanishes on restart. The hosted service (`app.softprobe.dev`) makes it durable and multi-tenant so users can sign up, get an API key, and run `softprobe` against `https://runtime.softprobe.dev` rather than a local process.
+The OSS `softprobe-runtime` is a single-process server with an in-memory store that vanishes on restart. The hosted service (`https://dashboard.softprobe.ai`) makes it durable and multi-tenant so users can sign up, get an API key, and run `softprobe` against `https://runtime.softprobe.dev` rather than a local process.
 
 The existing `otel-server` (Java/Spring, deployed at `runtime.softprobe.dev`) already handles durable span storage in BigQuery/GCS with a working multi-tenant API key model. We build on top of it rather than replacing it.
 
@@ -86,10 +86,10 @@ An API key can only read/write sessions belonging to its own tenant. Cross-tenan
 
 Goal: working `softprobe doctor` in under 5 minutes.
 
-1. User visits `app.softprobe.dev` → signs up with Google/GitHub via **Supabase Auth** (already powers `auth.softprobe.dev`).
+1. User visits `https://dashboard.softprobe.ai` → signs up with Google/GitHub via **Supabase Auth** (already powers `auth.softprobe.dev`).
 2. After signup, the dashboard shows one command:
    ```bash
-   export SOFTPROBE_API_TOKEN=sk_live_...
+   export SOFTPROBE_API_TOKEN=...
    softprobe doctor
    ```
 3. `softprobe doctor` passes → user follows existing quickstart docs unchanged.

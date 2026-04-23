@@ -215,7 +215,7 @@ rules:
 ```
 
 ```bash
-softprobe session rules apply --session $SESSION_ID --file rules/audit-partner.yaml
+softprobe session rules apply --session $SOFTPROBE_SESSION_ID --file rules/audit-partner.yaml
 ```
 
 `capture_only` **does not** synthesize a response — the proxy forwards to the real upstream as usual. It only ensures the hop shows up in `POST /v1/traces` and lands in the case file at close.

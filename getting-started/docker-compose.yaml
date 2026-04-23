@@ -1,0 +1,44 @@
+services:
+  softprobe-proxy:
+    image: envoyproxy/envoy:v1.27-latest
+    entrypoint: ["/bin/sh", "/etc/envoy/envoy-entrypoint.sh", "--log-level", "info"]
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml
+      - ./envoy-entrypoint.sh:/etc/envoy/envoy-entrypoint.sh
+    environment:
+      - SOFTPROBE_API_TOKEN
+    ports:
+      - "8082:8082"
+      - "8084:8084"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "true"]
+      interval: 5s
+      timeout: 2s
+      retries: 20
+
+  upstream:
+    image: softprobe/demo-upstream:latest
+    ports:
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8083/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 20
+
+  app:
+    image: softprobe/demo-app:latest
+    environment:
+      EGRESS_PROXY_URL: http://softprobe-proxy:8084
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 20
+    depends_on:
+      softprobe-proxy:
+        condition: service_healthy
+      upstream:
+        condition: service_healthy

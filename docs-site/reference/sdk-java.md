@@ -37,7 +37,7 @@ testImplementation("dev.softprobe:softprobe-java:0.5.0")
 
 ```java
 Softprobe softprobe = new Softprobe(
-    System.getenv().getOrDefault("SOFTPROBE_RUNTIME_URL", "http://127.0.0.1:8080")
+    System.getenv().getOrDefault("SOFTPROBE_RUNTIME_URL", "https://runtime.softprobe.dev")
 );
 ```
 
@@ -45,7 +45,7 @@ Or with the builder for advanced options:
 
 ```java
 Softprobe softprobe = Softprobe.builder()
-    .baseUrl("http://127.0.0.1:8080")
+    .baseUrl("https://runtime.softprobe.dev")
     .timeout(Duration.ofSeconds(5))
     .build();
 ```

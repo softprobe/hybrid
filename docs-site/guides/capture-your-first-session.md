@@ -33,11 +33,11 @@ echo "Session: $SOFTPROBE_SESSION_ID"
 ### Using raw curl
 
 ```bash
-SESSION_ID=$(curl -s -X POST http://127.0.0.1:8080/v1/sessions \
+SOFTPROBE_SESSION_ID=$(curl -s -X POST $SOFTPROBE_RUNTIME_URL/v1/sessions \
   -H 'Content-Type: application/json' \
   -d '{"mode":"capture"}' | jq -r .sessionId)
 
-echo "Session: $SESSION_ID"
+echo "Session: $SOFTPROBE_SESSION_ID"
 ```
 
 Either way, you now hold a `sessionId` string.
@@ -46,13 +46,13 @@ Either way, you now hold a `sessionId` string.
 
 Two rules:
 
-1. **Every request must carry** `x-softprobe-session-id: $SESSION_ID`.
+1. **Every request must carry** `x-softprobe-session-id: $SOFTPROBE_SESSION_ID`.
 2. **Every request must route through the ingress proxy** — not direct to the app.
 
 ### Manual testing with curl
 
 ```bash
-curl -v -H "x-softprobe-session-id: $SESSION_ID" \
+curl -v -H "x-softprobe-session-id: $SOFTPROBE_SESSION_ID" \
   http://127.0.0.1:8082/checkout \
   -d '{"amount": 1000, "currency": "USD"}' \
   -H 'content-type: application/json'
@@ -66,10 +66,10 @@ In real usage you run your app's own integration tests or a staging smoke test:
 
 ```bash
 # Example: drive a test harness that hits the SUT on :8082 with the session header
-SOFTPROBE_SESSION_ID=$SESSION_ID npm run smoke-test
+SOFTPROBE_SESSION_ID=$SOFTPROBE_SESSION_ID npm run smoke-test
 
 # Or run a browser-based flow
-SOFTPROBE_SESSION_ID=$SESSION_ID playwright test --grep "checkout"
+SOFTPROBE_SESSION_ID=$SOFTPROBE_SESSION_ID playwright test --grep "checkout"
 ```
 
 The constraint is mechanical: whatever is making the HTTP calls must **propagate** the session header. Most HTTP clients accept a per-request header map or a default header config.
@@ -87,7 +87,7 @@ docker logs -f e2e-softprobe-runtime-1
 Or query the runtime for span counts:
 
 ```bash
-curl -s http://127.0.0.1:8080/v1/sessions/$SESSION_ID/stats | jq
+curl -s $SOFTPROBE_RUNTIME_URL/v1/sessions/$SOFTPROBE_SESSION_ID/stats | jq
 # { "extractedSpans": 2, "injectedSpans": 2 }
 ```
 
@@ -98,11 +98,11 @@ If `extractedSpans` stays at 0 after you send traffic, your session header isn't
 Closing flushes the buffered traces to disk and deletes the session from the runtime.
 
 ```bash
-softprobe session close --session $SESSION_ID
+softprobe session close --session $SOFTPROBE_SESSION_ID
 # {"closed": true, "casePath": "e2e/captured.case.json"}
 
 # Or raw curl:
-curl -s -X POST http://127.0.0.1:8080/v1/sessions/$SESSION_ID/close
+curl -s -X POST $SOFTPROBE_RUNTIME_URL/v1/sessions/$SOFTPROBE_SESSION_ID/close
 ```
 
 By default the runtime writes to `SOFTPROBE_CAPTURE_CASE_PATH`. In the Docker Compose reference stack this is `e2e/captured.case.json`. Override it when you start the runtime:
@@ -117,7 +117,7 @@ docker run \
 Or per-session (v0.6+):
 
 ```bash
-softprobe session close --session $SESSION_ID --out cases/checkout.case.json
+softprobe session close --session $SOFTPROBE_SESSION_ID --out cases/checkout.case.json
 ```
 
 ## 4. Inspect the capture
@@ -188,9 +188,9 @@ Capture mode respects `capture_only` rules with a `redact` payload. Apply them b
 
 ```bash
 softprobe session start --mode capture --json > session.json
-SESSION_ID=$(jq -r .sessionId session.json)
+SOFTPROBE_SESSION_ID=$(jq -r .sessionId session.json)
 
-softprobe session rules apply --session $SESSION_ID \
+softprobe session rules apply --session $SOFTPROBE_SESSION_ID \
   --file rules/redact.yaml
 ```
 

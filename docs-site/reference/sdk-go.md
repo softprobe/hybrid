@@ -24,7 +24,7 @@ import "github.com/softprobe/softprobe-go/softprobe"
 
 ```go
 sp := softprobe.New(softprobe.Config{
-    BaseURL: "http://127.0.0.1:8080",
+    BaseURL: "https://runtime.softprobe.dev",
     Timeout: 5 * time.Second,
 })
 ```
@@ -33,7 +33,7 @@ Falls back to `$SOFTPROBE_RUNTIME_URL` if `BaseURL` is empty.
 
 | Field | Type | Default | Purpose |
 |---|---|---|---|
-| `BaseURL` | string | env or `127.0.0.1:8080` | Runtime URL |
+| `BaseURL` | string | env or `https://runtime.softprobe.dev` | Runtime URL |
 | `Timeout` | `time.Duration` | `5s` | Control-plane HTTP timeout |
 | `HTTPClient` | `*http.Client` | `http.DefaultClient` | Override for proxies / TLS tuning |
 

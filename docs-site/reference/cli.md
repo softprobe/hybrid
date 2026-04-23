@@ -6,7 +6,7 @@ The `softprobe` CLI is the primary interface for humans, CI, and AI agents. It s
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `--runtime-url URL` | `$SOFTPROBE_RUNTIME_URL` or `http://127.0.0.1:8080` | Where to find the runtime |
+| `--runtime-url URL` | `$SOFTPROBE_RUNTIME_URL` or `https://runtime.softprobe.dev` | Where to find the runtime |
 | `--json` | off | Emit structured JSON instead of human text |
 | `--verbose` / `-v` | off | Extra diagnostic logging to stderr |
 | `--quiet` / `-q` | off | Suppress non-error output |
@@ -96,7 +96,7 @@ This gives agents and CI a cheap, deterministic way to detect "someone upgraded 
     {
       "name": "runtime-reachable",
       "status": "ok",
-      "details": { "url": "http://127.0.0.1:8080", "latencyMs": 4 }
+      "details": { "url": "https://runtime.softprobe.dev", "latencyMs": 4 }
     },
     {
       "name": "version-drift",
@@ -146,7 +146,7 @@ softprobe session start --mode capture --shell
 ### `session load-case`
 
 ```bash
-softprobe session load-case --session $SESSION_ID --file cases/x.case.json
+softprobe session load-case --session $SOFTPROBE_SESSION_ID --file cases/x.case.json
 ```
 
 Uploads the case to the runtime (which parses + validates it).
@@ -154,7 +154,7 @@ Uploads the case to the runtime (which parses + validates it).
 ### `session rules apply`
 
 ```bash
-softprobe session rules apply --session $SESSION_ID --file rules/stripe.yaml
+softprobe session rules apply --session $SOFTPROBE_SESSION_ID --file rules/stripe.yaml
 ```
 
 Replaces the session's rule document with the contents of the file.
@@ -162,8 +162,8 @@ Replaces the session's rule document with the contents of the file.
 ### `session policy set`
 
 ```bash
-softprobe session policy set --session $SESSION_ID --strict
-softprobe session policy set --session $SESSION_ID --file policy.yaml
+softprobe session policy set --session $SOFTPROBE_SESSION_ID --strict
+softprobe session policy set --session $SOFTPROBE_SESSION_ID --file policy.yaml
 ```
 
 `--strict` is a shortcut for `externalHttp: strict, defaultOnMiss: error`.
@@ -171,8 +171,8 @@ softprobe session policy set --session $SESSION_ID --file policy.yaml
 ### `session close`
 
 ```bash
-softprobe session close --session $SESSION_ID
-softprobe session close --session $SESSION_ID --out cases/captured.case.json
+softprobe session close --session $SOFTPROBE_SESSION_ID
+softprobe session close --session $SOFTPROBE_SESSION_ID --out cases/captured.case.json
 ```
 
 Closes the session. For capture sessions, optionally redirects the flushed case file path.
@@ -180,7 +180,7 @@ Closes the session. For capture sessions, optionally redirects the flushed case 
 ### `session stats`
 
 ```bash
-softprobe session stats --session $SESSION_ID --json
+softprobe session stats --session $SOFTPROBE_SESSION_ID --json
 # {"extractedSpans":2,"injectedSpans":4,"sessionRevision":5,"mode":"replay"}
 ```
 
@@ -216,7 +216,7 @@ Starts a session, exports `SOFTPROBE_SESSION_ID` for the driver process, runs it
 ### `replay run`
 
 ```bash
-softprobe replay run --session $SESSION_ID --json
+softprobe replay run --session $SOFTPROBE_SESSION_ID --json
 # {"sessionId":"sess_...","hits":12,"misses":0}
 ```
 
@@ -246,7 +246,7 @@ softprobe suite run suites/checkout.suite.yaml \
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `--runtime-url URL` | `http://127.0.0.1:8080` | Control-plane runtime |
+| `--runtime-url URL` | `$SOFTPROBE_RUNTIME_URL` or `https://runtime.softprobe.dev` | Control-plane runtime |
 | `--app-url URL` | `$APP_URL` → `http://127.0.0.1:8081` | SUT base URL; prefer the ingress proxy so `x-softprobe-session-id` becomes `tracestate` on egress |
 | `--parallel N` | `min(32, cpu*4)` | Concurrent cases |
 | `--hooks PATH` | — | Hook file; repeatable. TS accepted on Node 22+ (uses `--experimental-strip-types`); otherwise compile to `.js`/`.mjs` |
@@ -306,8 +306,8 @@ Prints a table of spans: direction, method, URL, status, body size. Add `--json`
 ### `inspect session`
 
 ```bash
-softprobe inspect session --runtime-url $SOFTPROBE_RUNTIME_URL --session $SESSION_ID
-softprobe inspect session --session $SESSION_ID --json
+softprobe inspect session --runtime-url $SOFTPROBE_RUNTIME_URL --session $SOFTPROBE_SESSION_ID
+softprobe inspect session --session $SOFTPROBE_SESSION_ID --json
 ```
 
 Dumps the current session's policy, rules, loaded case summary, and statistics. Uses `GET /v1/sessions/{id}/state` on the runtime when available; older runtimes fall back to stats-only.
@@ -417,7 +417,7 @@ softprobe scrub 'cases/**/*.case.json' --rules redactions.yaml
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `SOFTPROBE_RUNTIME_URL` | `http://127.0.0.1:8080` | Default for `--runtime-url` |
+| `SOFTPROBE_RUNTIME_URL` | `https://runtime.softprobe.dev` | Default for `--runtime-url` |
 | `SOFTPROBE_API_TOKEN` | — | Bearer token for `Authorization: Bearer <token>` (hosted runtime or token-protected OSS runtime) |
 | `SOFTPROBE_SESSION_ID` | — | Read by `--session` flags if set |
 | `SOFTPROBE_CAPTURE_CASE_PATH` | `e2e/captured.case.json` | Output path for captured case files; supports `{sessionId}`, `{ts}`, `{mode}` placeholders and `file://` URIs |

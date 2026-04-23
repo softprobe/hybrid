@@ -6,6 +6,14 @@
  * module and call `applyLegacyFrameworkPatches()` (PD6.5f).
  */
 
+const otelApi = require('@opentelemetry/api');
+try {
+  const { AsyncHooksContextManager } = require('@opentelemetry/context-async-hooks');
+  const mgr = new AsyncHooksContextManager();
+  mgr.enable();
+  otelApi.context.setGlobalContextManager(mgr);
+} catch { /* context-async-hooks not installed; context.with() won't propagate across await */ }
+
 const { SoftprobeContext } = require('./context');
 
 if (process.env.SOFTPROBE_MODE !== undefined || process.env.SOFTPROBE_DATA_DIR !== undefined) {
@@ -23,11 +31,18 @@ SoftprobeContext.initGlobal({
   strictComparison: process.env.SOFTPROBE_STRICT_COMPARISON === '1',
 });
 
-const { applyAutoInstrumentationMutator } = require('./bootstrap/otel/mutator');
-require('./instrumentations/postgres');
-const { setupRedisReplay } = require('./instrumentations/redis');
 const { setupHttpReplayInterceptor } = require('./instrumentations/fetch');
 
-applyAutoInstrumentationMutator();
-setupRedisReplay();
+// postgres, redis, and auto-instrumentation mutator are optional — only active when
+// the corresponding packages are installed. HTTP fetch interception works without them.
+try { require('./instrumentations/postgres'); } catch { /* pg not installed */ }
+try {
+  const { setupRedisReplay } = require('./instrumentations/redis');
+  setupRedisReplay();
+} catch { /* @redis/client not installed */ }
+try {
+  const { applyAutoInstrumentationMutator } = require('./bootstrap/otel/mutator');
+  applyAutoInstrumentationMutator();
+} catch { /* @opentelemetry/auto-instrumentations-node not installed */ }
+
 setupHttpReplayInterceptor();

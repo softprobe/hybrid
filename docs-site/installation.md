@@ -13,7 +13,13 @@ A typical laptop-dev setup uses all four via `docker compose` and a local `npm i
 
 ## Runtime
 
-### Docker (recommended)
+::: tip Use the hosted runtime (recommended)
+Skip this section entirely. Point your CLI and SDKs at `https://runtime.softprobe.dev` — no Docker, no binary to manage. See [Hosted deployment](/deployment/hosted) for a five-minute setup guide.
+:::
+
+**Self-hosting** the runtime makes sense when you need no internet dependency, a fully air-gapped environment, or want to run the runtime inside your own Kubernetes cluster. The three options below are for that case.
+
+### Docker
 
 ```bash
 docker run -p 8080:8080 ghcr.io/softprobe/softprobe-runtime:v0.5
@@ -47,10 +53,6 @@ git clone https://github.com/softprobe/softprobe-runtime
 cd softprobe-runtime && go build -o softprobe-runtime .
 ./softprobe-runtime
 ```
-
-::: tip Hosted option
-If you do not want to operate the runtime yourself, point your CLI and SDKs at `https://o.softprobe.ai` (see [Hosted deployment](/deployment/hosted)). It speaks the same HTTP control API and OTLP trace API as the OSS runtime.
-:::
 
 ## CLI
 
@@ -94,7 +96,7 @@ softprobe --version
 # softprobe v0.5.0 (spec http-control-api@v1)
 
 softprobe doctor
-# ✓ runtime reachable at http://127.0.0.1:8080
+# ✓ runtime reachable at https://runtime.softprobe.dev
 # ✓ schema version matches CLI (spec v1)
 # ✓ proxy WASM binary at expected path
 ```
@@ -172,7 +174,7 @@ pip install softprobe
 ```python
 from softprobe import Softprobe
 
-softprobe = Softprobe(base_url="http://127.0.0.1:8080")
+softprobe = Softprobe()  # reads SOFTPROBE_RUNTIME_URL; defaults to https://runtime.softprobe.dev
 ```
 
 Reference: [Python SDK](/reference/sdk-python).
@@ -204,7 +206,17 @@ import "github.com/softprobe/softprobe-go/softprobe"
 
 Reference: [Go SDK](/reference/sdk-go).
 
-## One-liner: everything for a laptop
+## One-liner: hosted setup (recommended)
+
+```bash
+curl -fsSL https://softprobe.dev/install/cli.sh | sh
+export SOFTPROBE_API_TOKEN=...   # from https://dashboard.softprobe.ai
+softprobe doctor
+```
+
+After that, follow the [Quick start](/quickstart).
+
+## One-liner: self-hosted laptop setup
 
 ```bash
 curl -fsSL https://softprobe.dev/install/cli.sh | sh
@@ -213,8 +225,6 @@ cd softprobe
 docker compose -f e2e/docker-compose.yaml up --wait
 softprobe doctor
 ```
-
-After that, follow the [Quick start](/quickstart).
 
 ## Version matrix
 

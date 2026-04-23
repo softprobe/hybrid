@@ -67,7 +67,7 @@ The **Softprobe Runtime** is the **network service** that implements **both**:
 
 Both handler groups share a **single in-memory session store** (`internal/store/`). When a test calls `load-case` or `rules`, the inject handler immediately sees the updated state — no sync or external backend needed.
 
-For local and self-hosted setups, `SOFTPROBE_RUNTIME_URL` (CLI/SDK config) and `sp_backend_url` (proxy WASM config) both point to the **same** `softprobe-runtime` base URL. The hosted service (`https://o.softprobe.ai`) is the same unified service with durable storage behind it.
+For local and self-hosted setups, `SOFTPROBE_RUNTIME_URL` (CLI/SDK config) and `sp_backend_url` (proxy WASM config) both point to the **same** `softprobe-runtime` base URL. The hosted service (`https://runtime.softprobe.dev`) is the same unified service with durable storage behind it.
 
 It is **not** specified as a Kubernetes DaemonSet, Operator, or second mesh control plane. It is a **normal HTTP API service** (see [section 10](#10-softprobe-runtime-implementation-and-deployment)).
 
