@@ -5,7 +5,7 @@ Softprobe has four installable pieces. You pick the ones you need:
 | Piece | Install for… | Ships as |
 |---|---|---|
 | **Runtime** (`softprobe-runtime`) | Hosting the control plane yourself | Docker image + static binary |
-| **CLI** (`softprobe`) | Scripting capture, running suites, CI | Homebrew, curl-install, npm |
+| **CLI** (`softprobe`) | Scripting capture, running suites, CI | curl-install, direct download |
 | **Proxy** (Envoy + Softprobe WASM) | Intercepting HTTP in your environment | WASM binary + Envoy config |
 | **SDK** (one per language) | Authoring tests | npm, PyPI, Maven Central, Go modules |
 
@@ -33,19 +33,6 @@ The image is ~30 MB (`distroless` base) and starts in under a second. The only r
 | `SOFTPROBE_CAPTURE_CASE_PATH` | *(unset)* | Where to flush captured cases on session close |
 | `SOFTPROBE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 
-### Binary (Linux / macOS)
-
-```bash
-curl -fsSL https://softprobe.dev/install/runtime.sh | sh
-```
-
-Installs `/usr/local/bin/softprobe-runtime`. Verify:
-
-```bash
-softprobe-runtime --version
-# softprobe-runtime v0.5.0 (commit abcdef, built 2026-04-15)
-```
-
 ### Source (Go 1.22+)
 
 ```bash
@@ -58,36 +45,17 @@ cd softprobe-runtime && go build -o softprobe-runtime .
 
 The CLI is the primary interface for humans, CI pipelines, and AI agents. It speaks only HTTP to the runtime — no local state.
 
-### Homebrew (macOS / Linux)
+### Direct download
 
-```bash
-brew tap softprobe/tap
-brew install softprobe
-```
+Download the binary for your platform from the [GitHub Releases](https://github.com/softprobe/softprobe/releases) page and place it on your PATH.
 
 ### Curl installer (Linux / macOS)
 
 ```bash
-curl -fsSL https://softprobe.dev/install/cli.sh | sh
+curl -fsSL https://docs.softprobe.dev/install/cli.sh | sh
 ```
 
 Installs `/usr/local/bin/softprobe`.
-
-### Windows (Scoop)
-
-```powershell
-scoop bucket add softprobe https://github.com/softprobe/scoop-bucket
-scoop install softprobe
-```
-
-### npm (cross-platform, pinned to a release)
-
-```bash
-npm install --save-dev @softprobe/cli
-npx softprobe doctor
-```
-
-The `npm` package ships a Node wrapper that delegates to the canonical Go binary for your platform.
 
 ### Verify
 
@@ -209,7 +177,7 @@ Reference: [Go SDK](/reference/sdk-go).
 ## One-liner: hosted setup (recommended)
 
 ```bash
-curl -fsSL https://softprobe.dev/install/cli.sh | sh
+curl -fsSL https://docs.softprobe.dev/install/cli.sh | sh
 export SOFTPROBE_API_TOKEN=...   # from https://dashboard.softprobe.ai
 softprobe doctor
 ```
@@ -219,7 +187,7 @@ After that, follow the [Quick start](/quickstart).
 ## One-liner: self-hosted laptop setup
 
 ```bash
-curl -fsSL https://softprobe.dev/install/cli.sh | sh
+curl -fsSL https://docs.softprobe.dev/install/cli.sh | sh
 git clone https://github.com/softprobe/softprobe
 cd softprobe
 docker compose -f e2e/docker-compose.yaml up --wait
@@ -240,14 +208,8 @@ softprobe doctor
 ## Uninstall
 
 ```bash
-# Homebrew
-brew uninstall softprobe && brew untap softprobe/tap
-
 # curl install
-sudo rm /usr/local/bin/softprobe /usr/local/bin/softprobe-runtime
-
-# npm
-npm uninstall @softprobe/cli @softprobe/softprobe-js
+sudo rm /usr/local/bin/softprobe
 ```
 
 Case files, if any, remain — they are plain JSON you own.

@@ -6,28 +6,11 @@ on:
       - "v*"
 
 jobs:
+  # All targets are cross-compiled on Linux: Go honors GOOS/GOARCH; CGO_ENABLED=0
+  # avoids needing a macOS runner or cross-C toolchains (pure-Go CLI).
   build-binaries:
-    name: Build ${{ matrix.os }}/${{ matrix.arch }}
+    name: Cross-build CLI (linux + darwin, amd64 + arm64)
     runs-on: [self-hosted, Linux]
-    strategy:
-      matrix:
-        include:
-          - os: linux
-            arch: amd64
-            goarch: amd64
-            goos: linux
-          - os: linux
-            arch: arm64
-            goarch: arm64
-            goos: linux
-          - os: darwin
-            arch: amd64
-            goarch: amd64
-            goos: darwin
-          - os: darwin
-            arch: arm64
-            goarch: arm64
-            goos: darwin
 
     steps:
       - uses: actions/checkout@v4
@@ -37,32 +20,43 @@ jobs:
           go-version-file: softprobe-runtime/go.mod
           cache-dependency-path: softprobe-runtime/go.sum
 
-      - name: Build
+      - name: Build all targets
         working-directory: softprobe-runtime
         env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
           VERSION: ${{ github.ref_name }}
         run: |
-          go build -trimpath \
-            -ldflags "-s -w -X softprobe-runtime/internal/version.Version=${VERSION}" \
-            -o ../dist/softprobe-${{ matrix.os }}-${{ matrix.arch }} \
-            ./cmd/softprobe
+          mkdir -p ../dist
+          build_one() {
+            local goos="$1" goarch="$2"
+            GOOS="$goos" GOARCH="$goarch" go build -trimpath \
+              -ldflags "-s -w -X softprobe-runtime/internal/version.Version=${VERSION}" \
+              -o "../dist/softprobe-${goos}-${goarch}" \
+              ./cmd/softprobe
+          }
+          build_one linux amd64
+          build_one linux arm64
+          build_one darwin amd64
+          build_one darwin arm64
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: softprobe-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/softprobe-${{ matrix.os }}-${{ matrix.arch }}
+          name: softprobe-binaries
+          path: dist
           retention-days: 1
 
   release:
-    name: Attach binaries to release
+    name: Attach binaries to release and publish to GCS
     needs: build-binaries
     runs-on: [self-hosted, Linux]
     permissions:
       contents: write
+      id-token: write   # for Workload Identity GCS auth
+
+    env:
+      GCS_BUCKET: softprobe-published-files
+      GCS_PREFIX: cli/softprobe
 
     steps:
       - uses: actions/download-artifact@v4
@@ -70,40 +64,24 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Attach to GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          gh release upload "$TAG" dist/softprobe-* \
-            --repo ${{ github.repository }} \
-            --clobber
-
-  publish-npm:
-    name: Publish @softprobe/cli to npm
-    needs: build-binaries
-    runs-on: [self-hosted, Linux]
-    permissions:
-      contents: read
-      id-token: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - name: Authenticate to GCS
+        uses: google-github-actions/auth@v2
         with:
-          node-version: "20"
-          registry-url: "https://registry.npmjs.org"
+          credentials_json: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
 
-      - name: Align package version with release tag
-        working-directory: softprobe-cli
+      - name: Upload binaries to GCS
+        uses: google-github-actions/upload-cloud-storage@v2
+        with:
+          path: dist
+          destination: ${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ github.ref_name }}
+          headers: |-
+            content-type: application/octet-stream
+            content-disposition: attachment
+
+      - name: Smoke GCS URLs
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          npm version "$VERSION" --no-git-tag-version
-
-      - name: Publish
-        working-directory: softprobe-cli
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          SOFTPROBE_SKIP_INSTALL: "1"
-        run: npm publish --access public --provenance
+          for f in dist/softprobe-*; do
+            URL="https://storage.googleapis.com/${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ github.ref_name }}/$(basename "$f")"
+            curl -sfI "$URL" | grep -i "content-type"
+            echo "GCS URL: $URL"
+          done

@@ -1,10 +1,12 @@
 #!/usr/bin/env sh
 # Install the softprobe CLI binary.
-# Usage: curl -fsSL https://softprobe.dev/install/cli.sh | sh
+# Usage: curl -fsSL https://docs.softprobe.dev/install/cli.sh | sh
 set -e
 
-REPO="softprobe/softprobe-runtime"
+REPO="softprobe/hybrid"
 BIN="softprobe"
+GCS_BUCKET="softprobe-published-files"
+GCS_PREFIX="cli/softprobe"
 INSTALL_DIR="${SOFTPROBE_INSTALL_DIR:-/usr/local/bin}"
 
 # Resolve OS
@@ -37,7 +39,7 @@ if [ -z "$LATEST" ]; then
 fi
 
 ASSET="${BIN}-${OS}-${ARCH}"
-URL="https://github.com/${REPO}/releases/download/${LATEST}/${ASSET}"
+URL="https://storage.googleapis.com/${GCS_BUCKET}/${GCS_PREFIX}/${LATEST}/${ASSET}"
 
 echo "Installing softprobe ${LATEST} (${OS}/${ARCH}) → ${INSTALL_DIR}/${BIN}"
 
