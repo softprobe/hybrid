@@ -127,11 +127,9 @@ jobs:
 
       - name: Upload SHA256 to GCS
         if: github.event_name != 'pull_request'
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.gcsauth.outputs.credentials_file_path }}
         run: |
-          echo "${{ steps.wasmhash.outputs.sha }}" | \
-            gsutil cp - gs://${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ steps.gcstag.outputs.tag }}/sp_istio_agent.wasm.sha256
+          GOOGLE_APPLICATION_CREDENTIALS=${{ steps.gcsauth.outputs.credentials_file_path }}
+          echo "${{ steps.wasmhash.outputs.sha }}" | gsutil cp - gs://${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ steps.gcstag.outputs.tag }}/sp_istio_agent.wasm.sha256
 
       - name: Smoke GCS URL
         if: github.event_name != 'pull_request'
