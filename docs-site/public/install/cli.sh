@@ -28,17 +28,12 @@ case "$(uname -m)" in
     ;;
 esac
 
-# Resolve version: use SOFTPROBE_VERSION env if set, otherwise read from GCS version file
+# Resolve version: use SOFTPROBE_VERSION env if set, otherwise pinned release
 if [ -n "${SOFTPROBE_VERSION}" ]; then
   VERSION="${SOFTPROBE_VERSION#v}"
   VERSION="v${VERSION#v}"
 else
-  VERSION_URL="https://storage.googleapis.com/${GCS_BUCKET}/${GCS_PREFIX}/version"
-  VERSION=$(curl -fsSL "$VERSION_URL")
-  if [ -z "$VERSION" ]; then
-    echo "Could not determine latest version from $VERSION_URL" >&2
-    exit 1
-  fi
+  VERSION="v99.0.6-test"
 fi
 
 ASSET="${BIN}-${OS}-${ARCH}"
