@@ -336,6 +336,16 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	}
 	defer metaResp.Body.Close()
 
+	if metaResp.StatusCode == http.StatusUnauthorized || metaResp.StatusCode == http.StatusForbidden {
+		if *jsonOutput {
+			writeJSONError(stdout, exitDoctorFail, "auth_required", "runtime requires authentication — set SOFTPROBE_API_TOKEN", nil)
+			return exitDoctorFail
+		}
+		_, _ = fmt.Fprintf(stderr, "runtime metadata check failed: status %d\n", metaResp.StatusCode)
+		_, _ = fmt.Fprintf(stderr, "Hint: set SOFTPROBE_API_TOKEN env var or use --api-token flag\n")
+		return exitDoctorFail
+	}
+
 	if metaResp.StatusCode != http.StatusOK {
 		if *jsonOutput {
 			writeJSONError(stdout, exitDoctorFail, "runtime_meta_unhealthy", fmt.Sprintf("runtime metadata check failed: status %d", metaResp.StatusCode), nil)
