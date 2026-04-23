@@ -1,6 +1,8 @@
-# PD5.3b — build sp_istio_agent.wasm, package as scratch OCI image, push to GHCR.
-# Istio WasmPlugin: spec.url: oci://ghcr.io/<owner>/softprobe-proxy:<tag>
-name: softprobe-proxy wasm (GHCR)
+# Build sp_istio_agent.wasm and publish to two destinations:
+#   GHCR (FROM scratch OCI image, for Istio WasmPlugin oci:// URL)
+#   GCS  (plain binary at gs://softprobe-published-files/agent/proxy-wasm/<tag>/,
+#          for Envoy code.remote HTTP fetch in Docker Compose)
+name: softprobe-proxy wasm
 
 on:
   pull_request:
@@ -14,8 +16,10 @@ on:
       - "v*"
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/softprobe-proxy
+  GHCR_REGISTRY: ghcr.io
+  GHCR_IMAGE: ${{ github.repository_owner }}/softprobe-proxy
+  GCS_BUCKET: softprobe-published-files
+  GCS_PREFIX: agent/proxy-wasm
 
 jobs:
   wasm-image:
@@ -23,6 +27,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write   # for Workload Identity GCS auth
 
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +58,7 @@ jobs:
           make check-deps-build
           make build
 
-      - name: WASM SHA256 (OCI label)
+      - name: WASM SHA256 (OCI label + GCS upload)
         id: wasmhash
         working-directory: softprobe-proxy
         run: |
@@ -85,64 +90,50 @@ jobs:
           test -s /tmp/plugin.wasm
           file /tmp/plugin.wasm | grep -i wasm
 
-      # ---- main / tag: GHCR ----
+      # ---- main / tag: GHCR + GCS ----
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ${{ env.GHCR_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker metadata
+      - name: Resolve GCS tag
         if: github.event_name != 'pull_request'
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=sha-,format=short
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=ref,event=tag
-
-      - name: Build and push
-        if: github.event_name != 'pull_request'
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: ./softprobe-proxy
-          file: ./softprobe-proxy/Dockerfile.ghcr-wasm
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            WASM_SHA256=${{ steps.wasmhash.outputs.sha }}
-
-      - name: Install ORAS (registry OCI smoke)
-        if: github.event_name != 'pull_request'
-        uses: oras-project/setup-oras@v1
-
-      - name: Smoke GHCR (crane export + ORAS copy to OCI layout)
-        if: github.event_name != 'pull_request'
+        id: gcstag
         run: |
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            T=latest
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
           else
-            T="${{ github.ref_name }}"
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           fi
-          echo "Smoking tag: $T"
-          crane export ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:"$T" | tar -xO plugin.wasm > /tmp/plugin-ghcr.wasm
-          file /tmp/plugin-ghcr.wasm | grep -i wasm
-          rm -rf /tmp/oci-ghcr
-          oras copy ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:"$T" oci:/tmp/oci-ghcr
-          printf '\0asm' >/tmp/wasm-magic
-          found=""
-          while IFS= read -r -d '' f; do
-            if head -c4 "$f" | cmp -s - /tmp/wasm-magic; then
-              found=$f
-              break
-            fi
-          done < <(find /tmp/oci-ghcr -type f -size +50c -print0)
-          test -n "$found"
-          echo "ORAS oci layout contains wasm at: $found"
-          echo "WasmPlugin url: oci://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$T"
+
+      - name: Authenticate to GCS
+        if: github.event_name != 'pull_request'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCS_CREDENTIALS_JSON }}
+
+      - name: Upload WASM to GCS
+        if: github.event_name != 'pull_request'
+        uses: google-github-actions/upload-cloud-storage@v2
+        with:
+          path: softprobe-proxy/target/wasm32-unknown-unknown/release/sp_istio_agent.wasm
+          destination: ${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ steps.gcstag.outputs.tag }}
+          headers: |-
+            content-type: application/wasm
+
+      - name: Upload SHA256 to GCS
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "${{ steps.wasmhash.outputs.sha }}" | \
+            gsutil cp - gs://${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ steps.gcstag.outputs.tag }}/sp_istio_agent.wasm.sha256
+
+      - name: Smoke GCS URL
+        if: github.event_name != 'pull_request'
+        run: |
+          T=${{ steps.gcstag.outputs.tag }}
+          URL="https://storage.googleapis.com/${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${T}/sp_istio_agent.wasm"
+          curl -sfI "$URL" | grep -i "content-type: application/wasm"
+          echo "GCS WASM URL: $URL"
