@@ -3,10 +3,9 @@
 # Usage: curl -fsSL https://docs.softprobe.dev/install/cli.sh | sh
 set -e
 
-REPO="softprobe/hybrid"
-BIN="softprobe"
 GCS_BUCKET="softprobe-published-files"
 GCS_PREFIX="cli/softprobe"
+BIN="softprobe"
 INSTALL_DIR="${SOFTPROBE_INSTALL_DIR:-/usr/local/bin}"
 
 # Resolve OS
@@ -29,19 +28,23 @@ case "$(uname -m)" in
     ;;
 esac
 
-# Resolve latest version from GitHub API
-LATEST=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-  | grep '"tag_name"' | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
-
-if [ -z "$LATEST" ]; then
-  echo "Could not determine latest release version." >&2
-  exit 1
+# Resolve version: use SOFTPROBE_VERSION env if set, otherwise read from GCS version file
+if [ -n "${SOFTPROBE_VERSION}" ]; then
+  VERSION="${SOFTPROBE_VERSION#v}"
+  VERSION="v${VERSION#v}"
+else
+  VERSION_URL="https://storage.googleapis.com/${GCS_BUCKET}/${GCS_PREFIX}/version"
+  VERSION=$(curl -fsSL "$VERSION_URL")
+  if [ -z "$VERSION" ]; then
+    echo "Could not determine latest version from $VERSION_URL" >&2
+    exit 1
+  fi
 fi
 
 ASSET="${BIN}-${OS}-${ARCH}"
-URL="https://storage.googleapis.com/${GCS_BUCKET}/${GCS_PREFIX}/${LATEST}/${ASSET}"
+URL="https://storage.googleapis.com/${GCS_BUCKET}/${GCS_PREFIX}/${VERSION}/${ASSET}"
 
-echo "Installing softprobe ${LATEST} (${OS}/${ARCH}) → ${INSTALL_DIR}/${BIN}"
+echo "Installing softprobe ${VERSION} (${OS}/${ARCH}) → ${INSTALL_DIR}/${BIN}"
 
 TMPFILE=$(mktemp)
 trap 'rm -f "$TMPFILE"' EXIT
