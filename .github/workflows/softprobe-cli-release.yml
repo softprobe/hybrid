@@ -38,14 +38,7 @@ jobs:
           build_one linux arm64
           build_one darwin amd64
           build_one darwin arm64
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: softprobe-binaries
-          path: dist
-          retention-days: 1
-
+          
   release:
     name: Attach binaries to release and publish to GCS
     needs: build-binaries
@@ -72,7 +65,7 @@ jobs:
       - name: Upload binaries to GCS
         uses: google-github-actions/upload-cloud-storage@v2
         with:
-          path: dist
+          path: dist/softprobe-*
           destination: ${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ github.ref_name }}
           headers: |-
             content-type: application/octet-stream
