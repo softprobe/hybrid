@@ -128,8 +128,16 @@ jobs:
       - name: Upload SHA256 to GCS
         if: github.event_name != 'pull_request'
         run: |
-          GOOGLE_APPLICATION_CREDENTIALS=${{ steps.gcsauth.outputs.credentials_file_path }}
-          echo "${{ steps.wasmhash.outputs.sha }}" | gsutil cp - gs://${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ steps.gcstag.outputs.tag }}/sp_istio_agent.wasm.sha256
+          CREDS=${{ steps.gcsauth.outputs.credentials_file_path }}
+          TOKEN=$(python3 -c "import json; creds=json.load(open('$CREDS')); print(creds.get('access_token',''))" 2>/dev/null || echo "")
+          if [ -n "$TOKEN" ]; then
+            echo "${{ steps.wasmhash.outputs.sha }}" | curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: text/plain" \
+              "https://storage.googleapis.com/upload/storage/v1/b/${{ env.GCS_BUCKET }}/o?uploadType=media&name=${{ env.GCS_PREFIX }}/${{ steps.gcstag.outputs.tag }}/sp_istio_agent.wasm.sha256" \
+              --data-binary @-
+          else
+            echo "Failed to get access token"
+            exit 1
+          fi
 
       - name: Smoke GCS URL
         if: github.event_name != 'pull_request'
