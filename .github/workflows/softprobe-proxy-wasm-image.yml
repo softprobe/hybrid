@@ -111,6 +111,7 @@ jobs:
 
       - name: Authenticate to GCS
         if: github.event_name != 'pull_request'
+        id: gcsauth
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
@@ -126,6 +127,8 @@ jobs:
 
       - name: Upload SHA256 to GCS
         if: github.event_name != 'pull_request'
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.gcsauth.outputs.credentials_file_path }}
         run: |
           echo "${{ steps.wasmhash.outputs.sha }}" | \
             gsutil cp - gs://${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ steps.gcstag.outputs.tag }}/sp_istio_agent.wasm.sha256
