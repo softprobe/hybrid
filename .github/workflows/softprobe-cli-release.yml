@@ -5,12 +5,20 @@ on:
     tags:
       - "v*"
 
+env:
+  GCS_BUCKET: softprobe-published-files
+  GCS_PREFIX: cli/softprobe
+
 jobs:
-  # All targets are cross-compiled on Linux: Go honors GOOS/GOARCH; CGO_ENABLED=0
-  # avoids needing a macOS runner or cross-C toolchains (pure-Go CLI).
-  build-binaries:
-    name: Cross-build CLI (linux + darwin, amd64 + arm64)
+  # Build each target and upload directly to GCS.  CGO_ENABLED=0 + GOOS/GOARCH
+  # cross-compiles all targets from the Linux runner — no macOS runner needed.
+  build-and-upload:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
     runs-on: [self-hosted, Linux]
+    strategy:
+      matrix:
+        goos: [linux, darwin]
+        goarch: [amd64, arm64]
 
     steps:
       - uses: actions/checkout@v4
@@ -20,61 +28,35 @@ jobs:
           go-version-file: softprobe-runtime/go.mod
           cache-dependency-path: softprobe-runtime/go.sum
 
-      - name: Build all targets
+      - name: Build
         working-directory: softprobe-runtime
         env:
           CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
           VERSION: ${{ github.ref_name }}
         run: |
-          mkdir -p ../dist
-          build_one() {
-            local goos="$1" goarch="$2"
-            GOOS="$goos" GOARCH="$goarch" go build -trimpath \
-              -ldflags "-s -w -X softprobe-runtime/internal/version.Version=${VERSION}" \
-              -o "../dist/softprobe-${goos}-${goarch}" \
-              ./cmd/softprobe
-          }
-          build_one linux amd64
-          build_one linux arm64
-          build_one darwin amd64
-          build_one darwin arm64
-          
-  release:
-    name: Attach binaries to release and publish to GCS
-    needs: build-binaries
-    runs-on: [self-hosted, Linux]
-    permissions:
-      contents: write
-      id-token: write   # for Workload Identity GCS auth
-
-    env:
-      GCS_BUCKET: softprobe-published-files
-      GCS_PREFIX: cli/softprobe
-
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
+          go build -trimpath \
+            -ldflags "-s -w -X softprobe-runtime/internal/version.Version=${VERSION}" \
+            -o "../dist/softprobe-${{ matrix.goos }}-${{ matrix.goarch }}" \
+            ./cmd/softprobe
 
       - name: Authenticate to GCS
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
 
-      - name: Upload binaries to GCS
+      - name: Upload to GCS
         uses: google-github-actions/upload-cloud-storage@v2
         with:
-          path: dist/softprobe-*
+          path: dist/softprobe-${{ matrix.goos }}-${{ matrix.goarch }}
           destination: ${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ github.ref_name }}
           headers: |-
             content-type: application/octet-stream
             content-disposition: attachment
 
-      - name: Smoke GCS URLs
+      - name: Smoke
         run: |
-          for f in dist/softprobe-*; do
-            URL="https://storage.googleapis.com/${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ github.ref_name }}/$(basename "$f")"
-            curl -sfI "$URL" | grep -i "content-type"
-            echo "GCS URL: $URL"
-          done
+          URL="https://storage.googleapis.com/${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ github.ref_name }}/softprobe-${{ matrix.goos }}-${{ matrix.goarch }}"
+          curl -sfI "$URL" | grep -i "content-type"
+          echo "GCS URL: $URL"
