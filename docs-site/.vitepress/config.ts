@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress';
+import { withMermaid } from 'vitepress-plugin-mermaid';
 
-export default defineConfig({
+export default withMermaid(defineConfig({
   title: 'Softprobe',
   description:
     'Capture production HTTP traffic, replay it deterministically in tests. Cross-language, proxy-first, CI-ready.',
@@ -104,7 +105,7 @@ export default defineConfig({
             { text: 'Local (Docker Compose)', link: '/deployment/local' },
             { text: 'Standalone Envoy', link: '/deployment/envoy-standalone' },
             { text: 'Kubernetes', link: '/deployment/kubernetes' },
-            { text: 'Hosted (o.softprobe.ai)', link: '/deployment/hosted' },
+            { text: 'Hosted (runtime.softprobe.dev)', link: '/deployment/hosted' },
           ],
         },
         {
@@ -140,4 +141,4 @@ export default defineConfig({
       copyright: 'Copyright © 2026 Softprobe Inc.',
     },
   },
-});
+}));

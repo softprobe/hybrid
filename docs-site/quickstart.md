@@ -54,10 +54,20 @@ Docker pulls three images on first run (proxy, app, upstream) and starts them:
 
 **Topology:**
 
-```
-test → proxy:8082 → app:8081 → proxy:8084 → upstream:8083
-                       ↕                ↕
-             runtime.softprobe.dev (inject / extract)
+```mermaid
+flowchart LR
+    T([test])
+    subgraph proxy ["softprobe-proxy"]
+        P1["ingress\n:8082"]
+        P2["egress\n:8084"]
+    end
+    A["app\n:8081"]
+    U["upstream\n:8083"]
+    R(["runtime.softprobe.dev"])
+
+    T --> P1 --> A --> P2 --> U
+    P1 <-->|inject / extract| R
+    P2 <-->|inject / extract| R
 ```
 
 The proxy WASM filter is fetched from GCS on startup and calls the hosted runtime on every intercepted request. No runtime container to manage.
@@ -112,6 +122,16 @@ git commit -m "capture: hello baseline"
 
 ## 5. Run the replay test
 
+Kill the upstream container to prove no live dependency is needed:
+
+```bash
+# Run from the getting-started directory (not softprobe-tests/)
+docker compose stop upstream
+# Container getting-started-upstream-1  Stopped
+```
+
+Now run the test:
+
 ```bash
 cd softprobe-tests
 npm install
@@ -123,6 +143,8 @@ npx jest hello.test --verbose
   GET /hello
     ✓ returns the captured upstream response without hitting the network (34 ms)
 ```
+
+The upstream is stopped and the test still passes. The egress proxy intercepted the app's outbound call and returned the captured response from the case file — the real upstream was never contacted. The test's `afterAll` restarts the container so the stack is clean for next time.
 
 **`hello.test.ts`** in the repo:
 
@@ -182,27 +204,105 @@ describe('GET /hello', () => {
 
 ---
 
-## What just happened
+## 6. Mutate the mock and watch the test fail
+
+The response you're replaying comes from the case file. You own it — you can change it before registering the mock. Open `softprobe-tests/hello.test.ts` and change the `dep` value from `"ok"` to `"not ok"`:
+
+```ts
+    await session.mockOutbound({
+      id: 'fragment-mock',
+      direction: 'outbound',
+      path: '/fragment',
+      response: {
+        ...hit.response,
+        body: JSON.stringify({ dep: 'not ok' }),  // override the captured body
+      },
+    });
+```
+
+Run the test again (upstream is still stopped):
+
+```bash
+npx jest hello.test --verbose
+```
 
 ```
-CAPTURE (once)                          REPLAY (every CI build)
-──────────────────────────────────      ────────────────────────────────────────
-eval "$(softprobe session start ...)"   session = startSession('replay')
-                                        session.loadCaseFromFile(...)
-                                        session.mockOutbound({ path: '/fragment', ... })
-                                                ↓ POST /v1/sessions/{id}/rules
+ FAIL  hello.test.ts
+  GET /hello
+    ✕ returns the captured upstream response without hitting the network (38 ms)
 
-curl -H "x-softprobe-session-id: …"    fetch('/hello', { 'x-softprobe-session-id': id })
-  proxy:8082 → app:8081                   proxy:8082 → app:8081
-    app → proxy:8084                        app → proxy:8084
-      proxy calls /v1/inject                  proxy calls /v1/inject
-      → miss (capture mode)                   → rule hit: return {"dep":"ok"}
-      → forward to upstream:8083              upstream never called
-      → POST /v1/traces (extract)
-      ← {"dep":"ok"}
+  ● GET /hello › returns the captured upstream response without hitting the network
 
-softprobe session close --out ...
-  ← cases/hello.case.json
+    expect(received).toEqual(expected)
+
+    - Expected
+    + Received
+
+      Object {
+    -   "dep": "ok",
+    +   "dep": "not ok",
+        "message": "hello",
+      }
+```
+
+The test fails because the app's response reflects the mutated mock. Revert the change to restore green. This is the foundation of **mutation testing**: swap the captured fixture for an alternate value to verify your app code actually uses the dependency response rather than ignoring it.
+
+---
+
+## What just happened
+
+```mermaid
+sequenceDiagram
+    box Capture (once)
+        participant CLI as softprobe CLI
+        participant R as runtime.softprobe.dev
+        participant P1 as proxy :8082
+        participant A as app :8081
+        participant P2 as proxy :8084
+        participant U as upstream :8083
+    end
+
+    CLI->>R: session start (mode=capture)
+    R-->>CLI: sess_...
+    CLI->>P1: GET /hello (x-softprobe-session-id)
+    P1->>R: /v1/inject → miss
+    P1->>A: GET /hello (tracestate carries session id)
+    A->>P2: GET /fragment
+    P2->>R: /v1/inject → miss
+    P2->>U: GET /fragment
+    U-->>P2: {"dep":"ok"}
+    P2->>R: POST /v1/traces
+    P2-->>A: {"dep":"ok"}
+    A-->>P1: {"message":"hello","dep":"ok"}
+    P1->>R: POST /v1/traces
+    CLI->>R: session close --out cases/hello.case.json
+    R-->>CLI: cases/hello.case.json written
+```
+
+```mermaid
+sequenceDiagram
+    box Replay (every CI build)
+        participant Test as Jest test
+        participant SDK as softprobe-js SDK
+        participant R as runtime.softprobe.dev
+        participant P1 as proxy :8082
+        participant A as app :8081
+        participant P2 as proxy :8084
+    end
+
+    SDK->>R: session start (mode=replay)
+    SDK->>SDK: loadCaseFromFile / findInCase
+    SDK->>R: mockOutbound → POST /v1/sessions/{id}/rules
+    SDK->>SDK: docker compose stop upstream
+    Test->>P1: GET /hello (x-softprobe-session-id)
+    P1->>R: /v1/inject → miss
+    P1->>A: GET /hello (tracestate carries session id)
+    A->>P2: GET /fragment
+    P2->>R: /v1/inject → rule hit: {"dep":"ok"}
+    R-->>P2: {"dep":"ok"}
+    P2-->>A: {"dep":"ok"} (upstream never called)
+    A-->>P1: {"message":"hello","dep":"ok"}
+    P1-->>Test: 200 {"message":"hello","dep":"ok"}
 ```
 
 **Key mechanics:**
