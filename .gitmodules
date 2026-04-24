@@ -1,3 +1,6 @@
 [submodule "softprobe-js"]
 	path = softprobe-js
 	url = https://github.com/softprobe/softprobe-js
+[submodule "softprobe-go"]
+	path = softprobe-go
+	url = https://github.com/softprobe/softprobe-go
