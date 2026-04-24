@@ -1,4 +1,0 @@
-mode: PASSTHROUGH
-cassetteDirectory: ./cassettes
-strict:
-  enabled: true

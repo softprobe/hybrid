@@ -1,4 +1,0 @@
-mode: CAPTURE
-cassetteDirectory: ./cassettes
-strict:
-  enabled: false

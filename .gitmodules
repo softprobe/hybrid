@@ -1,0 +1,3 @@
+[submodule "softprobe-js"]
+	path = softprobe-js
+	url = https://github.com/softprobe/softprobe-js
