@@ -4,3 +4,6 @@
 [submodule "softprobe-go"]
 	path = softprobe-go
 	url = https://github.com/softprobe/softprobe-go
+[submodule "softprobe-python"]
+	path = softprobe-python
+	url = https://github.com/softprobe/softprobe-python
