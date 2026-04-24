@@ -36,7 +36,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           VERSION: ${{ github.ref_name }}
         run: |
-          echo "$VERSION" > ../.tag
+          echo "$VERSION" > ../version
           go build -trimpath \
             -ldflags "-s -w -X softprobe-runtime/internal/version.Version=${VERSION}" \
             -o "../dist/softprobe-${{ matrix.goos }}-${{ matrix.goarch }}" \
@@ -50,7 +50,7 @@ jobs:
       - name: Upload version file
         uses: google-github-actions/upload-cloud-storage@v2
         with:
-          path: .tag
+          path: version
           destination: ${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}
           headers: |-
             content-type: text/plain
