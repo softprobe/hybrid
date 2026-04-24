@@ -173,10 +173,10 @@ pub fn get_backend_authority(backend_url: &str) -> String {
                     None => host.to_string(),
                 }
             } else {
-                "o.softprobe.ai".to_string()
+                "runtime.softprobe.dev".to_string()
             }
         }
-        Err(_) => "o.softprobe.ai".to_string(),
+        Err(_) => "runtime.softprobe.dev".to_string(),
     }
 }
 
@@ -192,10 +192,10 @@ pub fn get_backend_cluster_name(backend_url: &str) -> String {
                 };
                 format!("outbound|{}||{}", port, host)
             } else {
-                "outbound|443||o.softprobe.ai".to_string()
+                "outbound|443||runtime.softprobe.dev".to_string()
             }
         }
-        Err(_) => "outbound|443||o.softprobe.ai".to_string(),
+        Err(_) => "outbound|443||runtime.softprobe.dev".to_string(),
     }
 }
 
@@ -280,14 +280,14 @@ mod tests {
 
     #[test]
     fn test_get_backend_authority_https_default_port() {
-        let authority = get_backend_authority("https://o.softprobe.ai");
-        assert_eq!(authority, "o.softprobe.ai");
+        let authority = get_backend_authority("https://runtime.softprobe.dev");
+        assert_eq!(authority, "runtime.softprobe.dev");
     }
 
     #[test]
     fn test_get_backend_authority_https_custom_port() {
-        let authority = get_backend_authority("https://o.softprobe.ai:8443");
-        assert_eq!(authority, "o.softprobe.ai:8443");
+        let authority = get_backend_authority("https://runtime.softprobe.dev:8443");
+        assert_eq!(authority, "runtime.softprobe.dev:8443");
     }
 
     #[test]
@@ -305,19 +305,19 @@ mod tests {
     #[test]
     fn test_get_backend_authority_invalid_url() {
         let authority = get_backend_authority("invalid-url");
-        assert_eq!(authority, "o.softprobe.ai");
+        assert_eq!(authority, "runtime.softprobe.dev");
     }
 
     #[test]
     fn test_get_backend_cluster_name_https() {
-        let cluster = get_backend_cluster_name("https://o.softprobe.ai");
-        assert_eq!(cluster, "outbound|443||o.softprobe.ai");
+        let cluster = get_backend_cluster_name("https://runtime.softprobe.dev");
+        assert_eq!(cluster, "outbound|443||runtime.softprobe.dev");
     }
 
     #[test]
     fn test_get_backend_cluster_name_https_custom_port() {
-        let cluster = get_backend_cluster_name("https://o.softprobe.ai:8443");
-        assert_eq!(cluster, "outbound|8443||o.softprobe.ai");
+        let cluster = get_backend_cluster_name("https://runtime.softprobe.dev:8443");
+        assert_eq!(cluster, "outbound|8443||runtime.softprobe.dev");
     }
 
     #[test]
@@ -335,21 +335,21 @@ mod tests {
     #[test]
     fn test_get_backend_cluster_name_invalid_url() {
         let cluster = get_backend_cluster_name("invalid-url");
-        assert_eq!(cluster, "outbound|443||o.softprobe.ai");
+        assert_eq!(cluster, "outbound|443||runtime.softprobe.dev");
     }
 
     #[test]
     fn test_build_inject_backend_request_defaults_to_protobuf_inject_path() {
-        let request = build_inject_backend_request("https://o.softprobe.ai", "pubkey", 123);
+        let request = build_inject_backend_request("https://runtime.softprobe.dev", "pubkey", 123);
 
-        assert_eq!(request.authority, "o.softprobe.ai");
-        assert_eq!(request.cluster_name, "outbound|443||o.softprobe.ai");
+        assert_eq!(request.authority, "runtime.softprobe.dev");
+        assert_eq!(request.cluster_name, "outbound|443||runtime.softprobe.dev");
         assert_eq!(
             request.headers,
             vec![
                 (":method".to_string(), "POST".to_string()),
                 (":path".to_string(), "/v1/inject".to_string()),
-                (":authority".to_string(), "o.softprobe.ai".to_string()),
+                (":authority".to_string(), "runtime.softprobe.dev".to_string()),
                 ("content-type".to_string(), "application/x-protobuf".to_string()),
                 ("accept".to_string(), "application/x-protobuf".to_string()),
                 ("content-length".to_string(), "123".to_string()),
@@ -361,16 +361,16 @@ mod tests {
 
     #[test]
     fn test_build_extract_backend_request_uses_traces_path_without_accept_header() {
-        let request = build_extract_backend_request("https://o.softprobe.ai", "pubkey", 456);
+        let request = build_extract_backend_request("https://runtime.softprobe.dev", "pubkey", 456);
 
-        assert_eq!(request.authority, "o.softprobe.ai");
-        assert_eq!(request.cluster_name, "outbound|443||o.softprobe.ai");
+        assert_eq!(request.authority, "runtime.softprobe.dev");
+        assert_eq!(request.cluster_name, "outbound|443||runtime.softprobe.dev");
         assert_eq!(
             request.headers,
             vec![
                 (":method".to_string(), "POST".to_string()),
                 (":path".to_string(), "/v1/traces".to_string()),
-                (":authority".to_string(), "o.softprobe.ai".to_string()),
+                (":authority".to_string(), "runtime.softprobe.dev".to_string()),
                 ("content-type".to_string(), "application/x-protobuf".to_string()),
                 ("content-length".to_string(), "456".to_string()),
                 ("x-public-key".to_string(), "pubkey".to_string()),
@@ -381,7 +381,7 @@ mod tests {
 
     #[test]
     fn test_build_backend_request_omits_authorization_when_key_empty() {
-        let request = build_inject_backend_request("https://o.softprobe.ai", "", 10);
+        let request = build_inject_backend_request("https://runtime.softprobe.dev", "", 10);
         assert!(!request.headers.iter().any(|(k, _)| k == "authorization"));
     }
 

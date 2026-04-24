@@ -60,7 +60,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            sp_backend_url: "https://o.softprobe.ai".to_string(),
+            sp_backend_url: "https://runtime.softprobe.dev".to_string(),
             traffic_direction: None,
             service_name: "default-service".to_string(),
             collection_rules: vec![],
@@ -262,7 +262,7 @@ mod tests {
     #[test]
     fn test_config_default() {
         let config = Config::default();
-        assert_eq!(config.sp_backend_url, "https://o.softprobe.ai");
+        assert_eq!(config.sp_backend_url, "https://runtime.softprobe.dev");
         assert_eq!(config.service_name, "default-service");
         assert!(config.traffic_direction.is_none());
         assert!(config.collection_rules.is_empty());

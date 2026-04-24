@@ -97,12 +97,14 @@ http_filters:
         configuration:
           "@type": type.googleapis.com/google.protobuf.StringValue
           value: |
-            {"sp_backend_url":"http://softprobe-runtime:8080"}
+            {"public_key":"<your-api-token>"}
         vm_config:
           runtime: envoy.wasm.runtime.v8
           code:
             local: { filename: /etc/envoy/sp_istio_agent.wasm }
 ```
+
+`public_key` is your API token. `sp_backend_url` defaults to `https://runtime.softprobe.dev` — omit it unless you are self-hosting the runtime.
 
 Download the WASM binary from the [releases page](https://github.com/softprobe/softprobe-proxy/releases).
 
@@ -127,7 +129,7 @@ npm install --save-dev @softprobe/softprobe-js
 ```ts
 import { Softprobe } from '@softprobe/softprobe-js';
 
-const softprobe = new Softprobe({ baseUrl: process.env.SOFTPROBE_RUNTIME_URL });
+const softprobe = new Softprobe();  // reads SOFTPROBE_API_TOKEN; defaults to https://runtime.softprobe.dev
 ```
 
 Reference: [TypeScript SDK](/reference/sdk-typescript).
@@ -183,16 +185,6 @@ softprobe doctor
 ```
 
 After that, follow the [Quick start](/quickstart).
-
-## One-liner: self-hosted laptop setup
-
-```bash
-curl -fsSL https://docs.softprobe.dev/install/cli.sh | sh
-git clone https://github.com/softprobe/softprobe
-cd softprobe
-docker compose -f e2e/docker-compose.yaml up --wait
-softprobe doctor
-```
 
 ## Version matrix
 
