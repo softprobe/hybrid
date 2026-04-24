@@ -1,5 +1,6 @@
 ---
 title: Downloads
+client: only
 ---
 
 <script setup>
@@ -10,16 +11,16 @@ const wasmVersion = ref('')
 const cliStatus = ref('loading')
 const wasmStatus = ref('loading')
 
-onMounted(async () => {
-  try {
-    cliVersion.value = (await fetch('https://storage.googleapis.com/softprobe-published-files/cli/softprobe/version')).text().then(r => r.trim())
-    cliStatus.value = 'ok'
-  } catch { cliStatus.value = 'error' }
+onMounted(() => {
+  fetch('https://storage.googleapis.com/softprobe-published-files/cli/softprobe/version')
+    .then(r => r.text())
+    .then(v => { cliVersion.value = v.trim(); cliStatus.value = 'ok' })
+    .catch(() => { cliStatus.value = 'error' })
 
-  try {
-    wasmVersion.value = (await fetch('https://storage.googleapis.com/softprobe-published-files/agent/proxy-wasm/version')).text().then(r => r.trim())
-    wasmStatus.value = 'ok'
-  } catch { wasmStatus.value = 'error' }
+  fetch('https://storage.googleapis.com/softprobe-published-files/agent/proxy-wasm/version')
+    .then(r => r.text())
+    .then(v => { wasmVersion.value = v.trim(); wasmStatus.value = 'ok' })
+    .catch(() => { wasmStatus.value = 'error' })
 })
 
 const platforms = [
