@@ -23,7 +23,13 @@ export SOFTPROBE_API_TOKEN=...
 
 Add this to your shell profile (`.zshrc`, `.bashrc`) or CI secret store — every command in this guide reads it.
 
-Verify the hosted runtime is reachable:
+---
+
+## 2. Install the Softprobe CLI
+
+Follow [Installation: CLI](/installation#cli) to install the `softprobe` binary.
+
+Verify the hosted runtime is reachable (this uses `SOFTPROBE_API_TOKEN` from step 1):
 
 ```bash
 softprobe doctor
@@ -33,18 +39,18 @@ softprobe doctor
 
 ---
 
-## 2. Clone the getting-started repo
+## 3. Clone the getting-started repo
 
 ```bash
 git clone https://github.com/softprobe/getting-started
 cd getting-started
 ```
 
-The repo ships a pre-committed case file (`cases/hello.case.json`) so you can skip straight to Step 4 if you want. The capture steps below show how that file was produced.
+The repo ships a pre-committed case file (`cases/hello.case.json`) so you can skip straight to Step 5 if you want. The capture steps below show how that file was produced.
 
 ---
 
-## 3. Start the sample stack
+## 4. Start the sample stack
 
 ```bash
 docker compose up --wait
@@ -80,7 +86,7 @@ The proxy WASM filter is fetched from GCS on startup and calls the hosted runtim
 
 ---
 
-## 4. Capture a baseline
+## 5. Capture a baseline
 
 The repo includes a pre-captured `cases/hello.case.json`. Run these steps to see how it was produced (or to re-capture after the upstream changes).
 
@@ -126,7 +132,7 @@ git commit -m "capture: hello baseline"
 
 ---
 
-## 5. Run the replay test
+## 6. Run the replay test
 
 Kill the upstream container to prove no live dependency is needed:
 
@@ -210,7 +216,7 @@ describe('GET /hello', () => {
 
 ---
 
-## 6. Mutate the mock and watch the test fail
+## 7. Mutate the mock and watch the test fail
 
 The response you're replaying comes from the case file. You own it — you can change it before registering the mock. Open `softprobe-tests/hello.test.ts` and change the `dep` value from `"ok"` to `"not ok"`:
 
@@ -346,7 +352,7 @@ Re-run the capture steps (and commit the updated `cases/hello.case.json`) when:
 
 **Proxy logs show WASM fetch timeout** — Envoy fetches the WASM filter from GCS on startup. Ensure the container has outbound internet access.
 
-**`softprobe doctor` fails** — your token may be invalid or expired. Get a fresh one at [https://dashboard.softprobe.ai](https://https://dashboard.softprobe.ai).
+**`softprobe doctor` fails** — your token may be invalid or expired. Get a fresh one at [https://dashboard.softprobe.ai](https://dashboard.softprobe.ai).
 
 **Replay test: `dep` field is `""` instead of `"ok"`** — the session ID is not reaching the egress proxy. Verify the app propagates OpenTelemetry trace context (`traceparent` / `tracestate`) on outbound calls. The session ID travels in `tracestate`; if the app strips it, the egress proxy sees a different session and misses the mock rule.
 

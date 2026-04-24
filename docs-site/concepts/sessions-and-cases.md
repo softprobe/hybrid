@@ -106,12 +106,10 @@ Correlation between legs happens via W3C Trace Context (`traceparent`). Session 
 
 ### What does **not** go into a case
 
-- Database queries (that's a future scope, `spec/protocol/db-capture.md` is a placeholder).
-- Non-HTTP RPC (gRPC is on the roadmap; MQTT, Kafka are not).
-- Internal function calls, logs, metrics.
+- Database & Redis queries (that's a future scope, `spec/protocol/db-capture.md` is a placeholder).
+- Non-HTTP RPC (gRPC, Kafka are on the roadmap).
+- Internal function calls, logs, metrics (on the roadmap).
 - Your source code.
-
-Softprobe is an HTTP-interaction recorder, not a program tracer.
 
 ### Embedded rules and fixtures
 

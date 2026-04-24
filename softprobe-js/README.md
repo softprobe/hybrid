@@ -25,9 +25,7 @@ npm install --save-dev @softprobe/softprobe-js
 import path from "path";
 import { Softprobe } from "@softprobe/softprobe-js";
 
-const softprobe = new Softprobe({
-  baseUrl: process.env.SOFTPROBE_RUNTIME_URL ?? "http://127.0.0.1:8080",
-});
+const softprobe = new Softprobe();
 
 const session = await softprobe.startSession({ mode: "replay" });
 await session.loadCaseFromFile(
