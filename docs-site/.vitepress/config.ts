@@ -33,6 +33,7 @@ export default withMermaid(defineConfig({
       { text: 'Concepts', link: '/concepts/architecture' },
       { text: 'Guides', link: '/guides/capture-your-first-session' },
       { text: 'Reference', link: '/reference/cli' },
+      { text: 'Downloads', link: '/downloads' },
       {
         text: 'v0.5',
         items: [

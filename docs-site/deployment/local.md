@@ -163,8 +163,9 @@ admin:
 
 ```bash
 # Download the WASM binary
-curl -L -o sp_istio_agent.wasm \
-  https://github.com/softprobe/softprobe-proxy/releases/download/v0.5.0/sp_istio_agent.wasm
+WASM_VERSION=$(curl -fsSL https://storage.googleapis.com/softprobe-published-files/agent/proxy-wasm/version)
+curl -fsSL "https://storage.googleapis.com/softprobe-published-files/agent/proxy-wasm/${WASM_VERSION}/sp_istio_agent.wasm" \
+  -o sp_istio_agent.wasm
 
 # Start the stack
 docker compose up -d --wait

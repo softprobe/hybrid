@@ -106,7 +106,12 @@ http_filters:
 
 `public_key` is your API token. `sp_backend_url` defaults to `https://runtime.softprobe.dev` — omit it unless you are self-hosting the runtime.
 
-Download the WASM binary from the [releases page](https://github.com/softprobe/softprobe-proxy/releases).
+Download the WASM binary:
+
+```bash
+curl -fsSL https://storage.googleapis.com/softprobe-published-files/agent/proxy-wasm/$(curl -fsSL https://storage.googleapis.com/softprobe-published-files/agent/proxy-wasm/version)/sp_istio_agent.wasm \
+  -o sp_istio_agent.wasm
+```
 
 ### Istio
 
