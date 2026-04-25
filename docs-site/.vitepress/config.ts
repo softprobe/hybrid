@@ -80,6 +80,7 @@ export default withMermaid(defineConfig({
             { text: 'Run a suite at scale', link: '/guides/run-a-suite-at-scale' },
             { text: 'Write a hook', link: '/guides/write-a-hook' },
             { text: 'CI integration', link: '/guides/ci-integration' },
+            { text: 'Use the Softprobe agent skill', link: '/guides/use-softprobe-agent-skill' },
             { text: 'Debug a strict-policy miss', link: '/guides/debug-strict-miss' },
             { text: 'Troubleshooting', link: '/guides/troubleshooting' },
           ],

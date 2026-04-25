@@ -8,8 +8,10 @@ import { ref, onMounted } from 'vue'
 
 const cliVersion = ref('')
 const wasmVersion = ref('')
+const skillVersion = ref('')
 const cliStatus = ref('loading')
 const wasmStatus = ref('loading')
+const skillStatus = ref('loading')
 
 onMounted(() => {
   fetch('https://storage.googleapis.com/softprobe-published-files/cli/softprobe/version')
@@ -21,6 +23,11 @@ onMounted(() => {
     .then(r => r.text())
     .then(v => { wasmVersion.value = v.trim(); wasmStatus.value = 'ok' })
     .catch(() => { wasmStatus.value = 'error' })
+
+  fetch('https://storage.googleapis.com/softprobe-published-files/agent/skills/softprobe-test-writer/version')
+    .then(r => r.text())
+    .then(v => { skillVersion.value = v.trim(); skillStatus.value = 'ok' })
+    .catch(() => { skillStatus.value = 'error' })
 })
 
 const platforms = [
@@ -56,3 +63,14 @@ Direct downloads:
 |---|---|
 | WASM binary | <a v-if="wasmStatus === 'ok'" :href="`https://storage.googleapis.com/softprobe-published-files/agent/proxy-wasm/${wasmVersion}/sp_istio_agent.wasm`">sp_istio_agent.wasm</a> |
 | Docker image | `ghcr.io/softprobe/softprobe-proxy:{{ wasmVersion }}` |
+
+## Softprobe Test Writer agent skill {#agent-skill}
+
+**Version:** `{{ skillVersion }}` <Badge v-if="skillStatus === 'loading'" type="warning" text="loading..." /> <Badge v-if="skillStatus === 'error'" type="danger" text="unavailable" />
+
+| Asset | Download |
+|---|---|
+| Skill archive | <a v-if="skillStatus === 'ok'" :href="`https://storage.googleapis.com/softprobe-published-files/agent/skills/${skillVersion}/softprobe-test-writer.zip`">softprobe-test-writer.zip</a> |
+| Manifest | <a v-if="skillStatus === 'ok'" :href="`https://storage.googleapis.com/softprobe-published-files/agent/skills/${skillVersion}/manifest.json`">manifest.json</a> |
+
+Install instructions: [Use the Softprobe agent skill](/guides/use-softprobe-agent-skill).

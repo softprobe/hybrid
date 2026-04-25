@@ -1,0 +1,98 @@
+name: agent skills publish
+
+on:
+  pull_request:
+    paths:
+      - "agent-skills/**"
+      - "scripts/package-agent-skill.py"
+      - ".github/workflows/agent-skills-publish.yml"
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - "agent-skills/**"
+      - "scripts/package-agent-skill.py"
+      - ".github/workflows/agent-skills-publish.yml"
+  workflow_dispatch:
+
+env:
+  GCS_BUCKET: softprobe-published-files
+  GCS_PREFIX: agent/skills
+  SKILL_NAME: softprobe-test-writer
+
+jobs:
+  package-and-upload:
+    runs-on: [self-hosted, Linux]
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "version=latest" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "version=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Package skill
+        run: |
+          python3 scripts/package-agent-skill.py "$SKILL_NAME" \
+            --version "${{ steps.version.outputs.version }}"
+
+      - name: Authenticate to GCS
+        if: github.event_name != 'pull_request'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
+
+      - name: Upload expanded skill to GCS
+        if: github.event_name != 'pull_request'
+        uses: google-github-actions/upload-cloud-storage@v2
+        with:
+          path: dist/agent-skills/${{ env.SKILL_NAME }}
+          destination: ${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ steps.version.outputs.version }}
+
+      - name: Upload skill archive to GCS
+        if: github.event_name != 'pull_request'
+        uses: google-github-actions/upload-cloud-storage@v2
+        with:
+          path: dist/${{ env.SKILL_NAME }}.zip
+          destination: ${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ steps.version.outputs.version }}
+          headers: |-
+            content-type: application/zip
+            content-disposition: attachment
+
+      - name: Upload manifest to GCS
+        if: github.event_name != 'pull_request'
+        uses: google-github-actions/upload-cloud-storage@v2
+        with:
+          path: dist/manifest.json
+          destination: ${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ steps.version.outputs.version }}
+          headers: |-
+            content-type: application/json
+
+      - name: Upload version to GCS
+        if: github.event_name != 'pull_request'
+        uses: google-github-actions/upload-cloud-storage@v2
+        with:
+          path: dist/version
+          destination: ${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ env.SKILL_NAME }}
+          headers: |-
+            content-type: text/plain
+
+      - name: Smoke GCS URLs
+        if: github.event_name != 'pull_request'
+        run: |
+          BASE="https://storage.googleapis.com/${{ env.GCS_BUCKET }}/${{ env.GCS_PREFIX }}/${{ steps.version.outputs.version }}"
+          curl -sfI "$BASE/${{ env.SKILL_NAME }}.zip" | grep -i "content-type: application/zip"
+          curl -sf "$BASE/${{ env.SKILL_NAME }}/SKILL.md" | grep "name: ${{ env.SKILL_NAME }}"
+          echo "GCS skill URL: $BASE/${{ env.SKILL_NAME }}.zip"
