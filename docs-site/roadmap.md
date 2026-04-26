@@ -12,14 +12,13 @@ We've accepted that every feature currently documented on this site is a commitm
 
 ## Shipped
 
-### v0.5 — Unified runtime, four-SDK coverage _(current stable)_
+### v0.5 — Hosted runtime, four-SDK coverage _(current stable)_
 
-- **`softprobe-runtime`** unified service serving the JSON control API and the proxy OTLP API from one process with a shared in-memory session store.
+- **Hosted runtime** serving the JSON control API and the proxy OTLP API from `https://runtime.softprobe.dev`.
 - **SDKs** in TypeScript, Python, Java, and Go with feature parity on `loadCaseFromFile` / `loadCase` / `findInCase` / `findAllInCase` / `mockOutbound` / `clearRules` / `setPolicy` / `setAuthFixtures` and typed errors (`*RuntimeError`, `*RuntimeUnreachableError`, `*UnknownSessionError`, `*CaseLoadError`, `*CaseLookupAmbiguityError`).
-- **Jest codegen** (`softprobe generate jest-session`) for a zero-boilerplate default path.
 - **Envoy + WASM** proxy with ingress / egress listener pair; Docker Compose for local dev.
 - **Strict policy** with observable per-session miss counter and the [debug-strict-miss](/guides/debug-strict-miss) workflow.
-- **CLI**: `doctor`, `session {start,load-case,rules apply,policy set --strict,stats,close}`, `inspect {case,session}`, `validate {case,rules,suite}`, `generate {jest-session,test}`, `export otlp`, `scrub`, `completion`, `capture run`, `replay run`, and **`suite {run,validate,diff}`** with Node hook sidecar + JUnit/HTML reporters — see the [`e2e/cli-suite-run/`](https://github.com/softprobe/hybrid/tree/main/e2e/cli-suite-run) end-to-end harness.
+- **CLI**: `doctor`, `session {start,load-case,rules apply,policy set --strict,stats,close}`, `inspect {case,session}`, `validate {case,rules,suite}`, `export otlp`, `scrub`, `completion`, `capture run`, `replay run`, and **`suite {run,validate,diff}`** with Node hook sidecar + JUnit/HTML reporters — see the [`e2e/cli-suite-run/`](https://github.com/softprobe/hybrid/tree/main/e2e/cli-suite-run) end-to-end harness.
 - **Docs site** at `docs.softprobe.dev` (this site).
 - **End-to-end acceptance tests** covering capture, replay, and strict-miss paths across Go, Jest, pytest, and JUnit harnesses.
 
@@ -35,19 +34,17 @@ Each item below is actively scoped in [`tasks.md`](https://github.com/softprobe/
 
 ### Delivering what's already documented (closing the doc-vs-shipped gap)
 
-- **CLI surface parity with `reference/cli.md`** — `suite {run,validate,diff}`, `validate {case,rules,suite}`, `inspect session`, `generate test`, `export otlp`, `scrub`, `completion`, `capture run`, and `replay run` are **shipped** in the current CLI build. Remaining gaps are mostly **contract polish**: stable exit codes on every path ([PD1.1a](https://github.com/softprobe/hybrid/blob/main/tasks.md)), universal `--json` envelope on every mutating command ([PD1.1c](https://github.com/softprobe/hybrid/blob/main/tasks.md)), and a few session conveniences ([PD1.3](https://github.com/softprobe/hybrid/blob/main/tasks.md)). Tracks [tasks.md PD1](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd1--cli-contract-completeness).
+- **CLI surface parity with `reference/cli.md`** — `suite {run,validate,diff}`, `validate {case,rules,suite}`, `inspect session`, `export otlp`, `scrub`, `completion`, `capture run`, and `replay run` are **shipped** in the current CLI build. Remaining gaps are mostly **contract polish**: stable exit codes on every path ([PD1.1a](https://github.com/softprobe/hybrid/blob/main/tasks.md)), universal `--json` envelope on every mutating command ([PD1.1c](https://github.com/softprobe/hybrid/blob/main/tasks.md)), and a few session conveniences ([PD1.3](https://github.com/softprobe/hybrid/blob/main/tasks.md)). Tracks [tasks.md PD1](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd1--cli-contract-completeness).
 - **Auth plumbing** — CLI and all four SDKs attach `Authorization: Bearer` when `SOFTPROBE_API_TOKEN` is set ([PD2.1a–e](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd2--runtime-auth-plumbing-in-sdks-and-cli) shipped). Remaining: **e2e auth** wiring across harnesses ([PD2.1f](https://github.com/softprobe/hybrid/blob/main/tasks.md)).
-- **Runtime observability** — Prometheus `/metrics`, `SOFTPROBE_LOG_LEVEL`, `{sessionId}` template substitution in `SOFTPROBE_CAPTURE_CASE_PATH`. Target: **v0.6**. Tracks [tasks.md PD4](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd4--runtime-observability-and-capture-operations).
-- **Object-storage capture writers** — `s3://`, `gs://`, `azblob://` destinations for capture output (default remains `file://`). Target: **v0.6–v0.7**. Tracks [tasks.md PD4.4a](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd4--runtime-observability-and-capture-operations).
+- **Runtime observability** — hosted-runtime health and diagnostics surfaced through `softprobe doctor --verbose`.
+- **Hosted capture storage** — captured cases are stored by the hosted runtime and downloaded with `softprobe session close --out`.
 - **TS SDK reference alignment** — **shipped** in current build (hooks + suite subpaths, error aliases, `setLogger` / `SOFTPROBE_LOG`). Tracks [tasks.md PD3](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd3--typescript-sdk-reference-reality-alignment).
 - **Release hygiene** — dual-license `LICENSE` coverage, runtime + WASM images on GHCR, and build-time CLI version string are **landed**; automated **npm / PyPI / Maven / Go module** publishes remain. See [`LICENSING.md`](https://github.com/softprobe/hybrid/blob/main/LICENSING.md). Tracks [tasks.md PD5](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd5--release-hygiene).
 - **Doc truth sync** — CLI reference banners for shipped commands were cleared in [Phase PD6](https://github.com/softprobe/hybrid/blob/main/tasks.md#phase-pd6--doc-truth-sync-after-each-code-phase-lands). Deployment pages still carry `::: warning Not shipped yet` only where the runtime feature is genuinely pending (for example PD4 metrics / capture templates).
 
 ### Scaling and hosted-service track
 
-- **Redis-backed session store** so `softprobe-runtime` can run multi-replica in Kubernetes. See [Kubernetes deployment — HA and scaling](/deployment/kubernetes). Target: **v0.6–v0.7**.
 - **Hosted service GA** on `runtime.softprobe.dev` with documented [SLA](/deployment/hosted#sla) and regional availability. Target: **v0.6–v0.7**.
-- **Multi-process runtime split** — separate the control API and OTLP backend into two deployables for clouds that want to scale them independently. Target: **v0.7**. Depends on the Redis store landing first.
 - **Hook runtime v1** — TypeScript/JavaScript hooks executed in a Node sidecar from the Go CLI for data transformations and custom assertions. Shipped in the current build: `RequestHook`, `MockResponseHook`, `BodyAssertHook`, `HeadersAssertHook` are resolved from `--hooks *.ts` files via the embedded sidecar; end-to-end harness at [`e2e/cli-suite-run/`](https://github.com/softprobe/softprobe/tree/main/e2e/cli-suite-run). Remaining hook runtime work (Python/Java sidecars for those CLIs, hook sandboxing options) is tracked in PD3+.
 
 ### Ecosystem track

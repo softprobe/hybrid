@@ -25,7 +25,7 @@ Unified-runtime release. The platform now ships as **one binary** (`softprobe-ru
 ### Added
 - `softprobe-runtime` single-process runtime exposing both `POST /v1/sessions/*` (control) and `POST /v1/inject` + `POST /v1/traces` (proxy backend).
 - Go SDK (`github.com/softprobe/softprobe-go`) with feature parity to the TypeScript, Python, and Java SDKs.
-- `softprobe generate jest-session` command producing ready-to-commit session modules — the recommended default for new Jest tests.
+- AI-agent-friendly CLI surface: `doctor --json`, `session start --shell`, `inspect case --json`.
 - `sessionRevision` monotonic counter surfaced in every session-modifying control response; enables the optional proxy inject cache.
 - `capture_only` rule action for observe-only sessions that still need to record live traffic.
 - User-facing docs site at `docs.softprobe.dev` (this site).

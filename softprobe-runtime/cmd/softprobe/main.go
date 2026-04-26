@@ -89,8 +89,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runDoctor(args[1:], stdout, stderr)
 	case "inspect":
 		return runInspect(args[1:], stdout, stderr)
-	case "generate":
-		return runGenerate(args[1:], stdout, stderr)
 	case "session":
 		return runSession(args[1:], stdout, stderr)
 	case "validate":
@@ -1108,7 +1106,7 @@ func runCasesGet(args []string, stdout, stderr io.Writer) int {
 }
 
 func printUsage(w io.Writer) {
-	_, _ = fmt.Fprintln(w, "usage: softprobe [--version|version|doctor|inspect case|generate jest-session|session start|session load-case|session policy set --file PATH|session close --out PATH|cases get|validate case|validate rules|validate suite|replay run|suite run|suite validate]")
+	_, _ = fmt.Fprintln(w, "usage: softprobe [--version|version|doctor|inspect case|session start|session load-case|session policy set --file PATH|session close --out PATH|cases get|validate case|validate rules|validate suite|replay run|suite run|suite validate]")
 }
 
 // normalizeRulesPayload accepts JSON straight through, and translates

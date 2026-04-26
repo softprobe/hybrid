@@ -69,7 +69,6 @@ export default withMermaid(defineConfig({
           items: [
             { text: 'Capture your first session', link: '/guides/capture-your-first-session' },
             { text: 'Proxy vs language instrumentation', link: '/guides/proxy-vs-language-instrumentation' },
-            { text: 'Generate a Jest session (recommended)', link: '/guides/generate-jest-session' },
             { text: 'Replay in a Jest test', link: '/guides/replay-in-jest' },
             { text: 'Replay in pytest', link: '/guides/replay-in-pytest' },
             { text: 'Replay in JUnit', link: '/guides/replay-in-junit' },
@@ -104,10 +103,10 @@ export default withMermaid(defineConfig({
         {
           text: 'Deployment',
           items: [
-            { text: 'Local (Docker Compose)', link: '/deployment/local' },
+            { text: 'Local proxy stack', link: '/deployment/local' },
             { text: 'Standalone Envoy', link: '/deployment/envoy-standalone' },
             { text: 'Kubernetes', link: '/deployment/kubernetes' },
-            { text: 'Hosted (runtime.softprobe.dev)', link: '/deployment/hosted' },
+            { text: 'Hosted runtime', link: '/deployment/hosted' },
           ],
         },
         {

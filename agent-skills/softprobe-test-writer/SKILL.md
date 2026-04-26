@@ -1,7 +1,7 @@
 ---
 name: softprobe-test-writer
 description: Help write or fix Softprobe-powered integration tests in Claude Code, Cursor, or another coding IDE. Use when the user asks to add replay tests, capture cases, mock HTTP dependencies with Softprobe, debug session headers, or turn a *.case.json file into Jest, pytest, or JUnit tests.
-when_to_use: Trigger for requests mentioning Softprobe, softprobe, captured case files, replay tests, integration tests without live dependencies, x-softprobe-session-id, findInCase, mockOutbound, softprobe doctor, or softprobe generate jest-session.
+when_to_use: Trigger for requests mentioning Softprobe, softprobe, captured case files, replay tests, integration tests without live dependencies, x-softprobe-session-id, findInCase, mockOutbound, or softprobe doctor.
 ---
 
 # Softprobe Test Writer
@@ -10,9 +10,14 @@ Use this skill to help a developer write practical Softprobe integration tests. 
 
 ## Required Documentation Lookup
 
-Before writing detailed code, choose the relevant official documentation from [references/docs-map.md](references/docs-map.md). Prefer the online docs at `https://docs.softprobe.dev` when network access is available. If this skill is being used inside the Softprobe repository, the same pages exist under `docs-site/`.
+Before writing detailed code, load the **canonical agent context** (workflow rules, headers, CLI surface):
 
-Do not rely on memory for SDK method names, CLI flags, generated Jest behavior, or header propagation details when the official docs are available.
+1. **Online (preferred when network is available):** fetch and follow `https://docs.softprobe.dev/ai-context.md`
+2. **Inside the Softprobe monorepo:** read `docs-site/public/ai-context.md` (same content as the URL above)
+
+Then, for task-specific pages (Jest, pytest, CLI flags, schemas), use [references/docs-map.md](references/docs-map.md) to pick the smallest official doc on `https://docs.softprobe.dev`.
+
+Do not rely on memory for SDK method names, CLI flags, generated Jest behavior, or header propagation details when `ai-context.md` or the official docs are available.
 
 ## Core Product Model
 
@@ -43,23 +48,13 @@ Ask a concise clarification only when the app URL, case file, or intended user f
 
 ## Decision Tree
 
-Use generated Jest session helpers when the user wants the simplest Jest path:
-
-```bash
-softprobe generate jest-session \
-  --case cases/checkout.case.json \
-  --out test/generated/checkout.replay.session.ts
-```
-
-Then write a normal Jest test that imports `startReplaySession()`, sends requests to the app through the ingress proxy, sets `x-softprobe-session-id`, asserts the application response, and calls `close()` in `afterAll`.
-
-Use hand-written SDK tests when the user needs to mutate captured responses, add custom match predicates, mix real and mocked upstreams, or support pytest/JUnit.
+Write SDK tests that call `startSession`, `loadCaseFromFile`, `findInCase`, and `mockOutbound` for all frameworks (Jest, pytest, JUnit). Use the Softprobe SDK for the language rather than generating scaffolding files.
 
 Use `softprobe suite run` for large collections of cases rather than generating hundreds of individual test functions.
 
 ## Patterns
 
-For Jest, pytest, and JUnit examples, load the relevant official guide from [references/docs-map.md](references/docs-map.md). Keep generated code aligned with the docs rather than copying stale examples from this skill.
+For Jest, pytest, and JUnit examples, load `ai-context.md` first, then the relevant official guide from [references/docs-map.md](references/docs-map.md). Keep generated code aligned with the docs rather than copying stale examples from this skill.
 
 Rules that apply across languages:
 
@@ -124,7 +119,7 @@ await session.mockOutbound({
 });
 ```
 
-Do not edit generated `*.replay.session.ts` files by hand. Add a wrapper or write an ad-hoc SDK test when mutation is required.
+Write an ad-hoc SDK test when mutation is required.
 
 ## Guardrails
 

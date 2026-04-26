@@ -245,7 +245,8 @@ describe('checkout scenarios', () => {
 
 Jest's `test.concurrent` and worker-per-file isolation need **one session per test file** so state doesn't collide. Put `startSession` in `beforeAll`, not `beforeEach`, and never share a `sessionId` across Jest workers.
 
-The runtime handles hundreds of concurrent sessions comfortably — each is just an entry in the in-memory store.
+The hosted runtime handles hundreds of concurrent sessions comfortably; each
+session is isolated by tenant and session id.
 
 ## Strict policy (fail on unexpected outbound)
 
@@ -281,11 +282,18 @@ Your test is hitting an address the proxy doesn't listen on. In the reference st
 
 ### `Session not found (404)`
 
-Someone closed the session already (another `afterAll`) or the runtime restarted. Sessions are in-memory; a runtime restart loses them all. Restart your test.
+Someone closed the session already (another `afterAll`), the session expired, or
+the token belongs to a different tenant. Start a fresh session.
 
 ### Test hangs at `await session.close()`
 
-The runtime container may be stopped. Check with `docker ps`. If `softprobe-runtime-1` isn't in the list, bring the stack back up.
+Check hosted runtime reachability and authentication:
+
+```bash
+softprobe doctor --verbose
+```
+
+If `doctor` is green, inspect app/proxy logs for a request that never returned.
 
 More at [Troubleshooting](/guides/troubleshooting).
 

@@ -10,9 +10,9 @@
 
 Softprobe Hybrid unifies **HTTP capture, replay, and rule-based dependency injection** behind a **proxy-first** data plane (Envoy + Softprobe WASM) and a **language-neutral control plane** (session, case, rules, policy). Language-level framework patching (Express, Fastify, `fetch`, database drivers, and so on) is **optional** and out of the default product path, to reduce implementation cost for a small team.
 
-Recorded behavior is stored as **one JSON file per test case**, containing an ordered list of **OpenTelemetry–compatible trace payloads** (not NDJSON streams). For **Jest (first stage)**, the **default path** is **`softprobe generate jest-session`** → a **checked-in TypeScript module** that uses **`@softprobe/sdk`** only (`Softprobe` → **`startSession`** → **`loadCaseFromFile`** → **`findInCase`** → **`mockOutbound`**) so **raw `fetch` to `/v1/sessions` never appears** in generated or test code; tests import that module and set **`x-softprobe-session-id`**.
+Recorded behavior is stored as **one JSON file per test case**, containing an ordered list of **OpenTelemetry–compatible trace payloads** (not NDJSON streams). The **default path** is a test that uses **`@softprobe/sdk`** only (`Softprobe` → **`startSession`** → **`loadCaseFromFile`** → **`findInCase`** → **`mockOutbound`**) so **raw `fetch` to `/v1/sessions` never appears** in test code; tests set **`x-softprobe-session-id`** on requests to the app.
 
-The **primary product surface for humans, CI, and AI agents** is the **`softprobe` CLI** (generate + doctor + session for ad-hoc use) and the **TypeScript SDK** helpers that mirror the same JSON control API. **Proxy OTLP** ([proxy-otel-api.md](../spec/protocol/proxy-otel-api.md)) stays an integration detail for proxy authors.
+The **primary product surface for humans, CI, and AI agents** is the **`softprobe` CLI** (doctor + session for ad-hoc use) and the **TypeScript SDK** helpers that mirror the same JSON control API. **Proxy OTLP** ([proxy-otel-api.md](../spec/protocol/proxy-otel-api.md)) stays an integration detail for proxy authors.
 
 This document specifies background, goals, concrete APIs, CLI shape, data artifacts, cross-language ergonomics, and **acceptance criteria** suitable for turning into an engineering task list.
 
@@ -43,8 +43,8 @@ Instrumenting every framework is not viable as the **default** product for a sta
 |--------|-----------------|
 | **Proxy (data plane)** | Intercept inbound and outbound HTTP; normalize request identity; call **`softprobe-runtime`** for inject/extract per [proxy-otel-api.md](../spec/protocol/proxy-otel-api.md); enforce passthrough / mock / error. |
 | **Softprobe Runtime** | **Unified service** (`softprobe-runtime`): serves **both** the HTTP control API (sessions, rules, cases, policy, fixtures) **and** the proxy OTLP API (`/v1/inject`, `/v1/traces`) from one process with a **shared in-memory session store**. `https://runtime.softprobe.dev` is the hosted instance of this same service. |
-| **Language SDKs** | Thin clients: create session, set policy, load case, register rules, attach headers; optional helpers for codegen and assertions. |
-| **CLI** | **Canonical** human, CI, and agent interface: doctor, sessions, capture, replay, inspect, export, codegen; **calls** the same HTTP control API as SDKs (it does not replace the runtime). |
+| **Language SDKs** | Thin clients: create session, set policy, load case, register rules, attach headers; optional helpers for assertions. |
+| **CLI** | **Canonical** human, CI, and agent interface: doctor, sessions, capture, replay, inspect, export; **calls** the same HTTP control API as SDKs (it does not replace the runtime). |
 
 ### 2.4 Where the APIs run (one unified service)
 
@@ -89,9 +89,9 @@ Softprobe is intentionally **hybrid**: HTTP capture and inject can run at the **
 - Defining a second, parallel mock DSL unrelated to rules + OTEL-shaped spans.
 - Replacing Istio/Envoy as the deployment model for the data plane.
 
-### 3.2 Default happy path (replay + Jest, codegen-first)
+### 3.2 Default happy path (replay + Jest, SDK-first)
 
-Tutorials and CI should assume: **one captured case file**, a **generated Jest session module** that **only calls `@softprobe/sdk`** (`startSession`, `loadCaseFromFile`, **`findInCase`**, **`mockOutbound`**, `close`), and tests that **import that module** and set **`x-softprobe-session-id`**. Authors re-run **`softprobe generate …`** after capture changes. **HTTP to `/v1/sessions` and friends is implemented once**, inside the SDK—not in generators or tests.
+Tutorials and CI should assume: **one captured case file**, a **hand-written (or AI-generated) test** that calls **`@softprobe/sdk`** (`startSession`, `loadCaseFromFile`, **`findInCase`**, **`mockOutbound`**, `close`) and sets **`x-softprobe-session-id`**. **HTTP to `/v1/sessions` and friends is implemented once**, inside the SDK — not in tests or scaffolding files.
 
 #### 3.2.0 Division of Labour: SDK vs. Runtime
 
@@ -108,17 +108,7 @@ This replaces the earlier design where the runtime walked OTLP case traces to ma
 
 **Prerequisites (unchanged):** runtime + mesh up; **`softprobe doctor`** green; app uses **OpenTelemetry** on outbound so **`traceparent` / `tracestate`** reach the egress proxy ([session-headers.md](../spec/protocol/session-headers.md)).
 
-**Step 1 — Generate the session script (once per case refresh):**
-
-```bash
-softprobe generate jest-session \
-  --case cases/checkout.case.json \
-  --out test/generated/checkout.replay.session.ts
-```
-
-(`jest-session` emits **only** SDK calls; the CLI implementation reuses the same HTTP code paths as `softprobe session …` in §9.)
-
-**Step 2 — The dependency mock (what authors search for):** after `startSession` and `loadCaseFromFile`, **one outbound mock** is expressed **only** through the SDK. `mockOutbound` compiles internally to **`POST /v1/sessions/{sessionId}/rules`** with a single **`when` / `then: mock`** rule ([rule.schema.json](../spec/schemas/rule.schema.json)); **`hostSuffix`** is expanded to a concrete `when.host` or matcher list inside the SDK if the schema does not yet carry suffix fields.
+**Step 1 — The dependency mock (what authors search for):** after `startSession` and `loadCaseFromFile`, **one outbound mock** is expressed **only** through the SDK. `mockOutbound` compiles internally to **`POST /v1/sessions/{sessionId}/rules`** with a single **`when` / `then: mock`** rule ([rule.schema.json](../spec/schemas/rule.schema.json)); **`hostSuffix`** is expanded to a concrete `when.host` or matcher list inside the SDK if the schema does not yet carry suffix fields.
 
 ```typescript
 // After: const session = await softprobe.startSession({ mode: 'replay' });
@@ -182,7 +172,7 @@ This is the **causal chain** implementers should document in SDK READMEs; it is 
 | **Clear mocks/replay rules only** | **`POST …/rules`** with **`{ "version": 1, "rules": [] }`** via **`await session.clearRules()`** (SDK) | **Removes** all session-local rules while keeping **`sessionId`**, **`load-case`**, and policy/fixtures. Bumps **`sessionRevision`**. |
 | **Reload case or replace rules** | `load-case` / `rules` / `policy` / `fixtures` | Each bumps **`sessionRevision`**; any **proxy inject cache** keyed per §8.4 must treat stale entries as invalid. |
 
-**Step 3 — `@softprobe/sdk` surface (normative for implementers):** all **`/v1/sessions`**, **`/load-case`**, **`/rules`**, **`/policy`**, **`/close`** live **here only**. Generated modules and Jest tests **must not** duplicate `fetch`.
+**Step 2 — `@softprobe/sdk` surface (normative for implementers):** all **`/v1/sessions`**, **`/load-case`**, **`/rules`**, **`/policy`**, **`/close`** live **here only**. Tests **must not** duplicate `fetch`.
 
 ```typescript
 // @softprobe/sdk — public API (implement in softprobe-js; one HTTP client)
@@ -274,74 +264,32 @@ export class SoftprobeSession {
 }
 ```
 
-**Step 4 — Generated file** (committed or regenerated in CI): **only** imports `@softprobe/sdk` and strings together `startSession` → `loadCaseFromFile` → **`findInCase` + `mockOutbound`** → return `{ sessionId, close }`. Generator fills **arguments** from capture metadata; it does **not** emit HTTP.
-
-```typescript
-// test/generated/checkout.replay.session.ts
-// Generated by `softprobe generate jest-session` — do not edit by hand.
-
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-import { Softprobe } from '@softprobe/sdk';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-export async function startCheckoutReplaySession(): Promise<{
-  sessionId: string;
-  close: () => Promise<void>;
-}> {
-  const softprobe = new Softprobe();
-  const session = await softprobe.startSession({ mode: 'replay' });
-  await session.loadCaseFromFile(join(__dirname, '../../cases/checkout.case.json'));
-
-  await session.mockOutbound({
-    method: 'POST',
-    pathPrefix: '/v1/payment_intents',
-    hostSuffix: 'stripe.com',
-    response: { status: 200, body: { id: 'pi_test', status: 'succeeded' } },
-  });
-
-  const fragmentHit = session.findInCase({
-    method: 'GET',
-    path: '/fragment',
-    direction: 'outbound',
-  });
-
-  await session.mockOutbound({
-    method: 'GET',
-    path: '/fragment',
-    direction: 'outbound',
-    response: fragmentHit.response,
-  });
-
-  return {
-    sessionId: session.id,
-    close: () => session.close(),
-  };
-}
-```
-
-**Step 5 — Jest test** only wires **session id** + **SUT request** (no SDK in the test body beyond the import of the generated helper):
+**Step 3 — Jest test** wires session setup + SUT request using only the SDK:
 
 ```typescript
 // test/checkout.replay.test.ts
 import request from 'supertest';
+import path from 'path';
 import { app } from '../src/app';
-import { startCheckoutReplaySession } from './generated/checkout.replay.session';
+import { Softprobe } from '@softprobe/softprobe-js';
 
 describe('checkout replay', () => {
   let sessionId: string;
   let close: () => Promise<void>;
 
   beforeAll(async () => {
-    const s = await startCheckoutReplaySession();
-    sessionId = s.sessionId;
-    close = s.close;
+    const softprobe = new Softprobe();
+    const session = await softprobe.startSession({ mode: 'replay' });
+    await session.loadCaseFromFile(path.join(__dirname, '../cases/checkout.case.json'));
+
+    const fragmentHit = session.findInCase({ direction: 'outbound', method: 'GET', path: '/fragment' });
+    await session.mockOutbound({ direction: 'outbound', method: 'GET', path: '/fragment', response: fragmentHit.response });
+
+    sessionId = session.id;
+    close = () => session.close();
   });
 
-  afterAll(async () => {
-    await close();
-  });
+  afterAll(async () => { await close(); });
 
   it('serves captured ingress + replayed egress', async () => {
     await request(app)
@@ -349,15 +297,13 @@ describe('checkout replay', () => {
       .set('x-softprobe-session-id', sessionId)
       .expect(200)
       .expect((res) => {
-        expect(res.body).toEqual(
-          expect.objectContaining({ message: 'hello', dep: 'ok' }),
-        );
+        expect(res.body).toEqual(expect.objectContaining({ message: 'hello', dep: 'ok' }));
       });
   });
 });
 ```
 
-**Policy and fixtures:** add **`softprobe generate`** flags or a **sidecar YAML** next to the case so the generator emits **`await session.setPolicy(…)`** / **`await session.setAuthFixtures(…)`** (same rule: **SDK only**, no raw `fetch` in generated files)—tests stay unchanged.
+**Policy and fixtures:** use a **sidecar YAML** next to the case and apply it via `session.setPolicy(…)` / `session.setAuthFixtures(…)` in the `beforeAll` block — tests stay unchanged.
 
 ### 3.3 Operational complexity and mitigations
 
@@ -440,7 +386,7 @@ Goal: drive tests where **some** HTTP is satisfied from **stored traces / rules*
 | 5 | Proxy + runtime | For each hop, **`/v1/inject`**: runtime matches OTLP inject span against session **policy + case + rules**; **`200`** → proxy synthesizes response; **`404`** → forward to real app/upstream. |
 | 6 | Test or script | **`POST …/close`** when done. |
 
-**Jest default:** steps **1–3** (and often **6**) are emitted as TypeScript inside **`softprobe generate jest-session`** (§3.2); the test suite imports the generated `start…ReplaySession()` instead of issuing raw `fetch` calls.
+**Jest default:** steps **1–3** (and often **6**) are written directly in the test using the SDK (§3.2); the test calls `startSession`, `loadCaseFromFile`, `findInCase`, `mockOutbound` without raw `fetch` calls.
 
 ### 4.3 Two API surfaces (who calls whom)
 
@@ -630,7 +576,7 @@ Tests do **not** call Envoy directly. They:
 
 1. **Start or attach to** a **Softprobe Runtime** process (local sidecar, testcontainer, or cluster service for advanced setups).
 2. **Create a session** with desired `mode` (`capture` | `replay` | `generate`) and **policy**.
-3. **Load a case** and/or **register mocks** through **`@softprobe/sdk`** (`SoftprobeSession.loadCaseFromFile`, **`findInCase`**, **`mockOutbound`**, …), which is the **only** supported way to hit the [HTTP control API](../spec/protocol/http-control-api.md) from TypeScript tests; do not duplicate `fetch` in app or generated code.
+3. **Load a case** and/or **register mocks** through **`@softprobe/sdk`** (`SoftprobeSession.loadCaseFromFile`, **`findInCase`**, **`mockOutbound`**, …), which is the **only** supported way to hit the [HTTP control API](../spec/protocol/http-control-api.md) from TypeScript tests; do not duplicate `fetch` in tests.
 4. Ensure **every HTTP request** that should participate carries:
 
    - `x-softprobe-session-id: <sessionId>` (required per [session-headers.md](../spec/protocol/session-headers.md))
@@ -640,11 +586,9 @@ Tests do **not** call Envoy directly. They:
 
 6. **Applications** use **OpenTelemetry** to propagate **W3C `traceparent` / `tracestate`** on outbound HTTP. The proxy places session correlation into that trace context; apps must **not** manually forward `x-softprobe-session-id` on dependency calls ([session-headers.md](../spec/protocol/session-headers.md)).
 
-### 7.2 Jest — default is generated session + SDK (see §3.2)
+### 7.2 Jest — SDK-first (see §3.2)
 
-The **normative Jest story** is **§3.2**: `softprobe generate jest-session` emits **`Softprobe` + `findInCase` + `mockOutbound`** only; tests import it and set **`x-softprobe-session-id`**.
-
-**Ad-hoc** (no generator): same **`mockOutbound`** surface—no raw `/v1/sessions` in the test file.
+The **normative Jest story** is **§3.2**: use **`Softprobe` + `findInCase` + `mockOutbound`** directly in the test — no raw `/v1/sessions` in the test file.
 
 ```typescript
 import request from 'supertest';
@@ -825,14 +769,13 @@ Design principles:
 
 1. **CLI verbs map 1:1 to control-plane concepts** (session, case, rules, policy, export), not to one-off hacks.
 2. **One canonical `softprobe` binary** (language-agnostic: speaks only HTTP to the runtime per [http-control-api.md](../spec/protocol/http-control-api.md)). Language repos ship **SDKs**, test helpers, and optional **thin shims** (for example `npx softprobe` delegating to the installed binary)—they **must not** introduce a second, divergent command vocabulary for the same operations.
-3. **Onboarding spine (Jest):** `doctor` → **`softprobe generate jest-session`** (§3.2) → run **`npm test`** with generated session + **`x-softprobe-session-id`**. Ad-hoc: `session start` → `load-case` → `rules apply` (§9.1).
+3. **Onboarding spine (Jest):** `doctor` → write SDK test (§3.2) → run **`npm test`** with **`x-softprobe-session-id`**. Ad-hoc: `session start` → `load-case` → `rules apply` (§9.1).
 
 ### 9.1 Command reference
 
 | Command | Purpose |
 |---------|---------|
 | `softprobe doctor` | Check runtime reachability, proxy headers, schema/spec versions; primary **first run** and CI preflight. |
-| `softprobe generate jest-session --case cases/x.case.json --out test/generated/x.replay.session.ts` | **Default Jest path:** emit a TypeScript module that creates a replay session, `load-case`, and `rules` (§3.2). |
 | `softprobe session start --mode replay` | Create session only; emit `sessionId` (ad-hoc or scripts; see §9.2). |
 | `softprobe session load-case --session $ID --file cases/x.case.json` | Load case JSON into the session. |
 | `softprobe session rules apply --session $ID --file rules/stripe.yaml` | Apply rule pack (JSON/YAML → control API). |
@@ -841,7 +784,6 @@ Design principles:
 | `softprobe replay run --session $ID` | Validate session + print inject statistics (optional dry-run). |
 | `softprobe inspect case cases/x.case.json` | Summarize spans, hosts, directions, diff-friendly view. |
 | `softprobe export otlp --case cases/*.case.json --endpoint $OTLP` | Push case traces to OTLP HTTP/gRPC endpoint. |
-| `softprobe generate test --case cases/x.case.json --framework vitest|jest|pytest|junit` | Emit broader test skeleton + fixture references (optional; **jest-session** is the focused default for Jest replay wiring). |
 
 ### 9.2 Flags, machine output, and agent ergonomics
 
@@ -950,7 +892,7 @@ Sources under **`docs-site/`** (VitePress) are the **canonical user-facing** doc
 | Internal source | `docs-site/` surface |
 |---|---|
 | `docs/design.md` §2–§5 (architecture) | `concepts/architecture.md`, `concepts/sessions-and-cases.md`, `concepts/capture-and-replay.md`, `concepts/rules-and-policy.md` |
-| `docs/design.md` §3.2 (default happy path) | `quickstart.md`, `guides/generate-jest-session.md` |
+| `docs/design.md` §3.2 (default happy path) | `quickstart.md`, `guides/replay-in-jest.md` |
 | `docs/design.md` §6 + `spec/protocol/case-otlp-json.md` | `reference/case-schema.md` |
 | `spec/protocol/http-control-api.md` | `reference/http-control-api.md` |
 | `spec/protocol/proxy-otel-api.md` | `reference/proxy-otel-api.md` |

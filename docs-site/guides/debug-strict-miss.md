@@ -51,26 +51,14 @@ If the status is `599` or the header is `1`, skip to [Step 2](#step-2--identify-
 
 ## Step 2 — Identify the missing rule
 
-The strict-miss body includes a `requestFingerprint` — a stable hash of `(method, host, path, body-hash)`. Combined with your **runtime logs**, you can pinpoint the exact request that wasn't matched.
-
-### Tail the runtime log
-
-```bash
-docker logs -f softprobe-runtime 2>&1 | grep -E "(inject|strict)"
-```
-
-Typical output on a miss:
-
-```text
-{"level":"info","msg":"inject miss","sessionId":"sess_abc","method":"POST","host":"api.stripe.com","path":"/v1/customers","policy":"strict","action":"error","status":599}
-```
-
-Every strict-miss creates one line. Copy the `method`, `host`, and `path` — they're your rule's `when` fields.
+The strict-miss body includes a `requestFingerprint` — a stable hash of
+`(method, host, path, body-hash)`. Combined with session stats and proxy logs,
+you can pinpoint the exact request that wasn't matched.
 
 ### Or inspect session stats
 
 ```bash
-curl -s $SOFTPROBE_RUNTIME_URL/v1/sessions/$SOFTPROBE_SESSION_ID/stats | jq
+softprobe session stats --session "$SOFTPROBE_SESSION_ID" --json | jq
 ```
 
 ```json

@@ -4,15 +4,7 @@ The Go flow mirrors [Replay in Jest](/guides/replay-in-jest). Same case file, sa
 
 ## 1. Add the module
 
-::: warning Not yet released
-`github.com/softprobe/softprobe-go` is not published yet. The in-repo Go
-module is `softprobe-go` and is consumed from source via a `replace`
-directive — see `softprobe-go/README.md` and the in-repo `e2e/go/` harness
-for the wiring.
-:::
-
 ```bash
-# Planned — not yet published.
 go get github.com/softprobe/softprobe-go@v0.5.0
 ```
 

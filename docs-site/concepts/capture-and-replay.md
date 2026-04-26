@@ -6,23 +6,31 @@ Capture and replay are **two modes of the same session**. The physical traffic f
 
 **Goal:** turn one end-to-end run through your system into a committable `*.case.json` file.
 
-```text
-POST /v1/sessions {mode: "capture"}        →  sess_X
-                                               │
-(test client) GET /hello  ─► (proxy ingress) ─►│
-                            /v1/inject ◄──────┘  404 (no rules, don't mock)
-                            → forward to app  
-                                         │
-              (app)        GET /fragment ─► (proxy egress)
-                            /v1/inject ◄──────┘  404
-                            → forward to upstream
-                            ◄ 200 {"dep":"ok"}
-                            POST /v1/traces (extract egress hop)
-              (app)        ← 200 {"dep":"ok"}
-              (app) returns {"message":"hello", "dep":"ok"}
-              POST /v1/traces (extract ingress hop)
+```mermaid
+sequenceDiagram
+    participant Test as test client
+    participant Proxy as proxy ingress
+    participant Runtime as Runtime
+    participant App as app
+    participant Egress as proxy egress
+    participant Upstream as upstream
 
-POST /v1/sessions/sess_X/close → flushes buffered traces to e2e/captured.case.json
+    Test->>Runtime: POST /v1/sessions {mode: "capture"} → sess_X
+    Test->>Proxy: GET /hello
+    Proxy->>Runtime: POST /v1/inject
+    Runtime-->>Proxy: 404 (no rules, don't mock)
+    Proxy->>App: forward to app
+    App->>Egress: GET /fragment
+    Egress->>Runtime: POST /v1/inject
+    Runtime-->>Egress: 404
+    Egress->>Upstream: forward to upstream
+    Upstream-->>Egress: 200 {"dep":"ok"}
+    Egress->>Runtime: POST /v1/traces (extract egress hop)
+    App-->>Egress: 200 {"dep":"ok"}
+    App-->>Proxy: returns {"message":"hello", "dep":"ok"}
+    Proxy->>Runtime: POST /v1/traces (extract ingress hop)
+    Test->>Runtime: POST /v1/sessions/sess_X/close
+    Runtime-->>Test: assembles captured.case.json
 ```
 
 ### What gets captured
@@ -43,7 +51,9 @@ Every HTTP hop that passes through the proxy with `x-softprobe-session-id: $SOFT
 
 ### Where the file lives
 
-By default, the runtime writes one file per session at `SOFTPROBE_CAPTURE_CASE_PATH` on `close`. In the reference Docker Compose setup, this is `e2e/captured.case.json`. In hosted deployments, capture can be streamed to object storage (see [Hosted deployment](/deployment/hosted)).
+The hosted runtime stores captured spans while the session is open. On `close`,
+use `softprobe session close --out cases/name.case.json` to download the
+assembled case file into your repository.
 
 ### Capture pitfalls
 
@@ -57,19 +67,27 @@ By default, the runtime writes one file per session at `SOFTPROBE_CAPTURE_CASE_P
 
 **Goal:** drive the SUT exactly as in production, but serve dependency responses from the captured case instead of the live world.
 
-```text
-POST /v1/sessions {mode: "replay"}         →  sess_Y
-POST /v1/sessions/sess_Y/load-case ▯       →  sessionRevision ++
-POST /v1/sessions/sess_Y/rules    [r1]     →  sessionRevision ++
+```mermaid
+sequenceDiagram
+    participant Test as test client
+    participant Proxy as proxy ingress
+    participant Runtime as Runtime
+    participant App as app
+    participant Egress as proxy egress
 
-(test client) GET /hello  ─► (proxy ingress) ─►
-                            /v1/inject ◄── no rule matched (ingress)
-                            → forward to app
-                                         │
-              (app)        GET /fragment ─► (proxy egress)
-                            /v1/inject ◄── rule r1 matched, 200 + body
-              (app)        ← 200 {"dep":"ok"} (never touched real upstream)
-              (app) returns {"message":"hello", "dep":"ok"}
+    Test->>Runtime: POST /v1/sessions {mode: "replay"} → sess_Y
+    Test->>Runtime: POST /v1/sessions/sess_Y/load-case ▯ → sessionRevision ++
+    Test->>Runtime: POST /v1/sessions/sess_Y/rules [r1] → sessionRevision ++
+
+    Test->>Proxy: GET /hello
+    Proxy->>Runtime: POST /v1/inject
+    Runtime-->>Proxy: no rule matched (ingress) → 404
+    Proxy->>App: forward to app
+    App->>Egress: GET /fragment
+    Egress->>Runtime: POST /v1/inject
+    Runtime-->>Egress: rule r1 matched, 200 + body
+    App-->>Egress: 200 {"dep":"ok"} (never touched real upstream)
+    App-->>Proxy: returns {"message":"hello", "dep":"ok"}
 ```
 
 ::: info Author-time vs request-time
@@ -163,10 +181,6 @@ await session.setPolicy({ externalHttp: 'strict' });
 ```
 
 With strict policy, any outbound hop without a matching mock rule returns an error to the app, which typically bubbles up as a test failure. This is the fastest way to catch "I forgot to mock X" bugs.
-
-## Generate mode (preview)
-
-A third mode, `generate`, is in preview. It drives a capture session and emits a ready-to-commit test file for your framework (`softprobe generate jest-session --case …`). Today it supports Jest; pytest / JUnit / Go are on the roadmap.
 
 ## Comparison: capture vs. replay at a glance
 

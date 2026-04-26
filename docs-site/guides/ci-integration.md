@@ -1,15 +1,18 @@
 # CI integration
 
-Softprobe runs unchanged in any CI that can spin up a Docker container and run Node / Python / Java / Go. This page shows copy-pasteable workflows for the major CI systems.
+Softprobe runs unchanged in any CI that can run Node / Python / Java / Go and
+reach `https://runtime.softprobe.dev`. This page shows copy-pasteable workflows
+for the major CI systems.
 
 ## Prerequisites
 
 Every CI example follows the same pattern:
 
-1. **Start the Softprobe runtime** as a sidecar service.
-2. **(Optional) start a capture** — most CI runs are replay-only; capture usually runs in a staging-cron job that commits updated cases.
-3. **Run your tests** against the runtime.
-4. **Upload artifacts** (JUnit XML, HTML report, captured case files).
+1. **Set `SOFTPROBE_API_TOKEN`** from the CI secret store.
+2. **Run `softprobe doctor`** against the hosted runtime.
+3. **Start your app and proxy** if the tests exercise real HTTP traffic.
+4. **Run your tests** against the hosted runtime.
+5. **Upload artifacts** (JUnit XML, HTML report, captured case files).
 
 ## GitHub Actions
 
@@ -26,16 +29,7 @@ on:
 
 jobs:
   replay:
-    runs-on: ubuntu-latest
-    services:
-      softprobe-runtime:
-        image: ghcr.io/softprobe/softprobe-runtime:v0.5
-        ports:
-          - 8080:8080
-        options: >-
-          --health-cmd "wget -qO- http://127.0.0.1:8080/health || exit 1"
-          --health-interval 5s --health-retries 10
-
+    runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v4
 
@@ -45,7 +39,9 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Preflight
-        run: softprobe doctor --runtime-url http://127.0.0.1:8080
+        env:
+          SOFTPROBE_API_TOKEN: ${{ secrets.SOFTPROBE_API_TOKEN }}
+        run: softprobe doctor
 
       - name: Start sample app and proxy (your project's docker-compose)
         run: docker compose up -d --wait app proxy upstream
@@ -60,7 +56,7 @@ jobs:
 
       - name: Run the suite
         env:
-          SOFTPROBE_RUNTIME_URL: http://127.0.0.1:8080
+          SOFTPROBE_API_TOKEN: ${{ secrets.SOFTPROBE_API_TOKEN }}
           APP_URL: http://127.0.0.1:8082
           TEST_CARD: ${{ secrets.TEST_CARD }}
         run: |
@@ -99,11 +95,11 @@ on: [push, pull_request]
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Boot Softprobe stack
+      - name: Boot app and proxy
         run: docker compose -f e2e/docker-compose.yaml up -d --wait
 
       - uses: actions/setup-node@v4
@@ -114,7 +110,7 @@ jobs:
       - run: npm ci
       - run: npm test -- --ci --reporters=default --reporters=jest-junit
         env:
-          SOFTPROBE_RUNTIME_URL: http://127.0.0.1:8080
+          SOFTPROBE_API_TOKEN: ${{ secrets.SOFTPROBE_API_TOKEN }}
           APP_URL: http://127.0.0.1:8082
 
       - uses: actions/upload-artifact@v4
@@ -147,7 +143,7 @@ on:
 
 jobs:
   capture:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     environment: staging-capture
     permissions:
       contents: write
@@ -160,7 +156,7 @@ jobs:
 
       - name: Capture one session per scenario
         env:
-          SOFTPROBE_RUNTIME_URL: ${{ secrets.STAGING_RUNTIME_URL }}
+          SOFTPROBE_API_TOKEN: ${{ secrets.SOFTPROBE_API_TOKEN }}
           STAGING_APP_URL: ${{ secrets.STAGING_APP_URL }}
         run: ./scripts/capture-scenarios.sh  # your own
 
@@ -183,17 +179,15 @@ jobs:
 stages: [build, test]
 
 variables:
-  SOFTPROBE_RUNTIME_URL: http://softprobe-runtime:8080
+  SOFTPROBE_RUNTIME_URL: https://runtime.softprobe.dev
+  # Configure SOFTPROBE_API_TOKEN as a masked CI/CD variable.
 
 replay:
   stage: test
   image: node:20
-  services:
-    - name: ghcr.io/softprobe/softprobe-runtime:v0.5
-      alias: softprobe-runtime
   before_script:
     - curl -fsSL https://softprobe.dev/install/cli.sh | sh
-    - softprobe doctor --runtime-url $SOFTPROBE_RUNTIME_URL
+    - softprobe doctor
     - npm ci
   script:
     - softprobe suite run suites/checkout.suite.yaml
@@ -217,16 +211,15 @@ jobs:
   replay:
     docker:
       - image: cimg/node:20.0
-      - image: ghcr.io/softprobe/softprobe-runtime:v0.5
-        name: softprobe-runtime
     environment:
-      SOFTPROBE_RUNTIME_URL: http://softprobe-runtime:8080
+      SOFTPROBE_RUNTIME_URL: https://runtime.softprobe.dev
+      # Set SOFTPROBE_API_TOKEN in the CircleCI project or context.
     steps:
       - checkout
       - run:
           name: Install CLI
           command: curl -fsSL https://softprobe.dev/install/cli.sh | sh
-      - run: softprobe doctor --runtime-url $SOFTPROBE_RUNTIME_URL
+      - run: softprobe doctor
       - run: npm ci
       - run:
           name: Run suite
@@ -253,14 +246,14 @@ workflows:
 pipeline {
   agent any
   environment {
-    SOFTPROBE_RUNTIME_URL = 'http://localhost:8080'
+    SOFTPROBE_RUNTIME_URL = 'https://runtime.softprobe.dev'
+    SOFTPROBE_API_TOKEN = credentials('softprobe-api-token')
   }
 
   stages {
-    stage('Start runtime') {
+    stage('Preflight') {
       steps {
-        sh 'docker run -d --name softprobe-runtime -p 8080:8080 ghcr.io/softprobe/softprobe-runtime:v0.5'
-        sh 'until curl -sf http://localhost:8080/health; do sleep 1; done'
+        sh 'softprobe doctor'
       }
     }
     stage('Suite') {
@@ -272,9 +265,6 @@ pipeline {
         always { junit 'out/junit.xml' }
       }
     }
-  }
-  post {
-    always { sh 'docker rm -f softprobe-runtime || true' }
   }
 }
 ```
@@ -309,16 +299,18 @@ Inject them via the CI's secret store (<code v-pre>${{ secrets.HMAC_KEY }}</code
 
 ## Speed tips
 
-**Pin the runtime image tag.** `:v0.5` pulls once and stays cached; `:latest` re-pulls on every run.
+**Keep the runtime URL at the hosted default.** Set `SOFTPROBE_API_TOKEN` in the
+CI secret store and leave `SOFTPROBE_RUNTIME_URL` unset unless Softprobe support
+provides a different hosted endpoint.
 
 **Install the CLI from the binary, not npm.** The binary installer is a single 8 MB download; the npm wrapper adds Node startup overhead.
 
 **Run suites in parallel across cases, not jobs.** One CI job running `--parallel 32` is faster than 32 jobs each running one case.
 
-**Collect logs on failure only.** `docker compose logs` on every run doubles your CI artifact cost.
+**Collect app/proxy logs on failure only.** `docker compose logs` on every run doubles your CI artifact cost.
 
 ## Next
 
 - [Troubleshooting](/guides/troubleshooting) — what to do when a CI run fails unexpectedly.
-- [Run a suite at scale](/guides/run-a-suite-at-scale) — if you haven't yet, start with the local version.
-- [Deployment: Kubernetes](/deployment/kubernetes) — for running the replay stack in a persistent CI environment.
+- [Run a suite at scale](/guides/run-a-suite-at-scale) — if you haven't yet, start with the hosted-runtime flow.
+- [Deployment: Kubernetes](/deployment/kubernetes) — for running the proxy in a persistent CI environment.

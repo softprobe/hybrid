@@ -328,66 +328,6 @@ Exit code: `0` on valid, `5` on invalid.
 
 ---
 
-## `softprobe generate`
-
-Code generation. The generator is the **default happy path** for Jest; it compiles a case file into an importable session helper so tests never call the runtime's JSON API directly.
-
-### `generate jest-session`
-
-```bash
-softprobe generate jest-session \
-  --case cases/checkout.case.json \
-  --out test/generated/checkout.replay.session.ts
-```
-
-Emits a TypeScript module that creates a replay session, loads the case, and registers one `findInCase` + `mockOutbound` pair per unique outbound hop — using only `@softprobe/softprobe-js`. No hand-rolled `fetch` is emitted. See the [generate-jest-session guide](/guides/generate-jest-session) for the full workflow and [design doc §3.2](https://github.com/softprobe/hybrid/blob/main/docs/design.md#32-default-happy-path-replay--jest-codegen-first) for the rationale.
-
-**Flags:**
-
-| Flag | Required | Purpose |
-|---|---|---|
-| `--case PATH` | yes | Input case file (`*.case.json`) |
-| `--out PATH` | yes | Output TypeScript file; convention: `test/generated/<scenario>.replay.session.ts` |
-| `--framework jest` | no | Reserved for future frameworks (Vitest, Mocha); `jest` is the default and only value in v0.5 |
-
-**Output conventions:**
-
-- Import specifier is hard-coded to `@softprobe/softprobe-js` (the canonical TS SDK package).
-- Case-file path is stored **relative to the generated file** via `path.dirname(__filename)`, so moving the test directory doesn't break the import.
-- Rules are deduplicated by `(direction, method, path)` and sorted lexicographically for stable diffs.
-
-**Exit codes:**
-
-| Code | Meaning |
-|---|---|
-| `0` | Module written successfully |
-| `2` | Missing or malformed flags |
-| `5` | Case file failed schema validation |
-
-**Regenerate after every capture refresh.** See [generate-jest-session → regeneration workflow](/guides/generate-jest-session#regeneration-workflow).
-
-### `generate test`
-
-```bash
-softprobe generate test \
-  --case cases/checkout.case.json \
-  --framework vitest \
-  --out test/checkout.replay.test.ts
-```
-
-Emits a **full test file** (not just a session helper) for the chosen framework. Currently supports:
-
-| `--framework` | Status |
-|---|---|
-| `jest` | beta |
-| `vitest` | preview |
-| `pytest` | preview |
-| `junit` | alpha |
-
-For stable codegen, prefer `generate jest-session` and write the `describe` / `it` wrapper yourself.
-
----
-
 ## `softprobe export`
 
 ### `export otlp`
@@ -418,10 +358,8 @@ softprobe scrub 'cases/**/*.case.json' --rules redactions.yaml
 | Variable | Default | Purpose |
 |---|---|---|
 | `SOFTPROBE_RUNTIME_URL` | `https://runtime.softprobe.dev` | Default for `--runtime-url` |
-| `SOFTPROBE_API_TOKEN` | — | Bearer token for `Authorization: Bearer <token>` (hosted runtime or token-protected OSS runtime) |
+| `SOFTPROBE_API_TOKEN` | — | Bearer token for hosted runtime authentication |
 | `SOFTPROBE_SESSION_ID` | — | Read by `--session` flags if set |
-| `SOFTPROBE_CAPTURE_CASE_PATH` | `e2e/captured.case.json` | Output path for captured case files; supports `{sessionId}`, `{ts}`, `{mode}` placeholders and `file://` URIs |
-| `SOFTPROBE_LOG_LEVEL` | `info` | Runtime log level: `debug`, `info`, `warn`, `error` |
 | `NO_COLOR` | off | Disable ANSI color |
 
 Session-creating commands (`session start`, `capture run`) can export `SOFTPROBE_SESSION_ID` via `--shell` so subsequent commands don't need `--session`.
@@ -459,8 +397,6 @@ Every `--json` response carries these fields (at the top level or nested under `
 | `suite run --json` | `suite`, `total`, `passed`, `failed`, `cases[]` (each: `caseId`, `status`, `durationMs`, `error?`) |
 | `suite validate --json` | `suite`, `errors[]` |
 | `suite diff --json` | `added[]`, `removed[]` (outbound span signature strings) |
-| `generate jest-session --json` | `outputPath`, `rulesEmitted`, `caseId` |
-| `generate test --json` | `outputPath`, `framework`, `rulesEmitted`, `caseId` |
 | `validate case --json` | `path`, `valid`, `errors[]` |
 | `validate rules --json` | `path`, `valid`, `errors[]` |
 | `validate suite --json` | `path`, `valid`, `errors[]` |

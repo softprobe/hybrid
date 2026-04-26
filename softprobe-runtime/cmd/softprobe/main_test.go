@@ -385,35 +385,6 @@ func TestRunInspectCaseSummarizesGoldenFixture(t *testing.T) {
 	}
 }
 
-func TestRunGenerateJestSessionDispatchesFromTopLevel(t *testing.T) {
-	casePath := filepath.Join("..", "..", "..", "spec", "examples", "cases", "fragment-happy-path.case.json")
-	outPath := filepath.Join(t.TempDir(), "fragment.replay.session.ts")
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	code := run([]string{"generate", "jest-session", "--case", casePath, "--out", outPath}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("exit code = %d stderr = %q, want 0", code, stderr.String())
-	}
-
-	moduleSource, err := os.ReadFile(outPath)
-	if err != nil {
-		t.Fatalf("read generated module: %v", err)
-	}
-
-	if got := stdout.String(); !strings.Contains(got, "wrote ") {
-		t.Fatalf("stdout = %q, want wrote line", got)
-	}
-	for _, want := range []string{
-		"startReplaySession",
-		"session.findInCase",
-		"path: \"/fragment\"",
-	} {
-		if !strings.Contains(string(moduleSource), want) {
-			t.Fatalf("generated module = %q, want %q", string(moduleSource), want)
-		}
-	}
-}
 
 func TestRunSessionRulesApplyPersistsRules(t *testing.T) {
 	st := store.NewStore()

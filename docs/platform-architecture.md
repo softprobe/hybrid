@@ -254,10 +254,6 @@ Rule precedence for **inject** is deterministic and comes directly from the shar
 - resolve HTTP decisions from rules and recordings
 - block unmatched traffic in strict mode unless policy allows it
 
-### `generate`
-
-- generate test code from case files using the same public API
-
 ---
 
 ## 10) Softprobe Runtime: implementation and deployment

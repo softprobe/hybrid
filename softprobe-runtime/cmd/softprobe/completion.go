@@ -30,7 +30,7 @@ func runCompletion(args []string, stdout, stderr io.Writer) int {
 }
 
 const bashCompletion = `# bash completion for softprobe
-_softprobe_cmds="doctor inspect generate session validate replay suite capture scrub export completion --version version"
+_softprobe_cmds="doctor inspect session validate replay suite capture scrub export completion --version version"
 _softprobe_session_cmds="start stats close load-case rules policy"
 _softprobe_inspect_cmds="case session"
 _softprobe_validate_cmds="case rules suite"
@@ -60,7 +60,6 @@ _softprobe() {
     'doctor:check the local environment'
     'session:manage sessions'
     'inspect:read-only inspection'
-    'generate:code generation'
     'validate:schema validation'
     'replay:diagnostic'
     'suite:run or validate suites'
@@ -88,7 +87,7 @@ _softprobe "$@"
 const fishCompletion = `# fish completion for softprobe
 complete -c softprobe -f
 
-set -l top 'doctor session inspect generate validate replay suite capture scrub export completion --version'
+set -l top 'doctor session inspect validate replay suite capture scrub export completion --version'
 complete -c softprobe -n '__fish_use_subcommand' -a "$top"
 
 complete -c softprobe -n '__fish_seen_subcommand_from session' -a 'start stats close load-case rules policy'

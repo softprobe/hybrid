@@ -53,10 +53,15 @@ softprobe-test-writer/
     docs-map.md
 ```
 
-`SKILL.md` contains the workflow rules. `references/docs-map.md` maps common tasks to the official pages on `docs.softprobe.dev`, so the agent can load the right documentation instead of guessing CLI flags or SDK APIs.
+`SKILL.md` tells the agent to load **canonical context** first, then deeper docs as needed:
+
+- **Canonical (always use first):** [`https://docs.softprobe.dev/ai-context.md`](https://docs.softprobe.dev/ai-context.md) — single markdown file with workflow rules, headers, and CLI surface. Source in repo: `docs-site/public/ai-context.md`.
+- **Task index:** `references/docs-map.md` maps common tasks to official pages on `docs.softprobe.dev` (CLI reference, language guides, schemas).
+
+When Softprobe behavior or docs change, maintainers update `ai-context.md` alongside the change so agents outside this repository stay accurate after the next docs deploy.
 
 ## Next
 
-- [Generate a Jest session](/guides/generate-jest-session) for the default Jest replay flow.
+- [Replay in a Jest test](/guides/replay-in-jest) for the Jest replay flow.
 - [Replay in pytest](/guides/replay-in-pytest) for Python tests.
 - [Troubleshooting](/guides/troubleshooting) when mocks are not hit.

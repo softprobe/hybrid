@@ -31,7 +31,7 @@ make capture-refresh
 
 This command:
 
-1. **Guards against mixing code + case changes** — aborts if `softprobe-runtime/`, `softprobe-go/`, `softprobe-js/`, `softprobe-python/`, or `softprobe-java/` have uncommitted modifications. Commit or stash those first.
+1. **Guards against mixing code + case changes** — aborts if `softprobe-runtime/`, `softprobe-js/`, `softprobe-python/`, or `softprobe-java/` have uncommitted modifications. Commit or stash those first.
 2. Starts the e2e compose stack, runs the capture driver (`spec/dogfood/capture.sh`), and canonicalizes session/trace IDs to stable placeholders.
 3. Overwrites `spec/examples/cases/control-plane-v1.case.json` with the new recording.
 4. Prints the diff.

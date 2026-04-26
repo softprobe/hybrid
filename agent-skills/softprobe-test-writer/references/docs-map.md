@@ -1,6 +1,8 @@
 # Softprobe Documentation Map
 
-Use this map to choose the smallest official documentation page needed for the user's task. Prefer the online URL. If working inside the Softprobe monorepo, the local file listed beside each URL has the same source content.
+**Normative workflow summary:** load `https://docs.softprobe.dev/ai-context.md` first (or `docs-site/public/ai-context.md` in the monorepo). Use this map to pick the smallest **additional** official page for the user's task.
+
+Prefer the online URL. If working inside the Softprobe monorepo, the local file listed beside each URL has the same source content.
 
 ## Start Here
 
@@ -15,8 +17,7 @@ Use this map to choose the smallest official documentation page needed for the u
 
 | Need | Online docs | Local source |
 |---|---|---|
-| Generate the default Jest replay session helper | https://docs.softprobe.dev/guides/generate-jest-session | `docs-site/guides/generate-jest-session.md` |
-| Write a hand-authored Jest replay test | https://docs.softprobe.dev/guides/replay-in-jest | `docs-site/guides/replay-in-jest.md` |
+| Write a Jest replay test | https://docs.softprobe.dev/guides/replay-in-jest | `docs-site/guides/replay-in-jest.md` |
 | Write a pytest replay test | https://docs.softprobe.dev/guides/replay-in-pytest | `docs-site/guides/replay-in-pytest.md` |
 | Write a JUnit replay test | https://docs.softprobe.dev/guides/replay-in-junit | `docs-site/guides/replay-in-junit.md` |
 | Write a Go replay test | https://docs.softprobe.dev/guides/replay-in-go | `docs-site/guides/replay-in-go.md` |

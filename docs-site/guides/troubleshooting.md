@@ -1,6 +1,7 @@
 # Troubleshooting
 
-This page lists the failures you're most likely to hit, what causes them, and how to fix them. Commands assume the reference Docker Compose stack; adapt addresses for your environment.
+This page lists the failures you're most likely to hit, what causes them, and
+how to fix them. Commands assume the hosted runtime and a local app/proxy stack.
 
 ## The first thing to run
 
@@ -48,7 +49,9 @@ docker logs e2e-softprobe-proxy-1 2>&1 | grep -i backend
 # Look for successful calls to sp_backend_url
 ```
 
-If the proxy logs show connection failures to `softprobe-runtime:8080`, check the `sp_backend_url` in `envoy.yaml` — it must point at the runtime container, not `127.0.0.1`.
+If the proxy logs show connection failures to the backend, check the
+`sp_backend_url` in `envoy.yaml` — it must be `https://runtime.softprobe.dev`.
+Also confirm `public_key` is set to your hosted API token.
 
 ### Captured file missing `/fragment` (or another egress hop)
 
@@ -68,23 +71,19 @@ The app likely called the dependency directly, not through the egress proxy. Two
 You're running a `capture_only` redaction rule. Check your applied rules:
 
 ```bash
-curl -s "http://127.0.0.1:8080/v1/sessions/$SOFTPROBE_SESSION_ID/rules" | jq
+softprobe inspect session --session "$SOFTPROBE_SESSION_ID" --json | jq '.rules'
 ```
 
 Adjust or remove the redaction rule if you want the raw body.
 
-### `SOFTPROBE_CAPTURE_CASE_PATH is not set — no case file written`
+### Closed session did not create a local case file
 
-The runtime only flushes to disk if the env var is set. Restart with it configured:
+The hosted runtime stores the captured case remotely. Use the CLI close command
+with `--out` to download a copy into your repository:
 
 ```bash
-docker run \
-  -e SOFTPROBE_CAPTURE_CASE_PATH=/cases/out.case.json \
-  -v $PWD/cases:/cases \
-  ghcr.io/softprobe/softprobe-runtime:v0.5
+softprobe session close --session "$SOFTPROBE_SESSION_ID" --out cases/out.case.json
 ```
-
-In hosted deployments, set the path (or object-storage URL) in the runtime's config.
 
 ## Replay — SDK errors
 
@@ -113,24 +112,19 @@ for (const hit of hits) {
 
 ### `Session not found (404)`
 
-Someone closed the session, or the runtime restarted. Sessions are in-memory (v1). Recreate the session.
+Someone closed the session, the session expired, or the token belongs to a
+different tenant. Recreate the session.
 
 Common pitfall: Jest's `beforeAll` ran on worker A, but the test runs on worker B (Jest isolates each test file). Put `startSession` in the same file as the test.
 
-### `Runtime unreachable (ECONNREFUSED)`
+### `Runtime unreachable`
 
 ```bash
-curl -v http://127.0.0.1:8080/health
+softprobe doctor --verbose
 ```
 
-If curl fails, the runtime isn't running or isn't bound to `0.0.0.0`. Check:
-
-```bash
-docker ps | grep softprobe-runtime
-docker logs e2e-softprobe-runtime-1 | tail -50
-```
-
-In hosted mode, verify `SOFTPROBE_RUNTIME_URL` is reachable from CI runners (firewalls, VPCs).
+Verify `SOFTPROBE_API_TOKEN` is set and that your laptop or CI runner can reach
+`https://runtime.softprobe.dev` over HTTPS.
 
 ### `x-softprobe-session-id` rejected
 
@@ -157,7 +151,8 @@ By default, Softprobe's body comparison is JSON-subset (actual may have fields t
 
 ### Test passes locally but fails in CI with `ECONNREFUSED`
 
-CI usually has the runtime on a different hostname. Make sure you honor env vars:
+CI must use the same hosted runtime and token as local development. Make sure
+you do not hard-code a local URL:
 
 ```ts
 const softprobe = new Softprobe({ baseUrl: process.env.SOFTPROBE_RUNTIME_URL });
@@ -207,7 +202,8 @@ Common issues:
 
 ### Slow response (>1s) on every request in replay mode
 
-Either the runtime is under memory pressure (check `docker stats`), or the proxy is syncing to the runtime on every hop without caching. Enable the proxy's inject cache:
+The proxy may be syncing to the runtime on every hop without caching. Enable the
+proxy's inject cache:
 
 ```yaml
 # envoy.yaml
@@ -280,7 +276,7 @@ You do **not** manually forward `x-softprobe-session-id` — the proxy puts sess
 ## Still stuck?
 
 1. **Run `softprobe doctor --verbose`** — it checks version drift, header propagation, and produces a diagnostic bundle.
-2. **Tail the runtime logs** — `docker logs -f softprobe-runtime` shows every `/v1/inject` and every 404.
+2. **Tail proxy and app logs** — proxy logs show backend connectivity and inject misses.
 3. **File an issue** with the doctor output attached at [github.com/softprobe/softprobe/issues](https://github.com/softprobe/softprobe/issues).
 4. **Ask the community** at [softprobe.dev/community](https://softprobe.dev/community).
 
@@ -291,17 +287,14 @@ You do **not** manually forward `x-softprobe-session-id` — the proxy puts sess
 ```bash
 # Health checks
 softprobe doctor
-curl http://127.0.0.1:8080/health
 curl http://127.0.0.1:8081/health          # your SUT
 curl http://127.0.0.1:8082/                # ingress listener
 
 # Session introspection
-curl http://127.0.0.1:8080/v1/sessions/$ID
-curl http://127.0.0.1:8080/v1/sessions/$ID/rules
-curl http://127.0.0.1:8080/v1/sessions/$ID/stats
+softprobe inspect session --session "$ID"
+softprobe session stats --session "$ID"
 
 # Logs
-docker logs -f e2e-softprobe-runtime-1
 docker logs -f e2e-softprobe-proxy-1
 
 # Case file

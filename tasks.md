@@ -69,7 +69,7 @@ Design doc: [`docs/hosted-service.md`](docs/hosted-service.md)
 
 - [x] **PD1.1a — Stable exit codes.** Map documented codes in `cmd/softprobe`: `2` invalid args, `3` runtime unreachable, `4` session not found, `5` schema/validation error, `10` doctor fail, `20` suite fail. Failing tests first.
 
-- [x] **PD1.1c — Universal `--json`.** Add the common `status/exitCode/error?` envelope to every mutating subcommand: `session load-case`, `session rules apply`, `session policy set`, `inspect case`, `generate jest-session`.
+- [x] **PD1.1c — Universal `--json`.** Add the common `status/exitCode/error?` envelope to every mutating subcommand: `session load-case`, `session rules apply`, `session policy set`, `inspect case`.
 
 ### PD1.3 — Session subcommands
 
