@@ -74,6 +74,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: actions/setup-node@v4
         with:
           node-version: "22.14.0"
@@ -119,9 +121,11 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - name: Inject version
         working-directory: softprobe-python
         run: |
@@ -162,6 +166,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: actions/setup-java@v4
         with:
           java-version: "21"
@@ -207,13 +213,15 @@ jobs:
       - name: Tag and push softprobe-go
         run: |
           cd softprobe-go
+          git config user.email "ci@softprobe.dev"
+          git config user.name "Softprobe CI"
           git tag -a "${{ github.ref_name }}" -m "Release ${{ github.ref_name }}"
           git push origin "${{ github.ref_name }}"
           echo "[OK] softprobe-go tagged at ${{ github.ref_name }}"
       - name: Verify module is accessible
         run: |
           sleep 5
-          curl -sf "https://proxy.golang.org/github.com/softprobe/softprobe-go/@v/${VERSION}.mod" | head -1
+          curl -sf "https://proxy.golang.org/github.com/softprobe/softprobe-go/@v/${{ github.ref_name }}.mod" | head -1
           echo "[OK] Go module published"
 
   # -- Runtime Docker image ----------------------------------------------------
