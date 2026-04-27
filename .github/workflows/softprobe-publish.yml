@@ -73,6 +73,8 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Install Git
+        run: sudo apt-get update && sudo apt-get install -y git
       - uses: actions/checkout@v4
         with:
           submodules: true
@@ -120,6 +122,8 @@ jobs:
     permissions:
       id-token: write
     steps:
+      - name: Install Git
+        run: sudo apt-get update && sudo apt-get install -y git
       - uses: actions/checkout@v4
         with:
           submodules: true
@@ -165,6 +169,8 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Install Git
+        run: sudo apt-get update && sudo apt-get install -y git
       - uses: actions/checkout@v4
         with:
           submodules: true
