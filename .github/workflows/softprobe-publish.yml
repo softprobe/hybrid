@@ -86,15 +86,17 @@ jobs:
       - name: Ensure npm supports trusted publishing
         run: npm install -g npm@11.5.1
       - name: Inject version
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
-          VERSION="${{ github.ref_name }}"
           python3 -c "
-          import json, pathlib
+          import json, pathlib, os
+          v = os.environ.get('VERSION')
           p = pathlib.Path('softprobe-js/package.json')
           d = json.loads(p.read_text())
-          d['version'] = '$VERSION'
+          d['version'] = v
           p.write_text(json.dumps(d, indent=2) + '\n')
-          print('version set to', d['version'])
+          print('version set to', v)
           "
       - name: Install + build
         run: cd softprobe-js && npm ci && npm run build
@@ -132,14 +134,17 @@ jobs:
           python-version: "3.x"
       - name: Inject version
         working-directory: softprobe-python
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
-          VERSION="${{ github.ref_name }}"
           python3 -c "
-          import re, pathlib
+          import re, pathlib, os
+          v = os.environ.get('VERSION')
           p = pathlib.Path('pyproject.toml')
           text = p.read_text()
-          text = re.sub(r'^version = \"[^\"]*\"', f'version = \"{VERSION}\"', text, flags=re.MULTILINE)
+          text = re.sub(r'^version = \"[^\"]*\"', f'version = \"{v}\"', text, flags=re.MULTILINE)
           p.write_text(text)
+          print('version set to', v)
           "
       - name: Install build tools
         working-directory: softprobe-python
@@ -185,8 +190,10 @@ jobs:
           gpg-passphrase: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
       - name: Inject version (strip v prefix for Maven)
         working-directory: softprobe-java
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
-          mvn versions:set -DnewVersion="${{ github.ref_name }}" -DgenerateBackupPoms=false
+          mvn versions:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false
       - name: Publish to Maven Central
         working-directory: softprobe-java
         run: mvn --no-transfer-progress -P release deploy -DskipTests
@@ -217,13 +224,15 @@ jobs:
           git checkout main
           echo "[OK] softprobe-go at $(git log --oneline -1 origin/main)"
       - name: Tag and push softprobe-go
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
           cd softprobe-go
           git config user.email "ci@softprobe.dev"
           git config user.name "Softprobe CI"
-          git tag -a "${{ github.ref_name }}" -m "Release ${{ github.ref_name }}"
-          git push origin "${{ github.ref_name }}"
-          echo "[OK] softprobe-go tagged at ${{ github.ref_name }}"
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push origin "$VERSION"
+          echo "[OK] softprobe-go tagged at $VERSION"
       - name: Verify module is accessible
         run: |
           sleep 5
