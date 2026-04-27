@@ -86,7 +86,7 @@ jobs:
       - name: Inject version
         run: |
           VERSION="${{ github.ref_name }}"
-          python -c "
+          python3 -c "
           import json, pathlib
           p = pathlib.Path('softprobe-js/package.json')
           d = json.loads(p.read_text())
@@ -130,7 +130,7 @@ jobs:
         working-directory: softprobe-python
         run: |
           VERSION="${{ github.ref_name }}"
-          python -c "
+          python3 -c "
           import re, pathlib
           p = pathlib.Path('pyproject.toml')
           text = p.read_text()
