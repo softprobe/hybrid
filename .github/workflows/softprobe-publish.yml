@@ -153,6 +153,8 @@ jobs:
         working-directory: softprobe-python
         run: python -m build
       - name: Publish to TestPyPI
+        if: secrets.TEST_PYPI_TOKEN != ''
+        continue-on-error: true
         working-directory: softprobe-python
         run: twine upload --repository testpypi dist/*
         env:
@@ -230,6 +232,8 @@ jobs:
           cd softprobe-go
           git config user.email "ci@softprobe.dev"
           git config user.name "Softprobe CI"
+          git tag -d "$VERSION" 2>/dev/null || true
+          git push origin :refs/tags/"$VERSION" 2>/dev/null || true
           git tag -a "$VERSION" -m "Release $VERSION"
           git push origin "$VERSION"
           echo "[OK] softprobe-go tagged at $VERSION"
