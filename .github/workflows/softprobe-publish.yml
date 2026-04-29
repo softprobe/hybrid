@@ -5,10 +5,10 @@
 # On failure of any component the GitHub Release is NOT created so that
 # re-tagging (or re-running) can retry without partial publishes.
 #
-# Required repo secret for private submodule softprobe/thelake (and any private submodule):
-#   SOFTPROBE_SUBMODULES_PAT — classic PAT with `repo` scope, or fine-grained PAT with
-#   Contents: Read on softprobe/thelake (and hybrid). GITHUB_TOKEN alone is not sufficient
-#   when the org does not grant workflows access to other private repos.
+# Submodule auth: GitHub does not grant GITHUB_TOKEN permission to clone *private* sibling
+# repos (there is no org toggle for that—only reusable-actions “Access” is separate).
+# softprobe/thelake is public, so actions/checkout + submodules works with GITHUB_TOKEN.
+# If thelake is ever private again, add a PAT secret and pass it as `token:` on checkout.
 #
 # Components & destinations:
 #   softprobe-js       -> npm (@softprobe/softprobe-js)
@@ -83,7 +83,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.SOFTPROBE_SUBMODULES_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22.14.0"
@@ -135,7 +135,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.SOFTPROBE_SUBMODULES_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
@@ -180,7 +180,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.SOFTPROBE_SUBMODULES_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-java@v4
         with:
           java-version: "21"
@@ -217,7 +217,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.SOFTPROBE_SUBMODULES_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
@@ -309,7 +309,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.SOFTPROBE_SUBMODULES_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify datalake Dockerfile
         run: test -f datalake/Dockerfile
       - name: Set up Docker Buildx
@@ -477,7 +477,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.SOFTPROBE_SUBMODULES_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Validate ai-context.md (local)
         run: python3 scripts/validate-ai-context.py
       - name: Verify production ai-context.md
