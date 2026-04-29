@@ -9,5 +9,5 @@
 	url = https://github.com/softprobe/softprobe-python
 [submodule "datalake"]
 	path = datalake
-	url = https://github.com/softprobe/thelake.git
+	url = ../thelake.git
 	branch = migrate-to-ducklake

@@ -78,6 +78,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22.14.0"
@@ -129,6 +130,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
@@ -173,6 +175,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-java@v4
         with:
           java-version: "21"
@@ -209,6 +212,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
@@ -296,10 +300,11 @@ jobs:
       GCR_PROJECT_ID: cs-poc-sasxbttlzroculpau4u6e2l
       GCR_IMAGE: gcr.io/cs-poc-sasxbttlzroculpau4u6e2l/softprobe-datalake
     steps:
-      # datalake/ is a git submodule (thelake); default checkout leaves it empty.
+      # datalake/ is a private submodule; relative URL in .gitmodules + token so clone works in CI.
       - uses: actions/checkout@v4
         with:
           submodules: true
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify datalake Dockerfile
         run: test -f datalake/Dockerfile
       - name: Set up Docker Buildx
@@ -467,6 +472,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Validate ai-context.md (local)
         run: python3 scripts/validate-ai-context.py
       - name: Verify production ai-context.md
