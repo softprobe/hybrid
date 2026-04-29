@@ -296,7 +296,12 @@ jobs:
       GCR_PROJECT_ID: cs-poc-sasxbttlzroculpau4u6e2l
       GCR_IMAGE: gcr.io/cs-poc-sasxbttlzroculpau4u6e2l/softprobe-datalake
     steps:
+      # datalake/ is a git submodule (thelake); default checkout leaves it empty.
       - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Verify datalake Dockerfile
+        run: test -f datalake/Dockerfile
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Authenticate to Google Cloud
