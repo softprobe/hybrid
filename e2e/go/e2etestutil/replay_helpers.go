@@ -167,7 +167,8 @@ func WaitForAsyncCaptureUpload() {
 }
 
 // MaterializeCapturedCase ensures caseFile exists after capture close.
-// Local runtimes write the file directly; hosted runtimes expose it via GET /v1/cases/{sessionId}.
+// Hosted runtimes expose it via GET /v1/captures/{captureId}; legacy local
+// runtimes may still expose GET /v1/cases/{sessionId}.
 func MaterializeCapturedCase(t *testing.T, runtimeURL, sessionID, caseFile string) {
 	t.Helper()
 
@@ -177,27 +178,31 @@ func MaterializeCapturedCase(t *testing.T, runtimeURL, sessionID, caseFile strin
 
 	apiKey := APIKey()
 	client := &http.Client{Timeout: 5 * time.Second}
-	deadline := time.Now().Add(30 * time.Second)
-	caseURL := strings.TrimRight(runtimeURL, "/") + "/v1/cases/" + sessionID
+	deadline := time.Now().Add(120 * time.Second)
+	captureURL := strings.TrimRight(runtimeURL, "/") + "/v1/captures/" + sessionID
+	legacyCaseURL := strings.TrimRight(runtimeURL, "/") + "/v1/cases/" + sessionID
 	for time.Now().Before(deadline) {
-		req, err := http.NewRequest(http.MethodGet, caseURL, nil)
-		if err == nil {
-			if apiKey != "" {
-				req.Header.Set("Authorization", "Bearer "+apiKey)
-			}
-			resp, err := client.Do(req)
+		for _, u := range []string{captureURL, legacyCaseURL} {
+			req, err := http.NewRequest(http.MethodGet, u, nil)
 			if err == nil {
-				body, _ := io.ReadAll(resp.Body)
-				resp.Body.Close()
-				if resp.StatusCode == http.StatusOK {
-					if err := os.WriteFile(caseFile, body, 0o644); err != nil {
-						t.Fatalf("write case file %s: %v", caseFile, err)
-					}
-					return
+				if apiKey != "" {
+					req.Header.Set("Authorization", "Bearer "+apiKey)
 				}
-				// Hosted path may take a short moment to finalize case persistence.
-				if resp.StatusCode != http.StatusNotFound {
-					t.Fatalf("GET %s: status=%d body=%s", caseURL, resp.StatusCode, bytes.TrimSpace(body))
+				resp, err := client.Do(req)
+				if err == nil {
+					body, _ := io.ReadAll(resp.Body)
+					resp.Body.Close()
+					if resp.StatusCode == http.StatusOK {
+						if err := os.WriteFile(caseFile, body, 0o644); err != nil {
+							t.Fatalf("write case file %s: %v", caseFile, err)
+						}
+						return
+					}
+					// Capture materialization may take a moment; continue polling while
+					// datalake flush/query views converge.
+					if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusInternalServerError {
+						t.Fatalf("GET %s: status=%d body=%s", u, resp.StatusCode, bytes.TrimSpace(body))
+					}
 				}
 			}
 		}
@@ -247,16 +252,21 @@ func CaseFileHasIngressEgressCapture(caseFile string) bool {
 
 	var seenHello, seenFragment bool
 	var helloBody string
+	var helloMethod, fragmentMethod string
 	for _, tr := range doc.Traces {
 		for _, rs := range tr.ResourceSpans {
 			for _, ss := range rs.ScopeSpans {
 				for _, sp := range ss.Spans {
-					var path, body string
+					var path, body, method string
 					for _, attr := range sp.Attributes {
 						switch attr.Key {
 						case "url.path":
 							if attr.Value.String != nil {
 								path = *attr.Value.String
+							}
+						case "http.request.method":
+							if attr.Value.String != nil {
+								method = *attr.Value.String
 							}
 						case "http.response.body":
 							if attr.Value.String != nil {
@@ -268,14 +278,19 @@ func CaseFileHasIngressEgressCapture(caseFile string) bool {
 					case "/hello":
 						seenHello = true
 						helloBody = body
+						helloMethod = method
 					case "/fragment":
 						seenFragment = true
+						fragmentMethod = method
 					}
 				}
 			}
 		}
 	}
 	if !seenHello || !seenFragment {
+		return false
+	}
+	if helloMethod != "GET" || fragmentMethod != "GET" {
 		return false
 	}
 	return strings.Contains(helloBody, `"message":"hello"`) && strings.Contains(helloBody, `"dep":"ok"`)

@@ -1,0 +1,127 @@
+/* Mermaid lightbox styles */
+
+.mermaid-wrapper {
+  position: relative;
+  margin: 1.5rem 0;
+}
+
+.mermaid-wrapper .mermaid {
+  display: block;
+}
+
+.mermaid-expand-hint {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(11, 114, 133, 0.9);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 5;
+}
+
+.mermaid-wrapper:hover .mermaid-expand-hint {
+  opacity: 1;
+}
+
+.mermaid-expand-hint:hover {
+  background: rgba(11, 114, 133, 1);
+}
+
+/* Lightbox overlay */
+.mermaid-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.3s ease;
+}
+
+.mermaid-lightbox-overlay.active {
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.mermaid-lightbox {
+  position: relative;
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow: auto;
+  transform: scale(0.9);
+  opacity: 0;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.mermaid-lightbox-overlay.active .mermaid-lightbox {
+  transform: scale(1);
+  opacity: 1;
+}
+
+.mermaid-lightbox .mermaid {
+  display: block;
+  max-width: none;
+}
+
+.mermaid-lightbox .mermaid svg {
+  max-width: none;
+  height: auto;
+}
+
+.mermaid-lightbox-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mermaid-lightbox-close:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.mermaid-lightbox-title {
+  text-align: center;
+  color: #666;
+  font-size: 13px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+/* Ensure SVG content is scrollable in lightbox */
+.mermaid-lightbox svg {
+  display: block;
+}
+
+/* D2 diagrams */
+.d2-diagram {
+  margin: 1.5rem 0;
+  width: 100%;
+  overflow-x: auto;
+}
+
+.d2-diagram svg {
+  display: block;
+  width: 100%;
+  max-width: none;
+  height: auto;
+}

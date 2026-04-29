@@ -74,9 +74,10 @@ Moving selection into the SDK via `findInCase` fixes all four. The runtime is no
 
 `findInCase` is synchronous and in-memory. A round-trip to the runtime would break that guarantee, and it would make test-authoring feedback loops slow. The runtime also keeps a copy so case-embedded rules can apply, but the SDK's copy is what powers `findInCase`.
 
-### How do you keep the OSS runtime and hosted runtime in sync?
+### What runtime should I use?
 
-They are **the same binary**. Hosted adds a durable datastore, per-org auth, and capture-to-object-storage — all built on top of the same control API and OTLP handlers. Every commit to `softprobe-runtime` ships to both.
+Use the hosted runtime at `https://runtime.softprobe.dev`. The official docs do
+not require installing or operating a runtime process.
 
 ### Why Envoy + WASM instead of a standalone reverse proxy?
 
@@ -98,11 +99,13 @@ languages.
 
 ### What happens on a network partition between SDK and runtime?
 
-SDK calls throw `RuntimeError`. Your test fails cleanly. The runtime keeps the session in its in-memory store until another call re-establishes contact or the session is closed.
+SDK calls throw `RuntimeError`. Your test fails cleanly. Hosted sessions remain
+available until they are closed or expire.
 
 ### Can I run tests without internet access?
 
-Yes. Everything runs locally — runtime, proxy, app, test code. No Softprobe component calls out to the internet during test execution.
+Not with the official hosted-runtime setup. Your test environment needs HTTPS
+egress to `runtime.softprobe.dev`.
 
 ### Which Node versions are supported?
 
@@ -122,13 +125,15 @@ Go 1.22 and 1.23.
 
 ## Operations
 
-### Is the runtime production-grade?
+### Is the hosted runtime production-grade?
 
-The v1 OSS runtime is suitable for **test and CI workloads**. For production canary capture or multi-region HA, use the hosted service or wait for v0.6 (which adds Redis / Postgres-backed session stores).
+The hosted runtime is the official target for tests, CI, and controlled canary
+capture. It provides authenticated, tenant-scoped session state and case storage.
 
 ### What's the memory footprint?
 
-Idle: ~50 MB. Active: ~200 MB per 1000 concurrent sessions. A 1-core, 512 MB container handles hundreds of concurrent tests comfortably.
+Runtime capacity is managed by Softprobe. For customer workloads, size your app
+and proxy normally and ensure they can reach `runtime.softprobe.dev`.
 
 ### Does Softprobe log request bodies?
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,7 +9,7 @@ import (
 
 	"softprobe-runtime/internal/authn"
 	"softprobe-runtime/internal/controlapi"
-	"softprobe-runtime/internal/gcs"
+	"softprobe-runtime/internal/datalake"
 	"softprobe-runtime/internal/hostedbackend"
 	"softprobe-runtime/internal/store"
 )
@@ -18,14 +17,14 @@ import (
 const defaultListenAddr = "127.0.0.1:8080"
 
 // newMux returns the HTTP mux. Hosted mode activates automatically when
-// SOFTPROBE_AUTH_URL, REDIS_HOST, and GCS_BUCKET are all set. Otherwise
+// SOFTPROBE_AUTH_URL, REDIS_HOST, and DATALAKE_URL are all set. Otherwise
 // the OSS in-memory mux is used (local / self-hosted).
 func newMux() http.Handler {
 	level := controlapi.ParseLogLevel(os.Getenv("SOFTPROBE_LOG_LEVEL"))
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
 
-	if os.Getenv("SOFTPROBE_AUTH_URL") == "" || os.Getenv("REDIS_HOST") == "" || os.Getenv("GCS_BUCKET") == "" {
+	if os.Getenv("SOFTPROBE_AUTH_URL") == "" || os.Getenv("REDIS_HOST") == "" || os.Getenv("DATALAKE_URL") == "" {
 		return controlapi.NewMuxWithLogger(store.NewStore(), logger)
 	}
 	return newHostedMux()
@@ -35,7 +34,7 @@ func newHostedMux() http.Handler {
 	authURL := requireEnv("SOFTPROBE_AUTH_URL")
 	redisAddr := fmt.Sprintf("%s:%s", requireEnv("REDIS_HOST"), envOrDefault("REDIS_PORT", "6379"))
 	redisPassword := os.Getenv("REDIS_PASSWORD")
-	gcsBucket := requireEnv("GCS_BUCKET")
+	datalakeURL := requireEnv("DATALAKE_URL")
 
 	resolver := authn.NewResolver(authURL, 60*time.Second)
 
@@ -50,20 +49,15 @@ func newHostedMux() http.Handler {
 		os.Exit(1)
 	}
 
-	// Use ADC — works for both key files (GOOGLE_APPLICATION_CREDENTIALS) and workload identity.
-	gcsClient, err := gcs.NewClient(context.Background())
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "softprobe-runtime: GCS client: %v\n", err)
-		os.Exit(1)
-	}
+	datalakeClient := datalake.NewClient(datalakeURL)
 
 	overrides := &controlapi.SessionCommandOverrides{
-		Close:    hostedbackend.HandleClose(st, gcsClient, gcsBucket),
-		LoadCase: hostedbackend.HandleLoadCase(st, gcsClient, gcsBucket),
-		Traces:   hostedbackend.HandleTraces(st, gcsClient, gcsBucket),
+		Close:    hostedbackend.HandleClose(st),
+		LoadCase: hostedbackend.HandleLoadCase(st),
+		Traces:   hostedbackend.HandleTraces(st, datalakeClient),
 	}
 	inner := http.NewServeMux()
-	inner.Handle("/v1/cases/", hostedbackend.NewHostedEndpoints(st, gcsClient, gcsBucket))
+	inner.Handle("/v1/captures/", hostedbackend.NewHostedEndpoints(st, datalakeClient))
 	inner.Handle("/", controlapi.NewMuxWithOverrides(overrides, st))
 	return controlapi.NewHostedAuthMux(resolver, inner)
 }

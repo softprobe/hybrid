@@ -1,30 +1,27 @@
-// Package hostedbackend wires GCS persistence into the extract, close, and load-case paths.
-// Active when SOFTPROBE_AUTH_URL, REDIS_HOST, and GCS_BUCKET are all set. OSS paths in
-// proxybackend and controlapi are unchanged.
+// Package hostedbackend wires hosted capture ingest/export through datalake.
 package hostedbackend
 
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 
 	"softprobe-runtime/internal/controlapi"
-	"softprobe-runtime/internal/gcs"
 	"softprobe-runtime/internal/proxybackend"
 	"softprobe-runtime/internal/store"
 )
 
-// HandleTraces returns an http.Handler that, for capture sessions, writes the
-// OTLP extract payload to GCS and appends the object path to the Redis extracts
-// list. For non-capture sessions it behaves identically to the OSS handler.
-func HandleTraces(st store.Store, gcsClient *gcs.Client, bucket string) http.Handler {
+// HandleTraces ingests extract spans directly into datalake without requiring
+// a pre-created runtime session.
+func HandleTraces(st store.Store, sink interface {
+	IngestTraces(context.Context, []byte) error
+}) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = st
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -43,54 +40,44 @@ func HandleTraces(st store.Store, gcsClient *gcs.Client, bucket string) http.Han
 		}
 
 		req, err := proxybackend.ParseExtractRequest(normalized)
-		if err != nil || req.SessionID == "" {
+		if err != nil {
 			http.Error(w, "invalid traces payload", http.StatusBadRequest)
 			return
 		}
 
-		session, ok := st.Get(req.SessionID)
-		if !ok {
-			http.Error(w, "unknown session", http.StatusNotFound)
+		tenantInfo, hasTenant := controlapi.TenantFromContext(r.Context())
+		if !hasTenant {
+			writeAPIError(w, http.StatusUnauthorized, "missing_tenant", "authentication required")
 			return
 		}
 
-		if session.Mode == "capture" {
-			tenantInfo, hasTenant := controlapi.TenantFromContext(r.Context())
-			if hasTenant {
-				objPath := extractObjectPath(tenantInfo.TenantID, req.SessionID, uuid.New().String())
-				if err := gcsClient.Put(r.Context(), bucket, objPath, normalized); err != nil {
-					slog.Error("hosted traces: persist extract failed", "sessionId", req.SessionID, "tenantId", tenantInfo.TenantID, "bucket", bucket, "object", objPath, "error", err)
-					writeAPIError(w, http.StatusInternalServerError, "storage_error", "failed to persist extract")
-					return
-				}
-				if !st.BufferExtract(req.SessionID, []byte(objPath)) {
-					slog.Error("hosted traces: append extract ref failed", "sessionId", req.SessionID, "object", objPath)
-					writeAPIError(w, http.StatusInternalServerError, "internal_error", "failed to persist extract ref")
-					return
-				}
-				if _, ok := st.RecordExtractedSpans(req.SessionID, req.SpanCount); !ok {
-					slog.Error("hosted traces: record extracted spans failed", "sessionId", req.SessionID, "spanCount", req.SpanCount)
-					writeAPIError(w, http.StatusInternalServerError, "internal_error", "failed to update extract stats")
-					return
-				}
-			} else {
-				// OSS fallback: buffer raw payload in store
-				st.BufferExtract(req.SessionID, normalized)
-				_, _ = st.RecordExtractedSpans(req.SessionID, req.SpanCount)
-			}
+		captureID := req.SessionID
+		if captureID == "" {
+			captureID = "cap_" + uuid.New().String()
+		}
+		annotated, err := annotateCapture(normalized, captureID, tenantInfo.TenantID)
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, "invalid_request", "invalid traces payload")
+			return
+		}
+		if err := sink.IngestTraces(r.Context(), annotated); err != nil {
+			slog.Error("hosted traces: datalake ingest failed", "captureId", captureID, "tenantId", tenantInfo.TenantID, "error", err)
+			writeAPIError(w, http.StatusInternalServerError, "storage_error", "failed to ingest traces")
+			return
 		}
 
-		w.WriteHeader(http.StatusNoContent)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"captureId": captureID,
+			"accepted":  true,
+		})
 	})
 }
 
-// HandleClose handles session close for the hosted path. For capture sessions it:
-//  1. Reads all extract GCS object paths from the Redis list.
-//  2. Fetches each object from GCS.
-//  3. Merges them into a case JSON document.
-//  4. Writes the case to gs://{bucket}/cases/{sessionID}.case.json.
-//  5. Deletes the session.
-func HandleClose(st store.Store, gcsClient *gcs.Client, bucket string) func(http.ResponseWriter, *http.Request, string) {
+// HandleClose uses the default close semantics and does not perform capture
+// assembly in hosted mode anymore.
+func HandleClose(st store.Store) func(http.ResponseWriter, *http.Request, string) {
 	return func(w http.ResponseWriter, r *http.Request, sessionID string) {
 		session, ok := st.Get(sessionID)
 		if !ok {
@@ -99,19 +86,7 @@ func HandleClose(st store.Store, gcsClient *gcs.Client, bucket string) func(http
 		}
 
 		resp := map[string]any{"sessionId": sessionID, "closed": true}
-
-		if session.Mode == "capture" {
-			tenantInfo, hasTenant := controlapi.TenantFromContext(r.Context())
-			if hasTenant {
-				caseRef, err := writeCaseToGCS(r.Context(), st, gcsClient, session, bucket, tenantInfo.TenantID)
-				if err != nil {
-					slog.Error("hosted close: write case failed", "sessionId", sessionID, "tenantId", tenantInfo.TenantID, "bucket", bucket, "error", err)
-					writeAPIError(w, http.StatusInternalServerError, "internal_error", "write case failed")
-					return
-				}
-				resp["caseRef"] = caseRef
-			}
-		}
+		_ = session
 
 		if !st.Close(sessionID) {
 			writeAPIError(w, http.StatusNotFound, "unknown_session", "unknown session")
@@ -124,9 +99,8 @@ func HandleClose(st store.Store, gcsClient *gcs.Client, bucket string) func(http
 	}
 }
 
-// HandleLoadCase handles POST /v1/sessions/{id}/load-case for the hosted path.
-// It stores the case body to GCS and also keeps it in the session for the inject hot path.
-func HandleLoadCase(st store.Store, gcsClient *gcs.Client, bucket string) func(http.ResponseWriter, *http.Request, string) {
+// HandleLoadCase keeps replay semantics in the runtime store.
+func HandleLoadCase(st store.Store) func(http.ResponseWriter, *http.Request, string) {
 	return func(w http.ResponseWriter, r *http.Request, sessionID string) {
 		if _, ok := st.Get(sessionID); !ok {
 			writeAPIError(w, http.StatusNotFound, "unknown_session", "unknown session")
@@ -137,16 +111,6 @@ func HandleLoadCase(st store.Store, gcsClient *gcs.Client, bucket string) func(h
 		if err != nil || len(caseBody) == 0 {
 			writeAPIError(w, http.StatusBadRequest, "invalid_request", "invalid load-case request")
 			return
-		}
-
-		// Persist to GCS first so failures are surfaced immediately.
-		if tenantInfo, hasTenant := controlapi.TenantFromContext(r.Context()); hasTenant {
-			objPath := caseObjectPath(tenantInfo.TenantID, sessionID)
-			if err := gcsClient.Put(r.Context(), bucket, objPath, caseBody); err != nil {
-				slog.Error("hosted load-case: persist case failed", "sessionId", sessionID, "tenantId", tenantInfo.TenantID, "bucket", bucket, "object", objPath, "error", err)
-				writeAPIError(w, http.StatusInternalServerError, "storage_error", "failed to persist case")
-				return
-			}
 		}
 
 		// Store in session for inject hot path.
@@ -165,44 +129,57 @@ func HandleLoadCase(st store.Store, gcsClient *gcs.Client, bucket string) func(h
 	}
 }
 
-func writeCaseToGCS(ctx context.Context, st store.Store, gcsClient *gcs.Client, session store.Session, bucket, tenantID string) (string, error) {
-	rs, ok := st.(*store.RedisStore)
-	if !ok {
-		return "", fmt.Errorf("hostedbackend: store is not a RedisStore")
-	}
-
-	refs := rs.GetExtractRefs(session.ID)
-	payloads := make([][]byte, 0, len(refs))
-	for _, ref := range refs {
-		data, err := gcsClient.Get(ctx, bucket, ref)
-		if err != nil {
-			return "", fmt.Errorf("hostedbackend: fetch extract %s: %w", ref, err)
-		}
-		payloads = append(payloads, data)
-	}
-
-	caseJSON, err := proxybackend.BuildCaseJSON(session.ID, payloads)
-	if err != nil {
-		return "", err
-	}
-
-	objPath := caseObjectPath(tenantID, session.ID)
-	if err := gcsClient.Put(ctx, bucket, objPath, caseJSON); err != nil {
-		return "", err
-	}
-	return objPath, nil
-}
-
-func caseObjectPath(tenantID, sessionID string) string {
-	return fmt.Sprintf("tenants/%s/cases/%s.case.json", tenantID, sessionID)
-}
-
-func extractObjectPath(tenantID, sessionID, extractID string) string {
-	return fmt.Sprintf("tenants/%s/extracts/%s/%s.otlp.json", tenantID, sessionID, extractID)
-}
-
 func normalizeOTLP(body []byte) ([]byte, error) {
 	return proxybackend.NormalizeOTLPJSON(body)
+}
+
+func annotateCapture(payload []byte, captureID, tenantID string) ([]byte, error) {
+	var doc map[string]any
+	if err := json.Unmarshal(payload, &doc); err != nil {
+		return nil, err
+	}
+	rs, _ := doc["resourceSpans"].([]any)
+	for _, rsRaw := range rs {
+		rsMap, _ := rsRaw.(map[string]any)
+		ensureAttribute(rsMap, "resource", "sp.capture.id", captureID)
+		ensureAttribute(rsMap, "resource", "sp.tenant.id", tenantID)
+		scopeSpans, _ := rsMap["scopeSpans"].([]any)
+		for _, ssRaw := range scopeSpans {
+			ssMap, _ := ssRaw.(map[string]any)
+			spans, _ := ssMap["spans"].([]any)
+			for _, sRaw := range spans {
+				spanMap, _ := sRaw.(map[string]any)
+				appendSpanAttr(spanMap, "sp.capture.id", captureID)
+				appendSpanAttr(spanMap, "sp.tenant.id", tenantID)
+			}
+		}
+	}
+	return json.Marshal(doc)
+}
+
+func ensureAttribute(rs map[string]any, field, key, val string) {
+	resource, ok := rs[field].(map[string]any)
+	if !ok {
+		resource = map[string]any{}
+		rs[field] = resource
+	}
+	attrs, _ := resource["attributes"].([]any)
+	resource["attributes"] = append(attrs, map[string]any{
+		"key": key,
+		"value": map[string]any{
+			"stringValue": val,
+		},
+	})
+}
+
+func appendSpanAttr(span map[string]any, key, val string) {
+	attrs, _ := span["attributes"].([]any)
+	span["attributes"] = append(attrs, map[string]any{
+		"key": key,
+		"value": map[string]any{
+			"stringValue": val,
+		},
+	})
 }
 
 func writeAPIError(w http.ResponseWriter, status int, code, message string) {
@@ -212,6 +189,3 @@ func writeAPIError(w http.ResponseWriter, status int, code, message string) {
 		"error": map[string]any{"code": code, "message": message},
 	})
 }
-
-// closedAt is used in BuildCaseJSON doc.
-var _ = time.Now

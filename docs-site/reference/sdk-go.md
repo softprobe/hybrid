@@ -2,17 +2,9 @@
 
 The `softprobe-go` Go module. Requires Go 1.22+.
 
-::: warning Not yet released at a public import path
-The `go get github.com/softprobe/softprobe-go@v0.5.0` command below refers to
-a **planned** release. The module in this monorepo currently has the local
-module name `softprobe-go` and is consumed from source via a `replace`
-directive (see `softprobe-go/README.md` and the in-repo `e2e/go/` harness).
-:::
-
 ## Install
 
 ```bash
-# Planned — not yet published.
 go get github.com/softprobe/softprobe-go@v0.5.0
 ```
 
@@ -163,7 +155,7 @@ All SDK errors implement the standard `error` interface. Use `errors.As` to reco
 
 | Condition | Type | Typical cause | Recovery |
 |---|---|---|---|
-| **Runtime unreachable** | `*RuntimeError` (wraps `*net.OpError` / `context.DeadlineExceeded`) | Runtime not running, wrong `BaseURL`, firewall | Start the runtime; `softprobe doctor` |
+| **Runtime unreachable** | `*RuntimeError` (wraps `*net.OpError` / `context.DeadlineExceeded`) | Wrong `BaseURL`, firewall, invalid hosted endpoint | Check network egress and `SOFTPROBE_API_TOKEN`; run `softprobe doctor` |
 | **Unknown session** | `*RuntimeError` with `.Status == 404` | Session closed, wrong id | Start a fresh session |
 | **Strict miss** (proxy returns error to app) | Not an SDK error — surfaces as an HTTP error in the SUT | Missing `MockOutbound` | Add the rule; see [Debug strict miss](/guides/troubleshooting#_403-forbidden-on-outbound-under-strict-policy) |
 | **Invalid rule payload** | `*RuntimeError` with `.Status == 400` | Rule body doesn't validate against [rule-schema](/reference/rule-schema) | Fix the spec |

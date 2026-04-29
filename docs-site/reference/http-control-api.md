@@ -5,24 +5,21 @@ The JSON HTTP surface used by the CLI, SDKs, and any custom integration. The can
 All endpoints live under `{runtimeBase}/v1/...`. Content type is `application/json` on requests and responses. Every mutating call increments `sessionRevision` (returned in the response).
 
 ::: info Scope of this page
-This page documents what the current OSS `softprobe-runtime` in this repository
-actually serves. One read-only endpoint is called out under [Planned](#planned)
-where the design defines a future direction but the implementation is not yet
-wired.
+This page documents the hosted runtime contract used by the CLI, SDKs, and
+Softprobe proxy. The canonical base URL is `https://runtime.softprobe.dev`.
 :::
 
 ## Base URL
 
-In local OSS setups, `SOFTPROBE_RUNTIME_URL` (for CLI/SDK) and `sp_backend_url` (for the proxy WASM) both point at the **same** runtime base URL. For the reference Docker Compose, that is `http://127.0.0.1:8080` from the host and `http://softprobe-runtime:8080` from inside the compose network.
-
-Hosted deployments use `https://runtime.softprobe.dev`.
+`SOFTPROBE_RUNTIME_URL` defaults to `https://runtime.softprobe.dev`. The proxy
+WASM `sp_backend_url` should point at the same hosted base URL.
 
 ## Health and metadata
 
 ### `GET /health`
 
 ```bash
-curl $SOFTPROBE_RUNTIME_URL/health
+curl https://runtime.softprobe.dev/health
 ```
 
 Example response:
@@ -210,8 +207,7 @@ Example response:
 
 ### `POST /v1/sessions/{sessionId}/close`
 
-Close the session. In capture mode, the runtime flushes buffered traces to a case
-file before deleting the session.
+Close the replay session and delete runtime session state.
 
 Response:
 
@@ -223,6 +219,17 @@ Response:
 ```
 
 After `close`, the session id is invalid for future control-plane calls.
+
+## Hosted capture export
+
+### `GET /v1/captures/{captureId}`
+
+Return a tenant-scoped capture JSON assembled from datalake query results.
+
+```bash
+curl -H "Authorization: Bearer $SOFTPROBE_API_TOKEN" \
+  "https://runtime.softprobe.dev/v1/captures/cap_123"
+```
 
 ## Errors
 
@@ -248,33 +255,15 @@ All errors return a JSON envelope with a nested `error` object:
 
 ## Authentication
 
-The OSS runtime is **unauthenticated by default** — use only on trusted networks
-or behind a reverse proxy.
-
-To require a bearer token, set `SOFTPROBE_API_TOKEN` on the runtime process:
+Every hosted `/v1/...` request must carry the header:
 
 ```bash
-docker run -e SOFTPROBE_API_TOKEN=sp_secret ghcr.io/softprobe/softprobe-runtime:latest
+curl -H "Authorization: Bearer $SOFTPROBE_API_TOKEN" \
+  https://runtime.softprobe.dev/v1/sessions
 ```
 
-When set, every `/v1/...` request must carry the header:
-
-```bash
-curl -H "Authorization: Bearer sp_secret" $SOFTPROBE_RUNTIME_URL/v1/sessions
-```
-
-`/health` is always unauthenticated so orchestrators can probe it. The CLI and
-SDKs read `SOFTPROBE_API_TOKEN` from the environment and attach the header
-automatically.
-
-## Planned
-
-The design references one read-only endpoint that is **not** yet implemented in
-the OSS runtime:
-
-- `GET /v1/sessions/{sessionId}` — full session snapshot (policy, rule count,
-  case summary, stats in one payload). Until it lands, use
-  `GET /v1/sessions/{sessionId}/stats` for counters.
+`/health` is unauthenticated for reachability checks. The CLI and SDKs read
+`SOFTPROBE_API_TOKEN` from the environment and attach the header automatically.
 
 ## Relationship to the proxy
 
@@ -283,8 +272,8 @@ Tests, SDKs, and the CLI use the JSON control API. The proxy uses the OTLP API:
 - `POST /v1/inject`
 - `POST /v1/traces`
 
-In the OSS reference layout, both handler groups live in the same
-`softprobe-runtime` process and share one in-memory session store.
+Both handler groups are served by the hosted runtime and share the same
+tenant-scoped session state.
 
 ## See also
 

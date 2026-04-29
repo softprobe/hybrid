@@ -1,10 +1,12 @@
 # Capture and replay
 
-Capture and replay are **two modes of the same session**. The physical traffic flow is identical — `client → proxy → app → proxy → dependency` — what changes is whether the proxy's `/v1/inject` calls return hits (replay) or 404s (capture), and whether the runtime persists observed traffic.
+Capture and replay now use different control paths. Replay uses runtime sessions;
+capture ingests OTLP spans directly into datalake and exports by `captureId`.
 
 ## Capture mode
 
-**Goal:** turn one end-to-end run through your system into a committable `*.case.json` file.
+**Goal:** turn one end-to-end run through your system into a committable capture
+JSON file, exported from datalake by `captureId`.
 
 ```mermaid
 sequenceDiagram
@@ -15,7 +17,6 @@ sequenceDiagram
     participant Egress as proxy egress
     participant Upstream as upstream
 
-    Test->>Runtime: POST /v1/sessions {mode: "capture"} → sess_X
     Test->>Proxy: GET /hello
     Proxy->>Runtime: POST /v1/inject
     Runtime-->>Proxy: 404 (no rules, don't mock)
@@ -29,39 +30,44 @@ sequenceDiagram
     App-->>Egress: 200 {"dep":"ok"}
     App-->>Proxy: returns {"message":"hello", "dep":"ok"}
     Proxy->>Runtime: POST /v1/traces (extract ingress hop)
-    Test->>Runtime: POST /v1/sessions/sess_X/close
-    Runtime-->>Test: assembles captured.case.json
+    Proxy->>Runtime: POST /v1/traces (returns captureId)
+    Test->>Runtime: GET /v1/captures/{captureId}
+    Runtime-->>Test: returns assembled capture JSON from datalake
 ```
 
 ### What gets captured
 
-Every HTTP hop that passes through the proxy with `x-softprobe-session-id: $SOFTPROBE_SESSION_ID` attached. For each hop, the case file stores:
+Every HTTP hop that passes through the proxy and reaches `/v1/traces`. For each
+hop, the exported capture JSON stores queryable span rows grouped by `captureId`.
 
 - method, URL, and all normalized headers (minus those redacted by policy)
 - request and response bodies (subject to size limits configured on the runtime)
 - status code, duration
 - W3C trace context (`traceparent`, `tracestate`) linking the hops together
-- Softprobe attributes (`sp.session.id`, `sp.traffic.direction`)
+- Softprobe attributes (`sp.capture.id`, `sp.tenant.id`, `sp.traffic.direction`)
 
 ### What does **not** get captured
 
-- Traffic without the session header (other tenants are ignored).
+- Traffic without valid hosted auth (other tenants are rejected).
 - Traffic that bypasses the proxy (direct in-cluster calls, backend-to-backend TCP).
 - Non-HTTP traffic (gRPC streaming, websockets are roadmap items).
 
 ### Where the file lives
 
-The hosted runtime stores captured spans while the session is open. On `close`,
-use `softprobe session close --out cases/name.case.json` to download the
-assembled case file into your repository.
+The hosted runtime forwards capture traces to datalake immediately. Use
+`softprobe cases get <captureId> --out cases/name.case.json` to export a
+capture JSON file into your repository.
 
 ### Capture pitfalls
 
 **PII leakage.** By default, Softprobe does **not** redact. If your captures flow through a proxy that sees authorization tokens, credit cards, or personal data, add a redaction rule in capture mode or run a post-capture scrubbing hook before committing. See [Write a hook](/guides/write-a-hook).
 
-**Double-capture.** If you already run a production OpenTelemetry pipeline, make sure capture sessions only trigger on tests — use the `x-softprobe-session-id` header as the opt-in marker. Traffic without it is ignored.
+**Double-capture.** If you already run a production OpenTelemetry pipeline, make
+sure test captures set and track a dedicated `captureId` so you export only the
+intended run.
 
-**Partial recordings.** If the session closes before all async HTTP completes (e.g. you close right after firing a background request), those hops may be dropped. Use `close` in a `finally`/`afterAll` and ensure your app flushes pending requests before the test ends.
+**Partial recordings.** If you export before async HTTP completes, those hops
+may be missing. Export after your driver/test run has fully flushed network work.
 
 ## Replay mode
 

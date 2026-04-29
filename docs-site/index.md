@@ -40,13 +40,13 @@ features:
 
   - icon: ⚡
     title: Scale beyond unit tests
-    details: Planned orchestration layers such as <code>softprobe suite run</code> build on the same runtime, proxy, and case format. The current OSS core focuses on capture/replay sessions and SDK-driven tests first.
+    details: Orchestration layers such as <code>softprobe suite run</code> build on the same hosted runtime, proxy, and case format.
     link: /guides/run-a-suite-at-scale
     linkText: Run a suite
 
   - icon: 🗣
     title: One control plane, many languages
-    details: A single Go runtime speaks an HTTP control API to every SDK and the CLI. Write tests in your team's language; the behavior is identical across Jest, pytest, JUnit, and <code>go test</code>.
+    details: The hosted runtime speaks one HTTP control API to every SDK and the CLI. Write tests in your team's language; the behavior is identical across Jest, pytest, JUnit, and <code>go test</code>.
     link: /reference/http-control-api
     linkText: Control API
 

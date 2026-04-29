@@ -73,16 +73,16 @@ func TestRuntimeURLFlagOverridesEnvVar(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Fix 3 — `softprobe cases get <sessionID> [--out PATH]`
+// Fix 3 — `softprobe cases get <captureID> [--out PATH]`
 // ---------------------------------------------------------------------------
 
 // TestCasesGetPrintsToStdout verifies that `cases get` fetches and prints the case.
 func TestCasesGetPrintsToStdout(t *testing.T) {
 	st := store.NewStore()
-	// Inject a fake hosted GET /v1/cases/{id} handler alongside the normal mux.
+	// Inject a fake hosted GET /v1/captures/{id} handler alongside the normal mux.
 	mux := http.NewServeMux()
 	mux.Handle("/", controlapi.NewMux(st))
-	mux.HandleFunc("/v1/cases/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/captures/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"caseId":"test-case","traces":[]}`))
@@ -109,7 +109,7 @@ func TestCasesGetWritesToFile(t *testing.T) {
 	st := store.NewStore()
 	mux := http.NewServeMux()
 	mux.Handle("/", controlapi.NewMux(st))
-	mux.HandleFunc("/v1/cases/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/captures/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"caseId":"file-case","traces":[]}`))
 	})
@@ -141,7 +141,7 @@ func TestCasesGetWritesToFile(t *testing.T) {
 // TestCasesGetNotFoundReturnsSessionNotFound checks 404 maps to exitSessionNotFound.
 func TestCasesGetNotFoundReturnsSessionNotFound(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/cases/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/captures/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`{"error":{"code":"session_not_found"}}`))
 	})
@@ -164,7 +164,7 @@ func TestCasesGetNotFoundReturnsSessionNotFound(t *testing.T) {
 
 // TestSessionCloseOutDownloadsCaseFromHosted verifies that when --out is given
 // and the runtime returns no capturePath (hosted pattern), the CLI fetches the
-// case via GET /v1/cases/{id} and writes it to the --out file.
+// case via GET /v1/captures/{id} and writes it to the --out file.
 func TestSessionCloseOutDownloadsCaseFromHosted(t *testing.T) {
 	const sessionID = "sess_hosted_abc"
 	const caseJSON = `{"caseId":"hosted-case","traces":[]}`
@@ -175,8 +175,8 @@ func TestSessionCloseOutDownloadsCaseFromHosted(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"sessionId":"` + sessionID + `","closed":true}`))
 	})
-	// cases endpoint returns the actual case
-	mux.HandleFunc("/v1/cases/"+sessionID, func(w http.ResponseWriter, r *http.Request) {
+	// captures endpoint returns the actual capture JSON
+	mux.HandleFunc("/v1/captures/"+sessionID, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(caseJSON))
 	})

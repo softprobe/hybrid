@@ -11,28 +11,27 @@ Softprobe supports two instrumentation placements:
 
 In the canonical deployment, Softprobe sits **under** your application, not inside it. Your app and its HTTP dependencies are unchanged; a single sidecar proxy sees every request and response on both directions.
 
-```text
-  ┌───────────────┐                                    ┌───────────────┐
-  │  Test client  │                                    │   HTTP        │
-  │ (Jest/pytest/ │                                    │   dependency  │
-  │  CLI / curl)  │                                    │ (Stripe, …)   │
-  └──────┬────────┘                                    └──────▲────────┘
-         │ (1) ingress                                        │ (4) egress
-         ▼                                                    │
-  ┌─────────────────┐   (2) forward     ┌────────────────┐   │ forward
-  │ Envoy + Softprobe│ ───────────────► │  Application    │───┘
-  │  WASM filter    │                   │  under test     │
-  └──────┬──────────┘                   └────────────────┘
-         │ (3) OTLP /v1/inject + /v1/traces
-         ▼
-  ┌─────────────────┐    JSON HTTP       ┌────────────────┐
-  │ softprobe-      │ ◄────────────────► │ Your test code │
-  │ runtime         │                    │   + CLI        │
-  │ (Go service)    │                    └────────────────┘
-  └─────────────────┘
-         │
-         ▼
-  *.case.json (OTLP traces on disk)
+```mermaid
+flowchart LR
+    subgraph External[" "]
+        TC[Test client<br/>Jest/pytest/<br/>CLI / curl]
+        HTTP[HTTP dependency<br/>Stripe, …]
+    end
+
+    TC -->|1 ingress| EP
+    EP -->|2 forward| APP
+    APP -->|4 forward| HTTP
+    HTTP -->|4 egress| APP
+    APP -->|4 egress| EP
+    EP -->|1 ingress| TC
+
+    EP -->|3 OTLP /v1/inject + /v1/traces| RT
+    RT <-->|JSON HTTP| CLI[Test code<br/>+ CLI]
+
+    RT -->|*.case.json| Disk[(.case.json<br/>OTLP traces<br/>on disk)]
+
+    style EP fill:#e1f5fe
+    style RT fill:#f3e5f5
 ```
 
 Each numbered edge is one of the two HTTP flows:
@@ -54,7 +53,7 @@ Both models share the same runtime APIs, session lifecycle, and case schema.
 |---|---|---|
 | Interception point | Envoy/WASM on ingress + egress | In-process Node hooks/interceptors |
 | Test authoring APIs | `startSession` / `loadCaseFromFile` / `mockOutbound` / `close` | Same |
-| Runtime | Required | Required |
+| Runtime | Hosted runtime | Hosted runtime |
 | Session semantics | `x-softprobe-session-id` + runtime session state | Same runtime session state; app wiring may differ |
 | Capture artifact | `*.case.json` | `*.case.json` |
 | Recommended for new deployments | Yes | Only when sidecar proxying is not available yet |
@@ -83,20 +82,20 @@ The proxy is **deliberately dumb**. It doesn't know what a "case" is, what a "ru
 
 ### 3. The runtime (control plane + OTLP handler)
 
-**One Go binary.** It serves two API surfaces from the same process, backed by a single in-memory session store:
+The hosted runtime serves two API surfaces with shared session state:
 
 | Surface | Called by | Spec |
 |---|---|---|
 | HTTP control API (JSON) | tests, CLI, SDKs | [`http-control-api.md`](/reference/http-control-api) |
 | OTLP trace API | proxy only | [`proxy-otel-api.md`](https://github.com/softprobe/softprobe/blob/main/spec/protocol/proxy-otel-api.md) |
 
-Because both handlers read from the same store, any rule registered by a test is visible to the proxy on the **very next** inject lookup — no cache, no sync, no database (v1).
+Because both handlers read from the same session state, any rule registered by a test is visible to the proxy on the **very next** inject lookup.
 
 The runtime's responsibilities:
 
 - Own **session** state (`sessionId`, `sessionRevision`, mode, policy, rules, loaded case bytes).
 - Match OTLP inject spans against stored rules and return `200 + response attrs` on hit or `404` on miss.
-- Buffer extracted spans during capture mode and flush them to a `*.case.json` file on session close.
+- Store extracted spans during capture mode and assemble a `*.case.json` file on session close.
 
 The runtime is **not** a routing control plane. It does not push config to Envoy. It reacts to the proxy's OTLP requests, nothing more.
 
@@ -109,38 +108,35 @@ Both are clients of the runtime's HTTP control API. They never speak OTLP to the
 
 ## Control plane vs. data plane
 
-```text
-       ┌─────────────────────────────────────────────┐
-       │  Control plane                              │
-       │  ─────────────                              │
-       │   Tests, CLI, SDKs ─── JSON HTTP ───► Runtime
-       │   (sessions, load-case, rules, policy)      │
-       └─────────────────────────────────────────────┘
-                          │ (shared in-memory store)
-       ┌──────────────────┴──────────────────────────┐
-       │  Data plane                                 │
-       │  ──────────                                 │
-       │   Proxy ───── OTLP /v1/inject + /v1/traces ───► Runtime
-       │   (per-request lookup; async capture)       │
-       └─────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Runtime["Hosted runtime (shared session state)"]
+        CP[Control plane<br/>Tests, CLI, SDKs<br/>sessions, load-case,<br/>rules, policy]
+        DP[Data plane<br/>Proxy<br/>per-request lookup<br/>async capture]
+    end
+
+    CP <-->|shared store| DP
 ```
 
 **Three invariants** to remember:
 
 1. **Tests never call `/v1/inject` directly.** Only the proxy does.
 2. **The proxy never calls the control API on the request path.** Only OTLP.
-3. **Both halves share one in-memory store.** A rule posted by a test is visible to the proxy's next inject call with no latency.
+3. **Both halves share session state.** A rule posted by a test is visible to the proxy's next inject call with no latency.
 
 ## The session model
 
 A **session** is a test-time scope. Creating a session gives you a UUID (`sessionId`) that you attach to HTTP requests via `x-softprobe-session-id`. The runtime uses that id to look up the session's policy, rules, and loaded case when the proxy asks.
 
-```text
-POST /v1/sessions           → session created, sessionRevision = 1
-POST /v1/sessions/$ID/load-case  → case loaded,   sessionRevision = 2
-POST /v1/sessions/$ID/rules  → rules replaced,   sessionRevision = 3
-                               ─── proxy sees rev 3 on the next /v1/inject ───
-POST /v1/sessions/$ID/close → state deleted
+```mermaid
+sequenceDiagram
+    participant Test as Test / SDK
+
+    Test->>Runtime: POST /v1/sessions → session created, sessionRevision = 1
+    Test->>Runtime: POST /v1/sessions/$ID/load-case → case loaded, sessionRevision = 2
+    Test->>Runtime: POST /v1/sessions/$ID/rules → rules replaced, sessionRevision = 3
+    Note over Runtime: proxy sees rev 3 on the next /v1/inject
+    Test->>Runtime: POST /v1/sessions/$ID/close → state deleted
 ```
 
 Every mutating control call bumps `sessionRevision`. Proxy-side inject caches, if any, key on `(sessionId, sessionRevision, requestFingerprint)` so stale hits can never survive a rule change.

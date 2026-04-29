@@ -271,7 +271,7 @@ All SDK errors extend `SoftprobeError`.
 
 | Condition | Error class | Typical cause | Recovery |
 |---|---|---|---|
-| **Runtime unreachable** | `SoftprobeRuntimeUnreachableError` | DNS / TCP / TLS / timeout before an HTTP status exists | Start the runtime; check `baseUrl`; `softprobe doctor` |
+| **Runtime unreachable** | `SoftprobeRuntimeUnreachableError` | DNS / TCP / TLS / timeout before an HTTP status exists | Check `baseUrl`, network egress, and `SOFTPROBE_API_TOKEN`; run `softprobe doctor` |
 | **Unknown session** | `SoftprobeUnknownSessionError` (`instanceof RuntimeError`, `status: 404`) | Session already closed, wrong id | Start a fresh session |
 | **Strict miss** (proxy returns error to app) | Not an SDK error — surfaces as an HTTP error inside the SUT, e.g. `Error: Request failed with status 599` | Missing `mockOutbound` or wrong predicate | Add the rule; see [Debug strict miss](/guides/troubleshooting#_403-forbidden-on-outbound-under-strict-policy) |
 | **Invalid rule payload** | `RuntimeError` with `status: 400`, body describing the schema violation | Rule body doesn't validate against [rule-schema](/reference/rule-schema) | Fix the spec; SDK validates many fields client-side |
@@ -342,9 +342,9 @@ Or via env: `SOFTPROBE_LOG=debug npm test`.
 
 ## Version compatibility
 
-The npm package uses **2.x** semver (`package.json` / exported `VERSION` in `src/version.ts`); the Go runtime and `softprobe` CLI use the **0.5.x** platform line until release tagging catches up. Pair a given npm release with a runtime built from the same commit or release notes.
+The npm package uses **2.x** semver (`package.json` / exported `VERSION` in `src/version.ts`); the hosted runtime and `softprobe` CLI use the **0.5.x** platform line until release tagging catches up. Pair a given npm release with the compatible hosted runtime release notes.
 
-| `@softprobe/softprobe-js` (npm) | `softprobe-runtime` / CLI | Spec |
+| `@softprobe/softprobe-js` (npm) | Hosted runtime / CLI | Spec |
 |---|---|---|
 | `2.0.x` (e.g. `2.0.10`) | `0.5.x` expected; dev builds may show `0.0.0-dev` | http-control-api v1 |
 | `0.4.x` (legacy) | `0.4.x` – `0.5.x` | v1 |

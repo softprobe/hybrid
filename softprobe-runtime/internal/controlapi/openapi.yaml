@@ -11,8 +11,8 @@ info:
     - **Hosted:** All `/v1/*` routes require a valid bearer token (tenant API key).
       The proxy compatibility header `x-public-key` is also accepted until clients migrate.
 
-    **Hosted-only:** `GET /v1/cases/{caseId}` is registered only when the server runs
-    in hosted mode (GCS + Redis + auth). It does not exist on the default OSS binary layout
+    **Hosted-only:** `GET /v1/captures/{captureId}` is registered only when the server runs
+    in hosted mode (datalake + Redis + auth). It does not exist on the default OSS binary layout
     unless that stack is enabled.
 
     Interactive docs: `GET /docs` (Swagger UI). Machine-readable spec: `GET /openapi.yaml`.
@@ -581,17 +581,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIError'
 
-  /v1/cases/{caseId}:
+  /v1/captures/{captureId}:
     get:
       tags: [Hosted]
-      summary: Download a stored case (hosted only)
+      summary: Download a stored capture JSON (hosted only)
       description: |
-        Returns the case JSON object from tenant-scoped GCS storage.
+        Returns a tenant-scoped capture JSON assembled from datalake query results.
         Not served by the default OSS-only mux unless hosted backends are wired.
       security:
         - BearerAuth: []
       parameters:
-        - name: caseId
+        - name: captureId
           in: path
           required: true
           schema:

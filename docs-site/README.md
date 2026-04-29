@@ -30,6 +30,15 @@ Configure a Cloudflare Pages project with:
 
 Pushes to `main` publish to production; PR branches get preview URLs automatically.
 
+## Agent context (`public/ai-context.md`)
+
+[`public/ai-context.md`](./public/ai-context.md) is copied to the live site as **`/ai-context.md`** (for example `https://docs.softprobe.dev/ai-context.md`). Published agent skills instruct models to read it first.
+
+**Checklist when you change replay behavior, CLI flags, SDK APIs, or header/session rules:**
+
+- Update `public/ai-context.md` in the same PR (or immediately after), including the `Last updated: YYYY-MM-DD` line at the top.
+- Run `python3 scripts/validate-ai-context.py` or `make validate-ai-context` from the repo root before pushing.
+
 ## Writing guidelines
 
 1. **One page, one outcome.** If a page has two distinct "I want to…" goals, split it.
@@ -44,7 +53,7 @@ Pushes to `main` publish to production; PR branches get preview URLs automatical
 docs-site/
 ├── .vitepress/
 │   └── config.ts           # navigation, sidebar, theme
-├── public/                 # static assets (favicon, og images)
+├── public/                 # static assets (favicon, og images) + ai-context.md for agents
 ├── index.md                # landing page
 ├── introduction.md
 ├── quickstart.md

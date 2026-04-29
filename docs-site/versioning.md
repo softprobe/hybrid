@@ -85,7 +85,7 @@ The runtime guarantees to read any case file whose major `schemaVersion` is the 
 
 ## SDK ↔ platform compatibility
 
-SDK majors track platform majors. Concretely, **SDK `v0.5.x` is compatible with platform `v0.5.x` only**. Mixing `sdk@v0.5.0` with `softprobe-runtime@v0.6.0` is unsupported; upgrade them together.
+SDK majors track platform majors. Concretely, **SDK `v0.5.x` is compatible with platform `v0.5.x` only**. Mixing `sdk@v0.5.0` with hosted runtime `v0.6.0` is unsupported; upgrade them together.
 
 We publish a compatibility table in each SDK's package README (`@softprobe/sdk`, `softprobe-python`, `io.softprobe:softprobe-sdk`, `github.com/softprobe/softprobe-go`).
 

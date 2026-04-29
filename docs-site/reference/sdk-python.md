@@ -180,7 +180,7 @@ All SDK exceptions inherit from `softprobe.errors.SoftprobeError`.
 
 | Condition | Exception | Typical cause | Recovery |
 |---|---|---|---|
-| **Runtime unreachable** | `RuntimeError` (cause: `ConnectionError` / `Timeout`) | Runtime not running, wrong `base_url`, firewall | Start the runtime; `softprobe doctor` |
+| **Runtime unreachable** | `RuntimeError` (cause: `ConnectionError` / `Timeout`) | Wrong `base_url`, firewall, invalid hosted endpoint | Check network egress and `SOFTPROBE_API_TOKEN`; run `softprobe doctor` |
 | **Unknown session** | `RuntimeError` with `.status == 404` | Session closed, wrong id | Start a fresh session |
 | **Strict miss** (proxy returns error to app) | Not an SDK error — surfaces as a Python HTTP client exception inside the SUT | Missing `mock_outbound` or wrong predicate | Add the rule; see [Debug strict miss](/guides/troubleshooting#_403-forbidden-on-outbound-under-strict-policy) |
 | **Invalid rule payload** | `RuntimeError` with `.status == 400` | Rule body doesn't validate against [rule-schema](/reference/rule-schema) | Fix the spec; most fields validated client-side |

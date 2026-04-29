@@ -1,40 +1,40 @@
-# Local deployment (Docker Compose)
+# Local proxy stack (Docker Compose)
 
-The fastest way to run the full Softprobe stack on a developer laptop or a CI runner. Based on the reference [`e2e/docker-compose.yaml`](https://github.com/softprobe/softprobe/blob/main/e2e/docker-compose.yaml).
+This page shows how to run your app, a sample upstream, and the Softprobe Envoy
+proxy on a laptop or CI runner while using the hosted runtime at
+`https://runtime.softprobe.dev`. There is no local runtime container in the
+official setup.
 
 ## What you get
 
-Five services on one Docker network:
+Four services on one Docker network:
 
 | Service | Image | Port | Role |
 |---|---|---|---|
-| `softprobe-runtime` | `ghcr.io/softprobe/softprobe-runtime` | 8080 | Control + OTLP |
 | `softprobe-proxy` | `envoyproxy/envoy:v1.27` + WASM | 8082 (ingress), 8084 (egress) | Data plane |
 | `app` | your SUT | 8081 | Application |
 | `upstream` | your dependency | 8083 | HTTP dependency |
 | `test-runner` | your test image | — | Sanity check |
 
+The proxy calls the hosted runtime for `/v1/inject` and `/v1/traces`. CLI and
+SDK calls also use the hosted runtime.
+
+## Environment
+
+```bash
+export SOFTPROBE_API_TOKEN=...     # from https://dashboard.softprobe.ai
+unset SOFTPROBE_RUNTIME_URL        # default is https://runtime.softprobe.dev
+```
+
 ## `docker-compose.yaml`
 
 ```yaml
 services:
-  softprobe-runtime:
-    image: ghcr.io/softprobe/softprobe-runtime:v0.5
-    environment:
-      SOFTPROBE_LISTEN_ADDR: 0.0.0.0:8080
-      SOFTPROBE_CAPTURE_CASE_PATH: /cases/captured.case.json
-    volumes:
-      - ./cases:/cases
-    ports:
-      - "8080:8080"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
-      interval: 5s
-      retries: 20
-
   softprobe-proxy:
     image: envoyproxy/envoy:v1.27-latest
     command: ["envoy", "-c", "/etc/envoy/envoy.yaml"]
+    environment:
+      SOFTPROBE_API_TOKEN: ${SOFTPROBE_API_TOKEN}
     volumes:
       - ./envoy.yaml:/etc/envoy/envoy.yaml
       - ./sp_istio_agent.wasm:/etc/envoy/sp_istio_agent.wasm
@@ -42,9 +42,6 @@ services:
       - "8082:8082"   # ingress listener
       - "8084:8084"   # egress listener
       - "18001:18001" # Envoy admin
-    depends_on:
-      softprobe-runtime:
-        condition: service_healthy
 
   app:
     image: your-org/your-sut:latest
@@ -53,24 +50,20 @@ services:
     ports:
       - "8081:8081"
     depends_on:
-      softprobe-proxy:
-        condition: service_started
-      upstream:
-        condition: service_healthy
+      - softprobe-proxy
+      - upstream
 
   upstream:
     image: your-org/your-dependency:latest
     ports:
       - "8083:8083"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8083/health"]
-      interval: 5s
-      retries: 20
 ```
 
 ## `envoy.yaml`
 
-One Envoy config with two HTTP listeners — ingress toward the app, egress toward dependencies. The Softprobe WASM filter sits on both chains.
+One Envoy config with two HTTP listeners: ingress toward the app, egress toward
+dependencies. The Softprobe WASM filter sits on both chains and sends OTLP calls
+to `https://runtime.softprobe.dev`.
 
 ```yaml
 static_resources:
@@ -100,7 +93,11 @@ static_resources:
                         configuration:
                           "@type": type.googleapis.com/google.protobuf.StringValue
                           value: |
-                            {"sp_backend_url":"http://softprobe-runtime:8080","direction":"ingress"}
+                            {
+                              "sp_backend_url":"https://runtime.softprobe.dev",
+                              "public_key":"<your-api-token>",
+                              "direction":"ingress"
+                            }
                         vm_config:
                           runtime: envoy.wasm.runtime.v8
                           code: { local: { filename: /etc/envoy/sp_istio_agent.wasm } }
@@ -131,7 +128,11 @@ static_resources:
                         configuration:
                           "@type": type.googleapis.com/google.protobuf.StringValue
                           value: |
-                            {"sp_backend_url":"http://softprobe-runtime:8080","direction":"egress"}
+                            {
+                              "sp_backend_url":"https://runtime.softprobe.dev",
+                              "public_key":"<your-api-token>",
+                              "direction":"egress"
+                            }
                         vm_config:
                           runtime: envoy.wasm.runtime.v8
                           code: { local: { filename: /etc/envoy/sp_istio_agent.wasm } }
@@ -162,34 +163,29 @@ admin:
 ## Bring it up
 
 ```bash
-# Download the WASM binary
 WASM_VERSION=$(curl -fsSL https://storage.googleapis.com/softprobe-published-files/agent/proxy-wasm/version)
 curl -fsSL "https://storage.googleapis.com/softprobe-published-files/agent/proxy-wasm/${WASM_VERSION}/sp_istio_agent.wasm" \
   -o sp_istio_agent.wasm
 
-# Start the stack
 docker compose up -d --wait
-
-# Verify
-softprobe doctor --runtime-url http://127.0.0.1:8080
+softprobe doctor
 ```
 
 Expected:
-```
-✓ runtime reachable at http://127.0.0.1:8080 (v0.5.0)
-✓ proxy healthy at http://127.0.0.1:8082
-✓ app reachable via proxy
+
+```text
+✓ runtime reachable at https://runtime.softprobe.dev
+✓ authenticated as <your-org>
 ```
 
-## Running your tests against it
+## Running tests
 
 ```bash
-SOFTPROBE_RUNTIME_URL=http://127.0.0.1:8080 \
-APP_URL=http://127.0.0.1:8082 \
-npm test
+APP_URL=http://127.0.0.1:8082 npm test
 ```
 
-The test client sends `x-softprobe-session-id` to `127.0.0.1:8082` (the ingress listener), not to `:8081` directly.
+The test client sends `x-softprobe-session-id` to `127.0.0.1:8082` (the ingress
+listener), not to `:8081` directly.
 
 ## Tearing down
 
@@ -197,63 +193,14 @@ The test client sends `x-softprobe-session-id` to `127.0.0.1:8082` (the ingress 
 docker compose down
 ```
 
-To reset state between runs without restarting the stack:
+Session state is hosted. Close sessions with the CLI or SDK during test cleanup:
 
 ```bash
-curl -X POST http://127.0.0.1:8080/v1/admin/reset
+softprobe session close --session "$SOFTPROBE_SESSION_ID" --out cases/captured.case.json
 ```
-
-(Admin endpoint; requires `SOFTPROBE_ADMIN_TOKEN` in v0.6+.)
-
-## Watching logs
-
-```bash
-docker compose logs -f softprobe-runtime softprobe-proxy
-```
-
-## Persisting captures between runs
-
-Case files are written to the runtime's mounted `./cases/` directory. By default this is preserved across `docker compose restart` because it's a bind mount.
-
-For a per-session path:
-
-```bash
-softprobe session close --session $SOFTPROBE_SESSION_ID --out cases/checkout-$(date +%Y%m%d).case.json
-```
-
-## CI variant
-
-For GitHub Actions, run the runtime as a service container and skip the proxy (if your app can hit a stubbed upstream directly):
-
-```yaml
-services:
-  softprobe-runtime:
-    image: ghcr.io/softprobe/softprobe-runtime:v0.5
-    ports:
-      - 8080:8080
-    options: >-
-      --health-cmd "wget -qO- http://127.0.0.1:8080/health"
-      --health-interval 5s
-```
-
-For tests that require the proxy (end-to-end capture/replay with a real SUT), use `docker compose` inside the workflow step:
-
-```yaml
-- run: docker compose -f e2e/docker-compose.yaml up -d --wait
-- run: npm test
-```
-
-See [CI integration](/guides/ci-integration) for full workflows.
-
-## Customizing
-
-- **Different upstream host:** update the `upstream` cluster in `envoy.yaml` and the `app` service's env.
-- **Two upstreams:** add a second cluster and a second route match (`/api/stripe/*` → stripe, `/api/auth/*` → auth).
-- **Auth headers on ingress:** add an `envoy.filters.http.lua` filter before the WASM filter.
-- **TLS:** bind the proxy to a TLS listener instead of plain HTTP; point the app at the HTTPS URL.
 
 ## Next
 
-- [Kubernetes deployment](/deployment/kubernetes) — production-grade with Istio.
-- [Hosted deployment](/deployment/hosted) — `runtime.softprobe.dev`.
+- [Kubernetes deployment](/deployment/kubernetes) — run the proxy with Istio.
+- [Hosted runtime](/deployment/hosted) — account, token, and hosted runtime behavior.
 - [Troubleshooting](/guides/troubleshooting) — when `docker compose up` doesn't go smoothly.

@@ -18,6 +18,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func runtimeURL(t *testing.T) string {
@@ -89,7 +90,7 @@ func TestHostedSmoke_HealthCheck(t *testing.T) {
 }
 
 // TestHostedSmoke_FullReplayFlow runs the core replay workflow:
-// create session → load-case → inject hit (via rules) → get case → close
+// create session → load-case → rules → stats → close
 func TestHostedSmoke_FullReplayFlow(t *testing.T) {
 	base := runtimeURL(t)
 	key := apiKey(t)
@@ -123,13 +124,10 @@ func TestHostedSmoke_FullReplayFlow(t *testing.T) {
 		t.Fatalf("rules: status=%v body=%s", resp, body)
 	}
 
-	// 4. GET /v1/cases/{sessionID} — case must be stored
-	resp, body = client.do(http.MethodGet, "/v1/cases/"+sessionID, nil)
+	// 4. Read stats to verify session is queryable.
+	resp, body = client.do(http.MethodGet, "/v1/sessions/"+sessionID+"/stats", nil)
 	if resp == nil || resp.StatusCode != http.StatusOK {
-		t.Fatalf("get case: status=%v body=%s", resp, body)
-	}
-	if !strings.Contains(string(body), sessionID) {
-		t.Errorf("case body does not contain sessionID: %s", body)
+		t.Fatalf("stats: status=%v body=%s", resp, body)
 	}
 
 	// 5. Close
@@ -137,4 +135,66 @@ func TestHostedSmoke_FullReplayFlow(t *testing.T) {
 	if resp == nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("close: status=%v body=%s", resp, body)
 	}
+}
+
+// TestHostedSmoke_CaptureRoundTrip verifies hosted capture goes through
+// /v1/traces and becomes queryable via /v1/captures/{captureId}.
+func TestHostedSmoke_CaptureRoundTrip(t *testing.T) {
+	base := runtimeURL(t)
+	key := apiKey(t)
+	client := &smokeClient{base: base, apiKey: key, http: &http.Client{}}
+
+	tracePayload := []byte(`{
+  "resourceSpans": [{
+    "scopeSpans": [{
+      "spans": [{
+        "traceId": "AAAAAAAAAAAAAAAAAAAAAA==",
+        "spanId": "AAAAAAAAAAA=",
+        "name": "sp.extract",
+        "attributes": [
+          {"key": "sp.span.type", "value": {"stringValue": "extract"}}
+        ]
+      }]
+    }]
+  }]
+}`)
+
+	resp, body := client.do(http.MethodPost, "/v1/traces", tracePayload)
+	if resp == nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("post traces: status=%v body=%s", resp, body)
+	}
+	var traceResp struct {
+		CaptureID string `json:"captureId"`
+		Accepted  bool   `json:"accepted"`
+	}
+	if err := json.Unmarshal(body, &traceResp); err != nil {
+		t.Fatalf("decode traces response: %v body=%s", err, body)
+	}
+	if traceResp.CaptureID == "" || !traceResp.Accepted {
+		t.Fatalf("unexpected traces response: %s", body)
+	}
+
+	deadline := time.Now().Add(45 * time.Second)
+	var lastStatus int
+	var lastBody []byte
+	for time.Now().Before(deadline) {
+		resp, body = client.do(http.MethodGet, "/v1/captures/"+traceResp.CaptureID, nil)
+		if resp != nil && resp.StatusCode == http.StatusOK {
+			var capDoc map[string]any
+			if err := json.Unmarshal(body, &capDoc); err != nil {
+				t.Fatalf("decode capture document: %v body=%s", err, body)
+			}
+			if got, _ := capDoc["captureId"].(string); got != traceResp.CaptureID {
+				t.Fatalf("captureId mismatch: got=%q want=%q body=%s", got, traceResp.CaptureID, body)
+			}
+			return
+		}
+		if resp != nil {
+			lastStatus = resp.StatusCode
+		}
+		lastBody = body
+		time.Sleep(2 * time.Second)
+	}
+
+	t.Fatalf("capture not materialized: captureId=%s lastStatus=%d lastBody=%s", traceResp.CaptureID, lastStatus, lastBody)
 }

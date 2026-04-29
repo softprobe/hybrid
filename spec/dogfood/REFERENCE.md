@@ -18,7 +18,7 @@ Post PD5.3a (released Go module tags), the reference will be a released tag
 ## Invariant
 
 > A case refresh must land in a PR that contains **no** changes to
-> `softprobe-runtime/`, `softprobe-go/`, `softprobe-js/`, `softprobe-python/`,
+> `softprobe-runtime/`, `softprobe-js/`, `softprobe-python/`,
 > or `softprobe-java/`. Case files record protocol behavior at a point in time;
 > mixing behavioral changes and case refreshes makes regressions ambiguous.
 

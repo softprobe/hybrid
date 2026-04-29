@@ -1,45 +1,30 @@
 # Installation
 
-Softprobe has four installable pieces. You pick the ones you need:
+Softprobe has three installable pieces. The runtime is hosted at
+`https://runtime.softprobe.dev`; there is no runtime installation step in the
+official path.
 
 | Piece | Install for… | Ships as |
 |---|---|---|
-| **Runtime** (`softprobe-runtime`) | Hosting the control plane yourself | Docker image + static binary |
 | **CLI** (`softprobe`) | Scripting capture, running suites, CI | curl-install, direct download |
 | **Proxy** (Envoy + Softprobe WASM) | Intercepting HTTP in your environment | WASM binary + Envoy config |
 | **SDK** (one per language) | Authoring tests | npm, PyPI, Maven Central, Go modules |
 
-A typical laptop-dev setup uses all four via `docker compose` and a local `npm install`. A typical CI setup uses the Docker image + the CLI binary + the SDK for the test language.
+A typical laptop-dev setup uses the CLI, one SDK, and a local Envoy proxy next
+to your app. A typical CI setup uses the same hosted runtime, with
+`SOFTPROBE_API_TOKEN` stored as a secret.
 
-## Runtime
+## Hosted runtime
 
-::: tip Use the hosted runtime (recommended)
-Skip this section entirely. Point your CLI and SDKs at `https://runtime.softprobe.dev` — no Docker, no binary to manage. See [Hosted deployment](/deployment/hosted) for a five-minute setup guide.
-:::
-
-**Self-hosting** the runtime makes sense when you need no internet dependency, a fully air-gapped environment, or want to run the runtime inside your own Kubernetes cluster. The three options below are for that case.
-
-### Docker
+Create an API token in [dashboard.softprobe.ai](https://dashboard.softprobe.ai)
+and export it before using the CLI, SDKs, or proxy:
 
 ```bash
-docker run -p 8080:8080 ghcr.io/softprobe/softprobe-runtime:v0.5
+export SOFTPROBE_API_TOKEN=...
 ```
 
-The image is ~30 MB (`distroless` base) and starts in under a second. The only required environment variable is `SOFTPROBE_LISTEN_ADDR` (defaults to `0.0.0.0:8080`).
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `SOFTPROBE_LISTEN_ADDR` | `0.0.0.0:8080` | HTTP bind address for both control API and OTLP |
-| `SOFTPROBE_CAPTURE_CASE_PATH` | *(unset)* | Where to flush captured cases on session close |
-| `SOFTPROBE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
-
-### Source (Go 1.22+)
-
-```bash
-git clone https://github.com/softprobe/softprobe-runtime
-cd softprobe-runtime && go build -o softprobe-runtime .
-./softprobe-runtime
-```
+`SOFTPROBE_RUNTIME_URL` defaults to `https://runtime.softprobe.dev`; leave it
+unset unless Softprobe support asks you to point at a different hosted endpoint.
 
 ## CLI
 
@@ -104,7 +89,7 @@ http_filters:
             local: { filename: /etc/envoy/sp_istio_agent.wasm }
 ```
 
-`public_key` is your API token. `sp_backend_url` defaults to `https://runtime.softprobe.dev` — omit it unless you are self-hosting the runtime.
+`public_key` is your API token. `sp_backend_url` defaults to `https://runtime.softprobe.dev`; omit it in the official hosted setup.
 
 Download the WASM binary:
 
@@ -122,7 +107,7 @@ In a mesh, attach the filter to your workload with a `WasmPlugin` resource. See 
 Install the SDK for the language your tests are written in. You can install more than one if your services span languages.
 
 ::: warning Publication status
-Only the TypeScript SDK (`@softprobe/softprobe-js`) has historical releases on a public registry. **Python, Java, and Go SDKs are not yet released** from this repository — the `pip install`, `go get`, and Maven coordinates below refer to **planned** releases. Today, consume Python / Java / Go SDKs directly from source in the [softprobe monorepo](https://github.com/softprobe/softprobe) (see each package's `README.md`).
+TypeScript (`@softprobe/softprobe-js`) and Go (`github.com/softprobe/softprobe-go`) are published. Python and Java coordinates below are still planned releases.
 :::
 
 ### TypeScript / JavaScript
@@ -134,7 +119,7 @@ npm install --save-dev @softprobe/softprobe-js
 ```ts
 import { Softprobe } from '@softprobe/softprobe-js';
 
-const softprobe = new Softprobe();  // reads SOFTPROBE_API_TOKEN; defaults to https://runtime.softprobe.dev
+const softprobe = new Softprobe();  // reads SOFTPROBE_API_TOKEN; uses https://runtime.softprobe.dev
 ```
 
 Reference: [TypeScript SDK](/reference/sdk-typescript).
@@ -149,7 +134,7 @@ pip install softprobe
 ```python
 from softprobe import Softprobe
 
-softprobe = Softprobe()  # reads SOFTPROBE_RUNTIME_URL; defaults to https://runtime.softprobe.dev
+softprobe = Softprobe()  # reads SOFTPROBE_API_TOKEN; uses https://runtime.softprobe.dev
 ```
 
 Reference: [Python SDK](/reference/sdk-python).
@@ -171,7 +156,6 @@ Reference: [Java SDK](/reference/sdk-java).
 ### Go
 
 ```bash
-# Planned Go module release — not yet published from this repo.
 go get github.com/softprobe/softprobe-go@v0.5.0
 ```
 
@@ -195,7 +179,7 @@ After that, follow the [Quick start](/quickstart).
 
 | Component | Current release | Minimum compatible CLI | Minimum compatible SDK |
 |---|---|---|---|
-| Runtime | v0.5.0 | v0.5.0 | v0.5.0 |
+| Hosted runtime | v0.5.0 | v0.5.0 | v0.5.0 |
 | CLI | v0.5.0 | — | v0.4.0+ |
 | Proxy WASM | v0.5.0 | v0.5.0 | — |
 | Spec | v1 | v0.5.0 | v0.4.0+ |

@@ -2,105 +2,78 @@ package hostedbackend_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/alicebob/miniredis/v2"
-	"github.com/fsouza/fake-gcs-server/fakestorage"
 
 	"softprobe-runtime/internal/authn"
 	"softprobe-runtime/internal/controlapi"
-	"softprobe-runtime/internal/gcs"
+	"softprobe-runtime/internal/datalake"
 	"softprobe-runtime/internal/hostedbackend"
 	"softprobe-runtime/internal/store"
 )
 
-func newEndpointDeps(t *testing.T) (store.Store, *gcs.Client, string, authn.TenantInfo) {
-	t.Helper()
-	mr := miniredis.RunT(t)
-	st, err := store.NewRedisStore(mr.Addr(), "", "tenantE", 24*time.Hour)
-	if err != nil {
-		t.Fatalf("NewRedisStore: %v", err)
-	}
-	fakeSrv := fakestorage.NewServer([]fakestorage.Object{})
-	t.Cleanup(fakeSrv.Stop)
-	bucket := "tenantE-bucket"
-	fakeSrv.CreateBucketWithOpts(fakestorage.CreateBucketOpts{Name: bucket})
-	gcsClient := gcs.NewClientFromStorage(fakeSrv.Client())
-	tenantInfo := authn.TenantInfo{TenantID: "tenantE", BucketName: bucket}
-	return st, gcsClient, bucket, tenantInfo
+type fakeSQLClient struct {
+	resp datalake.SQLQueryResponse
+	err  error
 }
 
-// ── GET /v1/cases/{caseId} ────────────────────────────────────────────────────
+func (f *fakeSQLClient) QuerySQL(_ context.Context, _ string) (datalake.SQLQueryResponse, error) {
+	return f.resp, f.err
+}
 
-func TestGetCase_Hit(t *testing.T) {
-	st, gcsClient, bucket, tenantInfo := newEndpointDeps(t)
-
-	// Seed a case file in GCS
-	sess := st.Create("replay")
-	caseBody := []byte(`{"version":"1.0.0","caseId":"` + sess.ID + `","traces":[]}`)
-	_ = gcsClient.Put(t.Context(), bucket, "tenants/"+tenantInfo.TenantID+"/cases/"+sess.ID+".case.json", caseBody)
-
-	mux := hostedbackend.NewHostedEndpoints(st, gcsClient, bucket)
-	req := httptest.NewRequest(http.MethodGet, "/v1/cases/"+sess.ID, nil)
-	req = req.WithContext(controlapi.WithTenant(req.Context(), tenantInfo))
+func TestGetCapture_Hit(t *testing.T) {
+	st := store.NewStore()
+	client := &fakeSQLClient{
+		resp: datalake.SQLQueryResponse{
+			Columns: []string{"trace_id", "http_request_path"},
+			Rows: [][]json.RawMessage{
+				{json.RawMessage(`"trace1"`), json.RawMessage(`"/checkout"`)},
+			},
+			RowCount: 1,
+		},
+	}
+	mux := hostedbackend.NewHostedEndpoints(st, client)
+	req := httptest.NewRequest(http.MethodGet, "/v1/captures/cap_123", nil)
+	req = req.WithContext(controlapi.WithTenant(req.Context(), authn.TenantInfo{TenantID: "tenantE"}))
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), sess.ID) {
-		t.Errorf("response does not contain caseId %q", sess.ID)
+	if !strings.Contains(rec.Body.String(), `"captureId": "cap_123"`) {
+		t.Fatalf("missing captureId in response: %s", rec.Body.String())
 	}
 }
 
-func TestGetCase_NotFound(t *testing.T) {
-	st, gcsClient, bucket, tenantInfo := newEndpointDeps(t)
-	mux := hostedbackend.NewHostedEndpoints(st, gcsClient, bucket)
-
-	req := httptest.NewRequest(http.MethodGet, "/v1/cases/sess_unknown", nil)
-	req = req.WithContext(controlapi.WithTenant(req.Context(), tenantInfo))
+func TestGetCapture_NotFound(t *testing.T) {
+	st := store.NewStore()
+	client := &fakeSQLClient{
+		resp: datalake.SQLQueryResponse{Columns: []string{"trace_id"}, Rows: nil, RowCount: 0},
+	}
+	mux := hostedbackend.NewHostedEndpoints(st, client)
+	req := httptest.NewRequest(http.MethodGet, "/v1/captures/cap_unknown", nil)
+	req = req.WithContext(controlapi.WithTenant(req.Context(), authn.TenantInfo{TenantID: "tenantE"}))
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
-		t.Errorf("status = %d, want 404", rec.Code)
+		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }
 
-func TestGetCase_RequiresTenantContext(t *testing.T) {
-	st, gcsClient, bucket, _ := newEndpointDeps(t)
-	mux := hostedbackend.NewHostedEndpoints(st, gcsClient, bucket)
-
-	req := httptest.NewRequest(http.MethodGet, "/v1/cases/sess_x", nil)
-	// no tenant context
+func TestGetCapture_RequiresTenantContext(t *testing.T) {
+	st := store.NewStore()
+	client := &fakeSQLClient{}
+	mux := hostedbackend.NewHostedEndpoints(st, client)
+	req := httptest.NewRequest(http.MethodGet, "/v1/captures/cap_x", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status = %d, want 401", rec.Code)
+		t.Fatalf("status = %d, want 401", rec.Code)
 	}
 }
-
-func TestGetCase_StorageErrorReturnsInternalError(t *testing.T) {
-	st, gcsClient, bucket, tenantInfo := newEndpointDeps(t)
-	sess := st.Create("replay")
-
-	mux := hostedbackend.NewHostedEndpoints(st, gcsClient, bucket)
-	req := httptest.NewRequest(http.MethodGet, "/v1/cases/"+sess.ID, nil)
-	ctx, cancel := context.WithCancel(req.Context())
-	cancel()
-	req = req.WithContext(controlapi.WithTenant(ctx, tenantInfo))
-
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want 500; body: %s", rec.Code, rec.Body.String())
-	}
-}
-

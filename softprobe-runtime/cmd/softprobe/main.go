@@ -733,7 +733,7 @@ func runSessionClose(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// If --out was given and the runtime did not return a local capturePath,
-	// fetch the case via GET /v1/cases/{id} (hosted runtime path).
+	// fetch the capture JSON via GET /v1/captures/{id} (hosted runtime path).
 	trimmedOut := strings.TrimSpace(*outPath)
 	if trimmedOut != "" && closed.CapturePath == "" {
 		if code := downloadCase(*runtimeURL, *sessionID, trimmedOut, stderr); code != exitOK {
@@ -763,12 +763,12 @@ func runSessionClose(args []string, stdout, stderr io.Writer) int {
 	return exitOK
 }
 
-// downloadCase fetches GET /v1/cases/{sessionID} and writes the body to outPath.
-func downloadCase(runtimeURL, sessionID, outPath string, stderr io.Writer) int {
+// downloadCase fetches GET /v1/captures/{captureID} and writes the body to outPath.
+func downloadCase(runtimeURL, captureID, outPath string, stderr io.Writer) int {
 	client := newHTTPClient(10 * time.Second)
 	req, err := newRuntimeRequest(
 		http.MethodGet,
-		strings.TrimRight(runtimeURL, "/")+"/v1/cases/"+sessionID,
+		strings.TrimRight(runtimeURL, "/")+"/v1/captures/"+captureID,
 		nil,
 	)
 	if err != nil {
@@ -1045,7 +1045,7 @@ func runSessionPolicySet(args []string, stdout, stderr io.Writer) int {
 
 func runCases(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || args[0] != "get" {
-		_, _ = fmt.Fprintln(stderr, "usage: softprobe cases get <sessionID> [--runtime-url URL] [--out PATH]")
+		_, _ = fmt.Fprintln(stderr, "usage: softprobe cases get <captureID> [--runtime-url URL] [--out PATH]")
 		return exitInvalidArgs
 	}
 	return runCasesGet(args[1:], stdout, stderr)
@@ -1060,15 +1060,15 @@ func runCasesGet(args []string, stdout, stderr io.Writer) int {
 		return exitInvalidArgs
 	}
 	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "cases get: expected one session ID argument")
+		_, _ = fmt.Fprintln(stderr, "cases get: expected one capture ID argument")
 		return exitInvalidArgs
 	}
-	sessionID := fs.Arg(0)
+	captureID := fs.Arg(0)
 
 	client := newHTTPClient(10 * time.Second)
 	req, err := newRuntimeRequest(
 		http.MethodGet,
-		strings.TrimRight(*runtimeURL, "/")+"/v1/cases/"+sessionID,
+		strings.TrimRight(*runtimeURL, "/")+"/v1/captures/"+captureID,
 		nil,
 	)
 	if err != nil {

@@ -15,6 +15,8 @@ test client → Envoy proxy → app → Envoy proxy → upstream dependency
 
 Read `docs/design.md` before starting any task. Do not hallucinate scope outside what is written there.
 
+**User-facing / agent context:** When changing replay flows, CLI/SDK surface, or session headers, update [`docs-site/public/ai-context.md`](docs-site/public/ai-context.md) (served as `https://docs.softprobe.dev/ai-context.md`) and run `make validate-ai-context`.
+
 ## Agent Operating Rules (from AGENTS.md)
 
 This repo uses a strictly sequentially-gated TDD workflow:

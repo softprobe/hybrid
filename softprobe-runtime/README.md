@@ -34,8 +34,9 @@ Set `SOFTPROBE_RUNTIME_URL` to a local address when running the server yourself.
 
 ## Hosted mode (auto-detected)
 
-When `SOFTPROBE_AUTH_URL`, `REDIS_HOST`, and `GCS_BUCKET` are all set the server
-boots in hosted mode: multi-tenant bearer auth, Redis session store, GCS case storage.
+When `SOFTPROBE_AUTH_URL`, `REDIS_HOST`, and `DATALAKE_URL` are all set the server
+boots in hosted mode: multi-tenant bearer auth, Redis replay session state, and
+datalake-backed capture ingest/export.
 The `SOFTPROBE_LISTEN_ADDR` should be `:8080` for Cloud Run.
 
 ## Local / self-hosted setup

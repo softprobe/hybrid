@@ -18,31 +18,56 @@ If you write HTTP services that call other HTTP services, you have probably felt
 
 Think of Softprobe as **three moving parts** and **one artifact**:
 
-```text
-          ┌───────────────────┐
-          │  Your test code   │  (Jest / pytest / JUnit / go test / CLI)
-          └────────┬──────────┘
-                   │ HTTP control API
-                   ▼
-┌────────────┐  ┌──────────────────────────┐
-│   Envoy +  │◄─┤   softprobe-runtime      │  ← one Go binary
-│  Softprobe │  │  (control + OTLP)        │
-│    WASM    │  └──────────────────────────┘
-└─────┬──────┘             ▲
-      │                    │ writes / reads
-      │                    ▼
-      │             ┌──────────────┐
-      │             │ *.case.json  │  ← the artifact (OTLP traces in JSON)
-      │             └──────────────┘
-      │
-      ▼
-┌────────────────────────────┐   ┌──────────────────────────┐
-| Your application under test|⟶ |its HTTP dependencies     |
-└────────────────────────────┘   └──────────────────────────┘
+```d2
+direction: down
+
+local: {
+  label: "User local components"
+  style: {
+    fill: "#e8f1ff"
+    stroke: "#2563eb"
+  }
+  direction: right
+
+  test_cli: "Test / CLI\nJest / pytest / JUnit / go test"
+  proxy: "Envoy sidecar\nSoftprobe WASM"
+  app: "Your application\nunder test"
+
+  test_cli -> proxy: "test traffic"
+  proxy <-> app: "app HTTP"
+}
+
+row: {
+  direction: right
+
+  hosted: {
+    label: "Softprobe hosted services"
+    style: {
+      fill: "#ede9fe"
+      stroke: "#7c3aed"
+    }
+    runtime: "runtime.softprobe.dev\ncontrol API + OTLP"
+    storage: "Object storage\n*.case.json + OTLP JSON"
+    runtime -> storage: "case artifacts"
+  }
+
+  external: {
+    label: "User external HTTP dependencies"
+    style: {
+      fill: "#fff4e6"
+      stroke: "#ea580c"
+    }
+    deps: "Payment gateway / CRM / APIs\ne.g. api.stripe.com"
+  }
+}
+
+local.proxy <-> row.external.deps: "upstream HTTP on miss"
+local.test_cli <-> row.hosted.runtime: "control API"
+local.proxy <-> row.hosted.runtime: "OTLP inject + traces"
 ```
 
 1. **Proxy** — Envoy with the Softprobe WASM filter. Sits beside your app as a sidecar and sees every inbound and outbound HTTP hop.
-2. **Runtime** — one Go service. It speaks an HTTP control API (used by tests and the CLI) and an OTLP trace API (used by the proxy). Both handlers share the same in-memory session store, so a rule set by a test is visible to the proxy immediately.
+2. **Hosted runtime** — the Softprobe service at `https://runtime.softprobe.dev`. It speaks an HTTP control API (used by tests and the CLI) and an OTLP trace API (used by the proxy). Both handlers share the same session state, so a rule set by a test is visible to the proxy immediately.
 3. **SDKs** — thin clients for TypeScript, Python, Java, and Go that let your tests express intent in terms like `findInCase`, `mockOutbound`, `loadCaseFromFile`.
 
 The **artifact** is `*.case.json` — a plain JSON document containing an array of OTLP-shaped traces. It's diffable, git-friendly, and can be edited by hand or by an LLM.
@@ -72,13 +97,13 @@ The **artifact** is `*.case.json` — a plain JSON document containing an array 
 | "I want to replay in my test file today" | [Replay in Jest](/guides/replay-in-jest), [pytest](/guides/replay-in-pytest), [JUnit](/guides/replay-in-junit), or [Go](/guides/replay-in-go) |
 | "I need to run 10k cases nightly in CI" | [Run a suite at scale](/guides/run-a-suite-at-scale) |
 | "I want to understand how it works first" | [Architecture](/concepts/architecture) |
-| "I'm operating the runtime in production" | [Deployment](/deployment/local) |
+| "I need to deploy the proxy" | [Deployment](/deployment/local) |
 
 ## How this platform evolved
 
 Softprobe began as a per-framework mocker for Node.js. Patching every HTTP client (Express, Fastify, Axios, `fetch`, Postgres, Redis) turned out to be an endless maintenance tax — and it only ever worked for one language. The current design moves interception **below** the application, into the proxy, so the same capture artifact can be replayed against a Java service, a Python service, or a Go service with identical semantics.
 
-The tradeoff is a modest increase in **operational surface** (you run an Envoy and a runtime container) in exchange for **dramatic savings in test maintenance** and **real cross-language parity**.
+The tradeoff is a modest increase in **operational surface** (you run an Envoy proxy next to the app) in exchange for **dramatic savings in test maintenance** and **real cross-language parity**.
 
 ---
 

@@ -12,11 +12,11 @@ For Kubernetes + Istio, see [Kubernetes deployment](/deployment/kubernetes). For
 
 ## Topology
 
-```text
- test client ─► Envoy :8082 (ingress) ─► app :8081 ─► Envoy :8084 (egress) ─► upstream :8083
-                     │                                       │
-                     └──────── POST /v1/inject ───────────────┴──► softprobe-runtime :8080
-                                                                   POST /v1/traces
+```mermaid
+flowchart LR
+  client["test client"] --> ingress["Envoy :8082 (ingress)"] --> app["app :8081"] --> egress["Envoy :8084 (egress)"] --> upstream["upstream :8083"]
+  ingress -. "POST /v1/inject" .-> runtime["runtime.softprobe.dev"]
+  egress -. "POST /v1/traces" .-> runtime
 ```
 
 One Envoy process, two listeners:
@@ -26,13 +26,13 @@ One Envoy process, two listeners:
 | Ingress | `8082` | Test client → app | `outbound` (from proxy's POV, to app) |
 | Egress | `8084` | App → real upstream | `outbound` (to real upstream) |
 
-Both listeners carry the **same** WASM filter configuration, pointing at the same runtime.
+Both listeners carry the **same** WASM filter configuration, pointing at the hosted runtime.
 
 ## Prerequisites
 
 - Envoy `v1.30` or newer (`envoy --version`).
 - The Softprobe WASM binary (`sp_istio_agent.wasm`). Download from [GitHub releases](https://github.com/softprobe/softprobe/releases) or build from source.
-- A running `softprobe-runtime` reachable by Envoy — see [Installation](/installation).
+- `SOFTPROBE_API_TOKEN` from [dashboard.softprobe.ai](https://dashboard.softprobe.ai).
 
 ## Configuration
 
@@ -77,7 +77,8 @@ static_resources:
                             {
                               "traffic_direction": "inbound",
                               "service_name": "my-app",
-                              "sp_backend_url": "http://softprobe-runtime:8080"
+                              "sp_backend_url": "https://runtime.softprobe.dev",
+                              "public_key": "<your-api-token>"
                             }
                   - name: envoy.filters.http.router
                     typed_config:
@@ -119,7 +120,8 @@ static_resources:
                             {
                               "traffic_direction": "outbound",
                               "service_name": "my-app",
-                              "sp_backend_url": "http://softprobe-runtime:8080"
+                              "sp_backend_url": "https://runtime.softprobe.dev",
+                              "public_key": "<your-api-token>"
                             }
                   - name: envoy.filters.http.router
                     typed_config:
@@ -148,17 +150,6 @@ static_resources:
                   address:
                     socket_address: { address: upstream.example.com, port_value: 443 }
 
-    - name: softprobe-runtime
-      type: LOGICAL_DNS
-      connect_timeout: 5s
-      load_assignment:
-        cluster_name: softprobe-runtime
-        endpoints:
-          - lb_endpoints:
-              - endpoint:
-                  address:
-                    socket_address: { address: 127.0.0.1, port_value: 8080 }
-
 admin:
   address:
     socket_address: { address: 127.0.0.1, port_value: 18001 }
@@ -170,8 +161,8 @@ admin:
 |---|---|---|
 | `traffic_direction` | `"inbound"` \| `"outbound"` | Which leg this listener intercepts. |
 | `service_name` | string | Logical service name, stamped on OTLP as `sp.service.name`. |
-| `sp_backend_url` | URL | Where the WASM sends `/v1/inject` and `/v1/traces`. Point at your runtime. |
-| `public_key` | string | Optional; reserved for hosted-deployment authentication. |
+| `sp_backend_url` | URL | Where the WASM sends `/v1/inject` and `/v1/traces`. Use `https://runtime.softprobe.dev`. |
+| `public_key` | string | Hosted-runtime API token. |
 | `collectionRules` | object | Which paths to intercept. `{"http":{"client":[{"host":".*","paths":[".*"]}]}}` captures everything. |
 | `exemptionRules` | array | Paths to skip (e.g. `/health`, `/ready`). |
 
@@ -198,21 +189,21 @@ You should see two listeners bind on `:8082` and `:8084`, and the admin interfac
 
 ## Smoke test
 
-Start a runtime, then drive traffic through the ingress listener with a capture session:
+Create a hosted capture session with the CLI, then drive traffic through the
+ingress listener:
 
 ```bash
-# 1. Start runtime + app somewhere Envoy can reach.
+# 1. Start the app and Envoy somewhere they can reach each other.
 
-# 2. Create a capture session.
-SESSION=$(curl -s -XPOST http://127.0.0.1:8080/v1/sessions \
-  -d '{"mode":"capture"}' | jq -r .sessionId)
+# 2. Create a capture session against the hosted runtime.
+eval "$(softprobe session start --mode capture --shell)"
 
 # 3. Drive traffic through ingress (:8082), carrying the session header.
-curl -s -H "x-softprobe-session-id: $SESSION" \
+curl -s -H "x-softprobe-session-id: $SOFTPROBE_SESSION_ID" \
   http://127.0.0.1:8082/hello
 
 # 4. Close and inspect.
-curl -s -XPOST "http://127.0.0.1:8080/v1/sessions/$SESSION/close"
+softprobe session close --session "$SOFTPROBE_SESSION_ID" --out e2e/captured.case.json
 softprobe inspect case e2e/captured.case.json
 ```
 

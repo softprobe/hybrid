@@ -31,35 +31,55 @@ You attach that `sessionId` to every HTTP request that should participate in the
 
 ### Session lifecycle
 
-```text
-┌──────────────┐      ┌──────────────┐      ┌──────────────┐
-│   CREATED    │─────►│  CONFIGURED  │─────►│    CLOSED    │
-│  (revision 1)│      │ (revision 2+) │      │  (deleted)   │
-└──────────────┘      └──────┬───────┘      └──────────────┘
-                             │
-                             │ traffic flows, proxy asks,
-                             │ runtime answers from state
-                             ▼
-                    ┌──────────────────┐
-                    │ STATE VISIBLE TO │
-                    │  PROXY IMMEDIATELY│
-                    └──────────────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> CREATED : POST /v1/sessions
+    CREATED --> CONFIGURED : load-case, rules, policy, fixtures
+    CONFIGURED --> CLOSED : POST /v1/sessions/close
+
+    note right of CREATED
+        revision 1
+    end note
+
+    note right of CONFIGURED
+        revision 2+
+    end note
+
+    note right of CLOSED
+        deleted
+    end note
+
+    CONFIGURED --> CONFIGURED : traffic flows, proxy asks, runtime answers from state
 ```
 
 Every mutating call (`load-case`, `rules`, `policy`, `fixtures`) bumps `sessionRevision`. This is how the proxy safely caches inject decisions: the cache key is `(sessionId, sessionRevision, requestFingerprint)`, so when you call `clearRules()` or `mockOutbound()`, the new revision invalidates all prior hits.
 
 ### Session revision, step by step
 
-```text
-Test thread                                Runtime state
-───────────                                ─────────────
-POST /v1/sessions {mode:replay}       →    { id: sess_X, rev: 1, rules: [] }
-POST /v1/sessions/X/load-case {…}     →    { id: sess_X, rev: 2, case: ▯, rules: [] }
-POST /v1/sessions/X/rules    {r1}     →    { id: sess_X, rev: 3, case: ▯, rules: [r1] }
-POST /v1/sessions/X/rules    {r1,r2}  →    { id: sess_X, rev: 4, case: ▯, rules: [r1, r2] }
-                                           — proxy's next inject sees rev 4 —
-POST /v1/sessions/X/rules    {}       →    { id: sess_X, rev: 5, case: ▯, rules: [] }
-POST /v1/sessions/X/close             →    (gone)
+```mermaid
+sequenceDiagram
+    participant Test as Test thread
+    participant Runtime as Runtime state
+
+    Test->>Runtime: POST /v1/sessions {mode:replay}
+    Runtime-->>Test: { id: sess_X, rev: 1, rules: [] }
+
+    Test->>Runtime: POST /v1/sessions/X/load-case {…}
+    Runtime-->>Test: { id: sess_X, rev: 2, case: ▯, rules: [] }
+
+    Test->>Runtime: POST /v1/sessions/X/rules {r1}
+    Runtime-->>Test: { id: sess_X, rev: 3, case: ▯, rules: [r1] }
+
+    Test->>Runtime: POST /v1/sessions/X/rules {r1,r2}
+    Runtime-->>Test: { id: sess_X, rev: 4, case: ▯, rules: [r1, r2] }
+
+    Note over Runtime: proxy's next inject sees rev 4
+
+    Test->>Runtime: POST /v1/sessions/X/rules {}
+    Runtime-->>Test: { id: sess_X, rev: 5, case: ▯, rules: [] }
+
+    Test->>Runtime: POST /v1/sessions/X/close
+    Runtime-->>Test: (gone)
 ```
 
 ### When to reuse a session vs. start a new one

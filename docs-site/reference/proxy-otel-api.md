@@ -1,6 +1,6 @@
 # Proxy OTLP API
 
-The **proxy OTLP API** is the wire contract between the Softprobe proxy (Envoy + WASM) and `softprobe-runtime`. In the default OSS layout this API is served by the same process as the [HTTP control API](/reference/http-control-api), sharing one in-memory session store.
+The **proxy OTLP API** is the wire contract between the Softprobe proxy (Envoy + WASM) and the hosted runtime at `https://runtime.softprobe.dev`. It is served alongside the [HTTP control API](/reference/http-control-api), sharing the same tenant-scoped session state.
 
 **You only need this page if you are:**
 
@@ -19,7 +19,7 @@ The normative source is [`spec/protocol/proxy-otel-api.md`](https://github.com/s
 - `Content-Type`: `application/x-protobuf` **or** `application/json`.
 - `Accept`: `application/x-protobuf` **or** `application/json` on endpoints that return OTLP payloads.
 
-The OSS proxy (Rust/WASM reference) negotiates protobuf by default; JSON is supported for ease of debugging with `curl` and for third-party proxies.
+The proxy negotiates protobuf by default; JSON is supported for ease of debugging with `curl` and for third-party proxies.
 
 ## Endpoints
 
@@ -195,7 +195,7 @@ Recommended SLOs for the inject path (measured at the runtime, not the proxy):
 |---|---|
 | p50 `/v1/inject` latency | < 1 ms |
 | p99 `/v1/inject` latency | < 5 ms |
-| Max inject throughput | ~ 20k rps / CPU core (in-memory store, single process) |
+| Max inject throughput | Hosted-runtime capacity managed by Softprobe |
 
 The extract path has no hard latency SLO since it's async; aim for < 100 ms p99 end-to-end to keep capture buffers small.
 

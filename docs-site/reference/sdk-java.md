@@ -178,7 +178,7 @@ All SDK exceptions inherit from `dev.softprobe.errors.SoftprobeException` (a `Ru
 
 | Condition | Exception | Typical cause | Recovery |
 |---|---|---|---|
-| **Runtime unreachable** | `RuntimeApiException` (cause: `ConnectException` / `HttpTimeoutException`) | Runtime not running, wrong URL, firewall | Start the runtime; `softprobe doctor` |
+| **Runtime unreachable** | `RuntimeApiException` (cause: `ConnectException` / `HttpTimeoutException`) | Wrong URL, firewall, invalid hosted endpoint | Check network egress and `SOFTPROBE_API_TOKEN`; run `softprobe doctor` |
 | **Unknown session** | `RuntimeApiException` with `getStatus() == 404` | Session closed, wrong id | Start a fresh session |
 | **Strict miss** (proxy returns error to app) | Not an SDK exception — surfaces as `IOException` in the SUT's HTTP client | Missing `mockOutbound` | Add the rule; see [Debug strict miss](/guides/troubleshooting#_403-forbidden-on-outbound-under-strict-policy) |
 | **Invalid rule payload** | `RuntimeApiException` with `getStatus() == 400` | Rule doesn't validate against [rule-schema](/reference/rule-schema) | Fix the spec |

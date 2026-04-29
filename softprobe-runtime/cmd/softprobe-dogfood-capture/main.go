@@ -115,7 +115,7 @@ func closeSession(c *http.Client, runtimeURL, sessionID string) error {
 }
 
 func fetchCase(c *http.Client, runtimeURL, sessionID string) ([]byte, error) {
-	req, err := http.NewRequest(http.MethodGet, runtimeURL+"/v1/cases/"+sessionID, nil)
+	req, err := http.NewRequest(http.MethodGet, runtimeURL+"/v1/captures/"+sessionID, nil)
 	if err != nil {
 		return nil, err
 	}

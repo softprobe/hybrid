@@ -27,7 +27,7 @@ booting a real runtime in unit tests:
   example — it reimplements the session lifecycle to assert one header).
 - `softprobe-js/src/__tests__/*.ts` uses in-process fakes per test file.
 - `softprobe-python/tests/test_client.py`, `softprobe-java`'s `ClientTest`,
-  and `softprobe-go/softprobe/auth_test.go` all do the same.
+  and `github.com/softprobe/softprobe-go/softprobe/auth_test.go` all do the same.
 
 Each fake is a local copy of the control-plane contract. They drift the
 moment we change `softprobe-runtime/internal/controlapi/` and nobody
