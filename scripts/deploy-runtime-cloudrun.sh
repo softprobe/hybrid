@@ -6,13 +6,17 @@ set -euo pipefail
 #   2) runtime (wired to datalake URL)
 #   3) hosted integration smoke test
 #
+# Docker images: Artifact Registry only — do not default back to gcr.io (legacy Container Registry).
+# One-time per project: gcloud artifacts repositories create softprobe \
+#   --repository-format=docker --location=us-central1 --project="${PROJECT_ID}"
+#
 # Optional overrides:
 #   PROJECT_ID                 default: coral-smoke-455007-j2
 #   REGION                     default: us-central1
 #   RUNTIME_SERVICE_NAME       default: softprobe-runtime
 #   DATALAKE_SERVICE_NAME      default: softprobe-datalake
 #   RUNTIME_IMAGE              default: ghcr.io/softprobe/softprobe-runtime:v0.5.0
-#   DATALAKE_IMAGE             default: gcr.io/${PROJECT_ID}/softprobe-datalake:latest
+#   DATALAKE_IMAGE             default: us-central1-docker.pkg.dev/${PROJECT_ID}/softprobe/softprobe-datalake:latest
 #   BUILD_DATALAKE_IMAGE       default: 1 (build+push datalake image in PROJECT_ID before deploy)
 #   SERVICE_ACCOUNT            default: softprobe-runtime@${PROJECT_ID}.iam.gserviceaccount.com
 #   VPC_CONNECTOR              default: softprobe-connector
@@ -35,7 +39,7 @@ REGION="${REGION:-us-central1}"
 RUNTIME_SERVICE_NAME="${RUNTIME_SERVICE_NAME:-softprobe-runtime}"
 DATALAKE_SERVICE_NAME="${DATALAKE_SERVICE_NAME:-softprobe-datalake}"
 RUNTIME_IMAGE="${RUNTIME_IMAGE:-ghcr.io/softprobe/softprobe-runtime:v0.5.0}"
-DATALAKE_IMAGE="${DATALAKE_IMAGE:-gcr.io/${PROJECT_ID}/softprobe-datalake:latest}"
+DATALAKE_IMAGE="${DATALAKE_IMAGE:-us-central1-docker.pkg.dev/${PROJECT_ID}/softprobe/softprobe-datalake:latest}"
 BUILD_DATALAKE_IMAGE="${BUILD_DATALAKE_IMAGE:-1}"
 SERVICE_ACCOUNT="${SERVICE_ACCOUNT:-softprobe-runtime@${PROJECT_ID}.iam.gserviceaccount.com}"
 VPC_CONNECTOR="${VPC_CONNECTOR:-softprobe-connector}"
