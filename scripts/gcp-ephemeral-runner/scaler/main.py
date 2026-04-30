@@ -41,6 +41,37 @@ def count_active_runs(repo: str, token: str) -> int:
     return total
 
 
+def count_busy_pool_runners(repo: str, token: str, name_prefix: str) -> int:
+    """
+    Runners currently executing a job (busy=true). MIG target must stay >= this
+    count or scale-in can delete a VM that is still running a workflow job.
+
+    Workflow run counts (queued/in_progress) can be lower than concurrent jobs
+    (matrix, multiple jobs per run) or lag the runner busy flag briefly.
+    """
+    url = f"https://api.github.com/repos/{repo}/actions/runners"
+    busy = 0
+    page = 1
+    while True:
+        r = requests.get(
+            url,
+            headers=gh_headers(token),
+            params={"per_page": 100, "page": page},
+            timeout=20,
+        )
+        r.raise_for_status()
+        payload = r.json()
+        runners = payload.get("runners") or []
+        for runner in runners:
+            name = str(runner.get("name") or "")
+            if runner.get("busy") is True and name.startswith(name_prefix):
+                busy += 1
+        if len(runners) < 100:
+            break
+        page += 1
+    return busy
+
+
 def get_current_target(project: str, zone: str, mig_name: str, session: AuthorizedSession) -> int:
     url = (
         f"https://compute.googleapis.com/compute/v1/projects/{project}"
@@ -76,9 +107,13 @@ def scale():
     mig_name = env("MIG_NAME")
     min_runners = int(env("MIN_RUNNERS", "0"))
     max_runners = int(env("MAX_RUNNERS", "3"))
+    runner_name_prefix = os.getenv("RUNNER_NAME_PREFIX", "gcp-ephemeral-").strip() or "gcp-ephemeral-"
 
     active_runs = count_active_runs(repo, token)
-    desired = min(max(active_runs, min_runners), max_runners)
+    busy_runners = count_busy_pool_runners(repo, token, runner_name_prefix)
+    # Never scale below runners that are actively executing a job.
+    floor = max(active_runs, min_runners, busy_runners)
+    desired = min(floor, max_runners)
 
     creds, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
     session = AuthorizedSession(creds)
@@ -92,6 +127,8 @@ def scale():
         {
             "repo": repo,
             "active_runs": active_runs,
+            "busy_runners": busy_runners,
+            "runner_name_prefix": runner_name_prefix,
             "current_target_size": current,
             "desired_target_size": desired,
             "resized": current != desired,

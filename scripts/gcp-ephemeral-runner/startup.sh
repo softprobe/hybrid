@@ -33,11 +33,17 @@ runner_labels="$(metadata_get_required runner_labels)"
 runner_group="$(metadata_get_optional runner_group)"
 runner_version="$(metadata_get_optional runner_version)"
 idle_timeout_seconds="$(metadata_get_optional idle_timeout_seconds)"
+non_online_timeout_seconds="$(metadata_get_optional non_online_timeout_seconds)"
 if [[ -z "${runner_version}" ]]; then
   runner_version="2.334.0"
 fi
 if [[ -z "${idle_timeout_seconds}" ]]; then
   idle_timeout_seconds="300"
+fi
+# Longer cap while GitHub still reports offline/idle transition; avoids recycling
+# a healthy listener during registration or API lag (separate from idle poweroff).
+if [[ -z "${non_online_timeout_seconds}" ]]; then
+  non_online_timeout_seconds="1800"
 fi
 
 RUNNER_USER="bill_softprobe_ai"
@@ -154,8 +160,8 @@ while true; do
 
     if [[ "${runner_status}" != "online" ]]; then
       idle_for="$((now_epoch - last_busy_epoch))"
-      log "Runner ${RUNNER_NAME} status=${runner_status}; idle_for=${idle_for}s (timeout ${idle_timeout_seconds}s)"
-      if (( idle_for >= idle_timeout_seconds )); then
+      log "Runner ${RUNNER_NAME} status=${runner_status}; idle_for=${idle_for}s (non_online_timeout ${non_online_timeout_seconds}s)"
+      if (( idle_for >= non_online_timeout_seconds )); then
         log "Runner ${RUNNER_NAME} stuck non-online for ${idle_for}s; recycling VM"
         recycle_reason="idle-timeout"
         break
