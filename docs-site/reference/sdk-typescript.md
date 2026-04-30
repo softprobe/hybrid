@@ -161,8 +161,9 @@ The runtime's `POST /v1/sessions/{id}/rules` **replaces** the entire rules docum
 
 ```ts
 interface MockRuleSpec {
-  id?: string;
-  priority?: number;       // default: 100
+  /** Optional label; omitted from the rules JSON when unset. */
+  name?: string;
+  priority?: number;
   consume?: 'once' | 'many';
   latencyMs?: number;
   direction?: 'inbound' | 'outbound';
@@ -181,6 +182,7 @@ interface MockRuleSpec {
 
 ```ts
 await session.mockOutbound({
+  name: 'stripe-payment-intents',
   direction: 'outbound',
   method: 'POST',
   hostSuffix: 'stripe.com',

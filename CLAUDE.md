@@ -30,15 +30,10 @@ This repo uses a strictly sequentially-gated TDD workflow:
 
 ## Build and Test Commands
 
-### softprobe-runtime (Go — primary server + CLI)
+### softprobe-cli (Go — canonical CLI)
 ```bash
-cd softprobe-runtime
-go build .                          # runtime server
+cd softprobe-cli
 go build ./cmd/softprobe            # CLI binary
-go test ./...                       # all unit tests
-go test -v ./internal/controlapi/...
-go test -v ./internal/proxybackend/...
-go test -v ./internal/store/...
 ```
 
 ### softprobe-proxy (Rust / WASM)
@@ -107,7 +102,8 @@ bash spec/scripts/validate-spec.sh
 | Directory | Language | Role |
 |---|---|---|
 | `spec/` | JSON Schema / docs | Canonical schemas and protocol contracts — everything must conform |
-| `softprobe-runtime/` | Go | HTTP server + CLI; serves both control API and OTLP proxy API |
+| `softprobe-runtime/` | Rust | HTTP server + OTLP ingest backend |
+| `softprobe-cli/` | Go | Canonical `softprobe` CLI source |
 | `softprobe-proxy/` | Rust (WASM) | Envoy filter; intercepts HTTP, calls runtime over OTLP |
 | `softprobe-js/` | TypeScript | Node SDK (`@softprobe/softprobe-js`) |
 | `softprobe-go/` | Go | Go SDK |
@@ -121,7 +117,7 @@ bash spec/scripts/validate-spec.sh
 - `internal/store/store.go` — single mutex-protected in-memory session map; holds `LoadedCase`, `Rules`, `Policy`, `FixturesAuth`, `Extracts`, `Stats` per session; every mutation bumps `Revision`
 - `internal/controlapi/mux.go` — all JSON control API routes (`/health`, `/v1/meta`, `/v1/sessions`, `/v1/sessions/{id}/load-case|rules|policy|fixtures/auth|close|stats`)
 - `internal/proxybackend/` — OTLP handlers (`/v1/inject`, `/v1/traces`) and rule resolver
-- `cmd/softprobe/` — canonical CLI binary (doctor, session, inspect, generate, validate, suite, capture, replay, scrub, export, completion)
+- `softprobe-cli/cmd/softprobe/` — canonical CLI binary (doctor, session, inspect, generate, validate, suite, capture, replay, scrub, export, completion)
 
 The Docker image starts the server with no args; any args are routed to the CLI.
 

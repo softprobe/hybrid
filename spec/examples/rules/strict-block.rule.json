@@ -1,5 +1,5 @@
 {
-  "id": "block-unknown-external",
+  "name": "block-unknown-external",
   "priority": 1000,
   "consume": "many",
   "when": {

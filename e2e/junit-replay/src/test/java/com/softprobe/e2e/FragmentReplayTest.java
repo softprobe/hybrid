@@ -72,7 +72,7 @@ class FragmentReplayTest {
 
     session.mockOutbound(
         new MockRuleSpec()
-            .id("fragment-replay")
+            .name("fragment-replay")
             .priority(100)
             .direction("outbound")
             .method("GET")

@@ -118,7 +118,7 @@ func TestHostedSmoke_FullReplayFlow(t *testing.T) {
 	}
 
 	// 3. Apply a mock rule
-	rule := `{"version":1,"rules":[{"id":"r1","priority":100,"when":{"direction":"outbound","method":"GET","path":"/smoke"},"then":{"action":"mock","response":{"statusCode":200,"body":"smoke-ok"}}}]}`
+	rule := `{"version":1,"rules":[{"name":"r1","priority":100,"when":{"direction":"outbound","method":"GET","path":"/smoke"},"then":{"action":"mock","response":{"statusCode":200,"body":"smoke-ok"}}}]}`
 	resp, body = client.do(http.MethodPost, "/v1/sessions/"+sessionID+"/rules", []byte(rule))
 	if resp == nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("rules: status=%v body=%s", resp, body)

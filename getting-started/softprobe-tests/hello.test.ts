@@ -23,7 +23,7 @@ describe('GET /hello', () => {
     });
 
     await session.mockOutbound({
-      id: 'fragment-mock',
+      name: 'fragment-mock',
       direction: 'outbound',
       path: '/fragment',
       response: hit.response,

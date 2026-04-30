@@ -28,13 +28,13 @@ Both `case.rules[]` and `case.fixtures[]` are top-level arrays in the case JSON.
   "traces": [ /* ... */ ],
   "rules": [
     {
-      "id": "redact-auth-headers",
+      "name": "redact-auth-headers",
       "priority": 10000,
       "when": { "direction": "outbound" },
       "then": { "action": "capture_only" }
     },
     {
-      "id": "healthcheck-passthrough",
+      "name": "healthcheck-passthrough",
       "priority": 50,
       "when": {
         "direction": "outbound",
@@ -112,7 +112,7 @@ Your test does:
 
 ```ts
 await session.mockOutbound({
-  id: 'partner-override',
+  name: 'partner-override',
   priority: 100,
   direction: 'outbound',
   host: 'partner.example.com',

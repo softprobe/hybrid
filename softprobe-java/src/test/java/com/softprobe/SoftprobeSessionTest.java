@@ -246,7 +246,7 @@ class SoftprobeSessionTest {
 
     session.mockOutbound(
         new MockRuleSpec()
-            .id("fragment-replay")
+            .name("fragment-replay")
             .priority(100)
             .direction("outbound")
             .method("GET")
@@ -262,7 +262,7 @@ class SoftprobeSessionTest {
     JsonNode body = MAPPER.readTree(rulesCall.body());
     assertEquals(1, body.get("version").asInt());
     JsonNode rule = body.get("rules").get(0);
-    assertEquals("fragment-replay", rule.get("id").asText());
+    assertEquals("fragment-replay", rule.get("name").asText());
     assertEquals(100, rule.get("priority").asInt());
     assertEquals("outbound", rule.get("when").get("direction").asText());
     assertEquals("GET", rule.get("when").get("method").asText());
@@ -307,7 +307,7 @@ class SoftprobeSessionTest {
 
     assertThrows(
         IllegalArgumentException.class,
-        () -> session.mockOutbound(new MockRuleSpec().path("/fragment")));
+        () -> session.mockOutbound(new MockRuleSpec().name("r1").path("/fragment")));
 
     // sanity: verify that the map-based Client API still works (no regression).
     Map<String, Object> created = Map.of("sessionId", session.id());

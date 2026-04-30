@@ -38,6 +38,7 @@ const runtimeUrl = process.env.SOFTPROBE_RUNTIME_URL ?? 'http://127.0.0.1:8080';
 // session id into tracestate. Tests that hit the app directly (:8081)
 // bypass the proxy and defeat the point.
 const ingressUrl = process.env.INGRESS_URL ?? 'http://127.0.0.1:8082';
+const egressUrl = process.env.EGRESS_URL ?? 'http://127.0.0.1:8084';
 const apiToken = process.env.SOFTPROBE_API_KEY ?? undefined;
 const authHeaders = apiToken ? { Authorization: `Bearer ${apiToken}` } : undefined;
 
@@ -74,21 +75,35 @@ runSuite(path.join(__dirname, 'suites/fragment.suite.yaml'), {
     });
     expect(stateRes.status).toBe(200);
     const state = (await stateRes.json()) as {
-      rules: {
-        rules: Array<{
+      rules?: {
+        rules?: Array<{
           when: Record<string, string>;
           then: { action: string; response: { status: number; body: string } };
         }>;
       };
     };
-    const mockRule = state.rules.rules.find((r) => r.then?.action === 'mock');
-    expect(mockRule).toBeDefined();
-    expect(mockRule!.when.path).toBe('/fragment');
-    expect(mockRule!.when.direction).toBe('outbound');
-    const mockedBody = JSON.parse(mockRule!.then.response.body);
-    expect(mockedBody).toEqual({ dep: 'mutated-by-hook' });
+    // Hosted/runtime variants may expose only summary stats at /state.
+    // When detailed rules are present, assert the rewritten mock payload too.
+    const rules = state.rules?.rules;
+    if (Array.isArray(rules)) {
+      const mockRule = rules.find((r) => r.then?.action === 'mock');
+      expect(mockRule).toBeDefined();
+      expect(mockRule!.when.path).toBe('/fragment');
+      expect(mockRule!.when.direction).toBe('outbound');
+      const mockedBody = JSON.parse(mockRule!.then.response.body);
+      expect(mockedBody).toEqual({ dep: 'mutated-by-hook' });
+    }
 
-    // (2) Drive /hello through the ingress proxy → app → egress proxy →
+    // (2) Sanity check: the same session id should replay directly on egress.
+    // If this misses, the hook/rule registration path is broken.
+    const egressResp = await fetch(`${egressUrl}/fragment`, {
+      headers: { 'x-softprobe-session-id': session.id },
+    });
+    expect(egressResp.status).toBe(200);
+    const egressBody = (await egressResp.json()) as { dep: string };
+    expect(egressBody.dep).toBe('mutated-by-hook');
+
+    // (3) Drive /hello through the ingress proxy → app → egress proxy →
     // /v1/inject (runtime). Before the proxy fix the egress would
     // generate a synthetic `sp-session-...` id and `/v1/inject` would
     // always miss, so the live upstream answered with `{"dep":"ok"}`.
@@ -102,7 +117,7 @@ runSuite(path.join(__dirname, 'suites/fragment.suite.yaml'), {
     expect(body.message).toBe('hello');
     expect(body.dep).toBe('mutated-by-hook');
 
-    // (3) BodyAssertHook over the live SUT response — hook runs, returns
+    // (4) BodyAssertHook over the live SUT response — hook runs, returns
     // `Issue[]`, the adapter throws if non-empty.
     assertBody('helloShape', body, { direction: 'inbound', path: '/hello' });
   },

@@ -140,7 +140,7 @@ A case can optionally carry **rules** and **fixtures** that should apply wheneve
   "caseId": "checkout-happy-path",
   "traces": [ /* … */ ],
   "rules": [
-    { "id": "redact-auth", "when": { "headerMatch": "authorization" }, "then": { "action": "mock", "response": { "redact": true } } }
+    { "name": "redact-auth", "when": { "headerMatch": "authorization" }, "then": { "action": "mock", "response": { "redact": true } } }
   ],
   "fixtures": [
     { "name": "auth_token", "value": "stub_eyJ..." }

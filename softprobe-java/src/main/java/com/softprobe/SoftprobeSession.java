@@ -182,8 +182,8 @@ public final class SoftprobeSession {
 
   private static ObjectNode buildMockRule(MockRuleSpec spec) {
     ObjectNode rule = MAPPER.createObjectNode();
-    if (spec.idValue() != null) {
-      rule.put("id", spec.idValue());
+    if (spec.nameValue() != null && !spec.nameValue().isBlank()) {
+      rule.put("name", spec.nameValue());
     }
     if (spec.priorityValue() != null) {
       rule.put("priority", spec.priorityValue());

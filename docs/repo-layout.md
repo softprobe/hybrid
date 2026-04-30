@@ -16,6 +16,7 @@ The target platform layout is:
 1. `spec`
 2. `softprobe-proxy`
 3. `softprobe-runtime`
+7. `softprobe-cli`
 4. `softprobe-js`
 5. `softprobe-go`
 6. `softprobe-python`

@@ -19,10 +19,10 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: softprobe-runtime/go.mod
+          go-version-file: softprobe-cli/go.mod
 
       - name: Validate docs snippets suite
         run: |
-          cd softprobe-runtime
+          cd softprobe-cli
           go build -o /tmp/softprobe ./cmd/softprobe
           /tmp/softprobe validate suite ../docs/snippets.suite.yaml

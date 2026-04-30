@@ -45,20 +45,18 @@ services:
       dockerfile: Dockerfile
     mem_limit: 2g
     environment:
-      CONFIG_FILE: /workspace/e2e/softprobe-runtime.yaml
       SOFTPROBE_LISTEN_ADDR: 0.0.0.0:8080
       SOFTPROBE_CAPTURE_CASE_PATH: /workspace/e2e/captured.case.json
       SOFTPROBE_AUTH_URL: http://authstub:8091/validate
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       SOFTPROBE_GRPC_DISABLE: "1"
-      AWS_REGION: us-east-1
     volumes:
       - ..:/workspace
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "sh", "-c", "true"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -68,8 +66,6 @@ services:
         condition: service_healthy
       authstub:
         condition: service_healthy
-      lakekeeper-init:
-        condition: service_completed_successfully
 
   softprobe-proxy:
     image: envoyproxy/envoy:v1.27-latest

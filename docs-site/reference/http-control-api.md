@@ -102,7 +102,7 @@ Request:
   "version": 1,
   "rules": [
     {
-      "id": "stripe-mock",
+      "name": "stripe-mock",
       "priority": 100,
       "when": {
         "direction": "outbound",

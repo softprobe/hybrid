@@ -4,7 +4,7 @@ The checked-in file `spec/examples/cases/control-plane-v1.case.json` is the **re
 
 ## When does the dogfood test fail?
 
-The Go dogfood replay test (`softprobe-runtime/cmd/softprobe/dogfood_replay_test.go`) fails when the recorded case no longer matches the runtime's current behavior. There are two root causes:
+The Go dogfood replay test (`softprobe-cli/cmd/softprobe/dogfood_replay_test.go`) fails when the recorded case no longer matches the runtime's current behavior. There are two root causes:
 
 | `errorType` | Meaning |
 |---|---|

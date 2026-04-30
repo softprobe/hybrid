@@ -2,11 +2,11 @@ package com.softprobe;
 
 /**
  * Specification for a {@code mock} outbound rule (see {@code docs/design.md}
- * §3.2). All predicate fields are optional; {@link #response(CapturedResponse)}
- * is required.
+ * §3.2). {@link #response(CapturedResponse)} is required; other fields are
+ * optional, including {@link #name(String)} for logging.
  */
 public final class MockRuleSpec {
-  private String id;
+  private String name;
   private Integer priority;
   private String direction;
   private String service;
@@ -17,8 +17,8 @@ public final class MockRuleSpec {
   private String pathPrefix;
   private CapturedResponse response;
 
-  public MockRuleSpec id(String id) {
-    this.id = id;
+  public MockRuleSpec name(String name) {
+    this.name = name;
     return this;
   }
 
@@ -67,8 +67,8 @@ public final class MockRuleSpec {
     return this;
   }
 
-  String idValue() {
-    return id;
+  String nameValue() {
+    return name;
   }
 
   Integer priorityValue() {

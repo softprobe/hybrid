@@ -30,7 +30,7 @@ WASM filter translates `x-softprobe-session-id` into W3C
 ## What the CLI does per case
 
 1. `softprobe suite run` spawns the Node sidecar **once per run**
-   (embedded at `softprobe-runtime/cmd/softprobe/sidecar/suite-sidecar.mjs`).
+   (embedded at `softprobe-cli/cmd/softprobe/sidecar/suite-sidecar.mjs`).
 2. For each case:
    - Open a replay session on the runtime.
    - `POST /v1/sessions/{id}/load-case` with the case bytes.
@@ -71,7 +71,7 @@ Bring up the shared e2e stack and build the CLI:
 
 ```bash
 docker compose -f e2e/docker-compose.yaml up -d --wait
-( cd archive/softprobe-runtime-go && go build -o ../../softprobe ./cmd/softprobe )
+( cd softprobe-cli && go build -o ../softprobe ./cmd/softprobe )
 ```
 
 Node 18+ must be on `PATH` for the sidecar. Node 22+ is recommended so

@@ -186,7 +186,7 @@ describe('GET /hello', () => {
     });
 
     await session.mockOutbound({
-      id: 'fragment-mock',
+      name: 'fragment-mock',
       direction: 'outbound',
       path: '/fragment',
       response: hit.response,
@@ -222,7 +222,7 @@ The response you're replaying comes from the case file. You own it — you can c
 
 ```ts
     await session.mockOutbound({
-      id: 'fragment-mock',
+      name: 'fragment-mock',
       direction: 'outbound',
       path: '/fragment',
       response: {

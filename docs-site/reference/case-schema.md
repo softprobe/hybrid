@@ -143,7 +143,7 @@ Same shape as session rules (see [Rules and policy](/concepts/rules-and-policy))
 {
   "rules": [
     {
-      "id": "redact-auth-headers",
+      "name": "redact-auth-headers",
       "priority": 10000,
       "when": { "direction": "outbound" },
       "then": {

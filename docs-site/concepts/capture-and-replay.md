@@ -163,6 +163,7 @@ The same predicate keys for the `when`, plus a concrete `response`:
 
 ```ts
 await session.mockOutbound({
+  name: 'fragment-mock',   // optional; useful in logs
   direction: 'outbound',
   method: 'GET',
   path: '/fragment',
@@ -171,7 +172,6 @@ await session.mockOutbound({
     headers: { 'content-type': 'application/json' },
     body: { dep: 'ok' },   // string or JSON, SDK serializes
   },
-  id: 'fragment-mock',   // optional; stable id aids diffs and codegen
   priority: 100,         // higher wins on conflict
 });
 ```

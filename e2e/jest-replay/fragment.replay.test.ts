@@ -42,7 +42,7 @@ describe('fragment replay', () => {
     });
 
     await session.mockOutbound({
-      id: 'fragment-replay',
+      name: 'fragment-replay',
       priority: 100,
       direction: 'outbound',
       method: 'GET',

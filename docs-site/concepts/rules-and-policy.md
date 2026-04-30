@@ -121,7 +121,7 @@ Test does:
 
 ```ts
 await session.mockOutbound({
-  id: 'partner-override',
+  name: 'partner-override',
   priority: 100,
   direction: 'outbound',
   host: 'partner.example.com',
@@ -187,7 +187,7 @@ POST /v1/sessions/$ID/rules
   "version": 1,
   "rules": [
     {
-      "id": "auto-generated-1",
+      "name": "suite-mock-1",
       "priority": 100,
       "when": { "direction": "outbound", "hostSuffix": "stripe.com", "pathPrefix": "/v1/payment_intents", "method": "POST" },
       "then": { "action": "mock", "response": { "status": 200, "headers": {...}, "body": "{\"id\":\"pi_test\",...}" } }

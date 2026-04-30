@@ -402,10 +402,10 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-go@v5
         with:
-          go-version-file: archive/softprobe-runtime-go/go.mod
-          cache-dependency-path: archive/softprobe-runtime-go/go.sum
+          go-version-file: softprobe-cli/go.mod
+          cache-dependency-path: softprobe-cli/go.sum
       - name: Build
-        working-directory: archive/softprobe-runtime-go
+        working-directory: softprobe-cli
         env:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
@@ -413,7 +413,7 @@ jobs:
         run: |
           echo "${{ github.ref_name }}" > ../version
           go build -trimpath \
-            -ldflags "-s -w -X softprobe-runtime/internal/version.Version=${{ github.ref_name }}" \
+            -ldflags "-s -w -X softprobe-cli/internal/version.Version=${{ github.ref_name }}" \
             -o "../dist/softprobe-${{ matrix.goos }}-${{ matrix.goarch }}" \
             ./cmd/softprobe
       - name: Authenticate to GCS

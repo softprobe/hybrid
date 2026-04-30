@@ -58,7 +58,7 @@ class ParityDogfoodTest {
 
     session.mockOutbound(
         new MockRuleSpec()
-            .id("fragment-replay")
+            .name("fragment-replay")
             .direction("outbound")
             .method("GET")
             .path("/fragment")
