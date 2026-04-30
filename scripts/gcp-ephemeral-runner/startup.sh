@@ -52,45 +52,13 @@ done
 pkill -f '/actions-runner/bin/Runner.Listener run' || true
 pkill -f '/actions-runner-org/bin/Runner.Listener run' || true
 
-export DEBIAN_FRONTEND=noninteractive
-if command -v docker >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 && command -v unzip >/dev/null 2>&1 && command -v zip >/dev/null 2>&1; then
-  log "Runner dependencies already present; skipping apt installation"
-else
-  log "Installing runner dependencies"
-  apt-get update
-  apt-get install -y --no-install-recommends \
-    ca-certificates curl jq unzip zip git docker.io libicu70 libkrb5-3 zlib1g
+log "Using pre-baked runner image; skipping package install/bootstrap"
+if [[ ! -x "${RUNNER_ROOT}/config.sh" || ! -x "${RUNNER_ROOT}/run.sh" || ! -x "${RUNNER_ROOT}/bin/Runner.Listener" ]]; then
+  log "ERROR: pre-baked runner binaries not found at ${RUNNER_ROOT}"
+  exit 1
 fi
-# Docker is usually pre-enabled on the image. Avoid blocking forever on
-# SysV synchronization during boot; keep startup progressing.
-if ! systemctl is-enabled docker >/dev/null 2>&1; then
-  timeout 20s systemctl enable docker || true
-fi
-timeout 20s systemctl start docker || true
-usermod -aG docker "${RUNNER_USER}" || true
 
 mkdir -p "${RUNNER_ROOT}"
-chown -R "${RUNNER_USER}:${RUNNER_USER}" "${RUNNER_ROOT}"
-chown -R "${RUNNER_USER}:${RUNNER_USER}" "/home/${RUNNER_USER}"
-chmod 755 "/home/${RUNNER_USER}"
-install -d -o "${RUNNER_USER}" -g "${RUNNER_USER}" -m 775 \
-  "/home/${RUNNER_USER}/go" \
-  "/home/${RUNNER_USER}/.docker" \
-  "/home/${RUNNER_USER}/.cache" \
-  "/home/${RUNNER_USER}/.npm" \
-  "/home/${RUNNER_USER}/.m2"
-
-log "Downloading actions runner ${runner_version}"
-runner_tgz="actions-runner-linux-x64-${runner_version}.tar.gz"
-su - "${RUNNER_USER}" -c "cd '${RUNNER_ROOT}' && curl -fsSLo '${runner_tgz}' 'https://github.com/actions/runner/releases/download/v${runner_version}/${runner_tgz}'"
-su - "${RUNNER_USER}" -c "cd '${RUNNER_ROOT}' && tar xzf '${runner_tgz}'"
-if ldconfig -p | grep -q libicu; then
-  log "Runner runtime libraries detected; skipping installdependencies"
-else
-  log "Installing GitHub runner runtime dependencies"
-  cd "${RUNNER_ROOT}"
-  ./bin/installdependencies.sh
-fi
 chown -R "${RUNNER_USER}:${RUNNER_USER}" "${RUNNER_ROOT}"
 
 group_args=()
