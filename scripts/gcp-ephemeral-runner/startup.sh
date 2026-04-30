@@ -145,9 +145,12 @@ while true; do
 
   log "Runner PID ${runner_pid} started; monitoring idle timeout ${idle_timeout_seconds}s"
   last_busy_epoch="$(date +%s)"
+  recycle_reason=""
+  missing_in_github_checks=0
   while true; do
     if ! kill -0 "${runner_pid}" 2>/dev/null; then
       log "Runner process ${runner_pid} exited unexpectedly"
+      recycle_reason="runner-exited"
       break
     fi
 
@@ -161,10 +164,17 @@ while true; do
     )"
 
     if [[ -z "${runner_state}" ]]; then
-      log "Runner ${RUNNER_NAME} not found in GitHub yet; waiting"
+      missing_in_github_checks="$((missing_in_github_checks + 1))"
+      if (( missing_in_github_checks >= 6 )); then
+        log "Runner ${RUNNER_NAME} missing from GitHub for 60s; forcing re-registration"
+        recycle_reason="registration-lost"
+        break
+      fi
+      log "Runner ${RUNNER_NAME} not found in GitHub yet; waiting (${missing_in_github_checks}/6)"
       sleep 10
       continue
     fi
+    missing_in_github_checks=0
 
     runner_status="$(echo "${runner_state}" | awk '{print $1}')"
     runner_busy="$(echo "${runner_state}" | awk '{print $2}')"
@@ -185,11 +195,31 @@ while true; do
     idle_for="$((now_epoch - last_busy_epoch))"
     if (( idle_for >= idle_timeout_seconds )); then
       log "Runner ${RUNNER_NAME} idle for ${idle_for}s; recycling VM"
+      recycle_reason="idle-timeout"
       break
     fi
 
     sleep 10
   done
+
+  if [[ "${recycle_reason}" == "registration-lost" || "${recycle_reason}" == "runner-exited" ]]; then
+    log "Runner recycle reason is '${recycle_reason}'; cleaning local state and re-registering"
+    kill "${runner_pid}" 2>/dev/null || true
+    sleep 2
+    kill -9 "${runner_pid}" 2>/dev/null || true
+    remove_token="$(
+      curl -fsSL -X POST \
+        -H "Authorization: Bearer ${github_pat}" \
+        -H "Accept: application/vnd.github+json" \
+        "https://api.github.com/repos/${github_repo}/actions/runners/remove-token" | jq -r '.token' || true
+    )"
+    if [[ -n "${remove_token}" && "${remove_token}" != "null" ]]; then
+      su - "${RUNNER_USER}" -c "cd '${RUNNER_ROOT}' && ./config.sh remove --token '${remove_token}'" || true
+    fi
+    rm -f "${RUNNER_ROOT}/.runner" "${RUNNER_ROOT}/.credentials" "${RUNNER_ROOT}/.credentials_rsaparams"
+    sleep 5
+    continue
+  fi
 
   log "Stopping runner process ${runner_pid}"
   kill "${runner_pid}" 2>/dev/null || true
@@ -207,6 +237,6 @@ while true; do
   fi
 
   log "Powering off after idle timeout"
-  shutdown -h now
+  systemctl poweroff --force --no-wall || shutdown -P now || halt -p || true
   exit 0
 done
