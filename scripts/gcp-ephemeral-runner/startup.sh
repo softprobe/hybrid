@@ -20,12 +20,30 @@ fi
 RUNNER_USER="bill_softprobe_ai"
 RUNNER_ROOT="/home/${RUNNER_USER}/actions-runner-ephemeral"
 RUNNER_NAME="gcp-ephemeral-$(hostname)-$(date +%s)"
+RUNNER_URL="https://github.com/${github_repo}"
+
+cleanup_runner() {
+  # Best effort cleanup: remove runner registration if config exists.
+  if [[ -x "${RUNNER_ROOT}/config.sh" && -f "${RUNNER_ROOT}/.runner" ]]; then
+    log "Attempting runner cleanup for ${RUNNER_NAME}"
+    remove_token="$(
+      curl -fsSL -X POST \
+        -H "Authorization: Bearer ${github_pat}" \
+        -H "Accept: application/vnd.github+json" \
+        "https://api.github.com/repos/${github_repo}/actions/runners/remove-token" | jq -r '.token' || true
+    )"
+    if [[ -n "${remove_token}" && "${remove_token}" != "null" ]]; then
+      su - "${RUNNER_USER}" -c "cd '${RUNNER_ROOT}' && ./config.sh remove --token '${remove_token}'" || true
+    fi
+  fi
+}
+trap cleanup_runner EXIT
 
 export DEBIAN_FRONTEND=noninteractive
 log "Installing runner dependencies"
 apt-get update
 apt-get install -y --no-install-recommends \
-  ca-certificates curl jq unzip zip git docker.io
+  ca-certificates curl jq unzip zip git docker.io libicu70 libkrb5-3 zlib1g
 systemctl enable docker
 systemctl start docker
 usermod -aG docker "${RUNNER_USER}" || true
@@ -37,6 +55,10 @@ log "Downloading actions runner ${runner_version}"
 runner_tgz="actions-runner-linux-x64-${runner_version}.tar.gz"
 su - "${RUNNER_USER}" -c "cd '${RUNNER_ROOT}' && curl -fsSLo '${runner_tgz}' 'https://github.com/actions/runner/releases/download/v${runner_version}/${runner_tgz}'"
 su - "${RUNNER_USER}" -c "cd '${RUNNER_ROOT}' && tar xzf '${runner_tgz}'"
+log "Installing GitHub runner runtime dependencies"
+cd "${RUNNER_ROOT}"
+./bin/installdependencies.sh
+chown -R "${RUNNER_USER}:${RUNNER_USER}" "${RUNNER_ROOT}"
 
 log "Requesting registration token for ${github_repo}"
 registration_token="$(
@@ -57,14 +79,13 @@ fi
 
 log "Configuring ephemeral runner ${RUNNER_NAME}"
 su - "${RUNNER_USER}" -c "cd '${RUNNER_ROOT}' && ./config.sh \
-  --url 'https://github.com/${github_repo}' \
+  --url '${RUNNER_URL}' \
   --token '${registration_token}' \
   --name '${RUNNER_NAME}' \
   --labels '${runner_labels}' \
   --work '_work' \
   --unattended \
   --ephemeral \
-  --disableupdate \
   ${group_args[*]-}"
 
 log "Running runner (single job, then terminate VM)"
