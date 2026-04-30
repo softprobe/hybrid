@@ -59,7 +59,7 @@ jobs:
 
   validate:
     name: Validate version ${{ github.ref_name }}
-    runs-on: [self-hosted, Linux, gcp-ephemeral]
+    runs-on: [self-hosted, Linux]
     permissions:
       contents: read
     steps:
@@ -84,7 +84,7 @@ jobs:
   js-sdk:
     name: JS SDK -> npm
     needs: validate
-    runs-on: [self-hosted, Linux, gcp-ephemeral]
+    runs-on: [self-hosted, Linux]
     # id-token required for npm OIDC trusted publishing (self-hosted: unset tokens)
     permissions:
       contents: read
@@ -138,7 +138,7 @@ jobs:
   python-sdk:
     name: Python SDK -> PyPI
     needs: validate
-    runs-on: [self-hosted, Linux, gcp-ephemeral]
+    runs-on: [self-hosted, Linux]
     permissions:
       id-token: write
     steps:
@@ -183,7 +183,7 @@ jobs:
   java-sdk:
     name: Java SDK -> Maven Central
     needs: validate
-    runs-on: [self-hosted, Linux, gcp-ephemeral]
+    runs-on: [self-hosted, Linux]
     permissions:
       contents: read
     steps:
@@ -221,7 +221,7 @@ jobs:
   go-sdk:
     name: Go SDK -> pkg.go.dev
     needs: validate
-    runs-on: [self-hosted, Linux, gcp-ephemeral]
+    runs-on: [self-hosted, Linux]
     permissions:
       contents: write
       pull-requests: write
@@ -263,7 +263,7 @@ jobs:
   runtime-image:
     name: Runtime -> Artifact Registry
     needs: validate
-    runs-on: [self-hosted, Linux, gcp-ephemeral]
+    runs-on: [self-hosted, Linux]
     permissions:
       contents: read
       id-token: write
@@ -320,7 +320,7 @@ jobs:
   proxy-wasm:
     name: Proxy WASM -> GCS
     needs: validate
-    runs-on: [self-hosted, Linux, gcp-ephemeral]
+    runs-on: [self-hosted, Linux]
     permissions:
       contents: read
     steps:
@@ -388,7 +388,7 @@ jobs:
   cli:
     name: CLI -> GCS
     needs: validate
-    runs-on: [self-hosted, Linux, gcp-ephemeral]
+    runs-on: [self-hosted, Linux]
     strategy:
       matrix:
         goos: [linux, darwin]
@@ -446,7 +446,7 @@ jobs:
   agent-skills:
     name: Agent Skills -> GCS
     needs: validate
-    runs-on: [self-hosted, Linux, gcp-ephemeral]
+    runs-on: [self-hosted, Linux]
     permissions:
       contents: read
     steps:
@@ -516,7 +516,7 @@ jobs:
   release:
     name: Create GitHub Release
     needs: [js-sdk, python-sdk, java-sdk, go-sdk, runtime-image, proxy-wasm, cli, agent-skills]
-    runs-on: [self-hosted, Linux, gcp-ephemeral]
+    runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v4
         with:
