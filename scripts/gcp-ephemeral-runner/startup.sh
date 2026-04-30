@@ -61,8 +61,12 @@ else
   apt-get install -y --no-install-recommends \
     ca-certificates curl jq unzip zip git docker.io libicu70 libkrb5-3 zlib1g
 fi
-systemctl enable docker || true
-systemctl start docker || true
+# Docker is usually pre-enabled on the image. Avoid blocking forever on
+# SysV synchronization during boot; keep startup progressing.
+if ! systemctl is-enabled docker >/dev/null 2>&1; then
+  timeout 20s systemctl enable docker || true
+fi
+timeout 20s systemctl start docker || true
 usermod -aG docker "${RUNNER_USER}" || true
 
 mkdir -p "${RUNNER_ROOT}"
