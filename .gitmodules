@@ -7,7 +7,7 @@
 [submodule "softprobe-python"]
 	path = softprobe-python
 	url = https://github.com/softprobe/softprobe-python
-[submodule "datalake"]
-	path = datalake
+[submodule "softprobe-runtime"]
+	path = softprobe-runtime
 	url = https://github.com/softprobe/thelake.git
 	branch = migrate-to-ducklake

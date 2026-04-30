@@ -121,7 +121,6 @@ fn build_backend_request(
         (":authority".to_string(), authority.clone()),
         ("content-type".to_string(), "application/x-protobuf".to_string()),
         ("content-length".to_string(), content_length.to_string()),
-        ("x-public-key".to_string(), public_key.to_string()),
     ];
     if !public_key.is_empty() {
         headers.push(("authorization".to_string(), format!("Bearer {}", public_key)));
@@ -353,7 +352,6 @@ mod tests {
                 ("content-type".to_string(), "application/x-protobuf".to_string()),
                 ("accept".to_string(), "application/x-protobuf".to_string()),
                 ("content-length".to_string(), "123".to_string()),
-                ("x-public-key".to_string(), "pubkey".to_string()),
                 ("authorization".to_string(), "Bearer pubkey".to_string()),
             ]
         );
@@ -373,7 +371,6 @@ mod tests {
                 (":authority".to_string(), "runtime.softprobe.dev".to_string()),
                 ("content-type".to_string(), "application/x-protobuf".to_string()),
                 ("content-length".to_string(), "456".to_string()),
-                ("x-public-key".to_string(), "pubkey".to_string()),
                 ("authorization".to_string(), "Bearer pubkey".to_string()),
             ]
         );

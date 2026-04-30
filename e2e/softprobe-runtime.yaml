@@ -1,0 +1,49 @@
+# e2e: same shape as softprobe-runtime/tests/config/test-docker.yaml — service names resolve on the compose network.
+server:
+  port: 8080
+  host: 0.0.0.0
+  max_body_size: 104857600
+  worker_threads: null
+
+storage:
+  s3_region: us-east-1
+
+span_buffering:
+  max_buffer_bytes: 134217728
+  max_buffer_spans: 50
+  flush_interval_seconds: 5
+
+ingest_engine:
+  wal_bucket: warehouse
+  wal_prefix: wal
+  cache_dir: /tmp/softprobe-e2e/cache
+  wal_dir: /tmp/softprobe-e2e/wal
+  optimizer_interval_seconds: 60
+  replay_wal_on_startup: false
+
+compaction:
+  enabled: false
+  min_files_to_compact: 5
+  target_file_size_bytes: 67108864
+  compaction_interval_seconds: 3600
+
+duckdb:
+  max_connections: 10
+  max_memory_per_query: "512MB"
+  max_query_duration_seconds: 30
+  enable_spill_to_disk: true
+  spill_directory: /tmp/duckdb_spill
+
+s3:
+  endpoint: http://minio:9000
+  access_key_id: minioadmin
+  secret_access_key: minioadmin
+
+iceberg:
+  catalog_type: rest
+  catalog_uri: http://lakekeeper:8181/catalog
+  warehouse: default
+  write_target_file_size_bytes: 67108864
+  write_row_group_size_bytes: 134217728
+  write_page_size_bytes: 1048576
+  force_close_after_append: false

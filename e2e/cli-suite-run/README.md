@@ -71,7 +71,7 @@ Bring up the shared e2e stack and build the CLI:
 
 ```bash
 docker compose -f e2e/docker-compose.yaml up -d --wait
-( cd softprobe-runtime && go build -o ../softprobe ./cmd/softprobe )
+( cd archive/softprobe-runtime-go && go build -o ../../softprobe ./cmd/softprobe )
 ```
 
 Node 18+ must be on `PATH` for the sidecar. Node 22+ is recommended so

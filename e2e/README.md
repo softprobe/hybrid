@@ -42,11 +42,16 @@ The **`app`** process is configured with **`EGRESS_PROXY_URL=http://softprobe-pr
 
 ## Running
 
-Requires the WASM binary at `softprobe-proxy/target/wasm32-unknown-unknown/release/sp_istio_agent.wasm`. From repo root:
+Requires the WASM binary at `softprobe-proxy/target/wasm32-unknown-unknown/release/sp_istio_agent.wasm`.
+
+From repo root:
 
 ```bash
-docker compose -f e2e/docker-compose.yaml up --build --wait
+make -C softprobe-runtime build-linux
+make -C softprobe-runtime e2e-up
 ```
+
+`make -C softprobe-runtime build-linux` stages the Linux amd64 runtime binary for Docker. `make -C softprobe-runtime e2e-up` auto-builds/stages for your local Docker architecture and then launches compose.
 
 The stack publishes the runtime on **8080**, the proxy ingress on **8082**, the app on **8081**, the upstream on **8083**, and the egress listener on **8084**. Every harness below runs against this **same** stack with **no per-SDK setup** beyond the normal toolchain (`node` / `python3` / `mvn`).
 
