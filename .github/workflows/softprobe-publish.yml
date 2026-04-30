@@ -276,6 +276,11 @@ jobs:
         with:
           submodules: true
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Reclaim disk space before Docker build
+        run: |
+          docker system df || true
+          docker system prune -af --volumes || true
+          docker system df || true
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Authenticate to Google Cloud
@@ -392,6 +397,9 @@ jobs:
       VERSION: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: softprobe-runtime/go.mod
