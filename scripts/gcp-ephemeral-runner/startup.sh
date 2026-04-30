@@ -153,7 +153,13 @@ while true; do
     now_epoch="$(date +%s)"
 
     if [[ "${runner_status}" != "online" ]]; then
-      log "Runner ${RUNNER_NAME} status=${runner_status}; waiting"
+      idle_for="$((now_epoch - last_busy_epoch))"
+      log "Runner ${RUNNER_NAME} status=${runner_status}; idle_for=${idle_for}s (timeout ${idle_timeout_seconds}s)"
+      if (( idle_for >= idle_timeout_seconds )); then
+        log "Runner ${RUNNER_NAME} stuck non-online for ${idle_for}s; recycling VM"
+        recycle_reason="idle-timeout"
+        break
+      fi
       sleep 10
       continue
     fi

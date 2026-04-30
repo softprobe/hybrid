@@ -24,17 +24,21 @@ def gh_headers(token: str) -> Dict[str, str]:
     }
 
 
-def count_queued_runs(repo: str, token: str) -> int:
+def count_active_runs(repo: str, token: str) -> int:
+    """Approximate repo demand for runner capacity (queued + in_progress)."""
     url = f"https://api.github.com/repos/{repo}/actions/runs"
-    r = requests.get(
-        url,
-        headers=gh_headers(token),
-        params={"status": "queued", "per_page": 100},
-        timeout=20,
-    )
-    r.raise_for_status()
-    payload = r.json()
-    return int(payload.get("total_count", 0))
+    total = 0
+    for status in ("queued", "in_progress"):
+        r = requests.get(
+            url,
+            headers=gh_headers(token),
+            params={"status": status, "per_page": 100},
+            timeout=20,
+        )
+        r.raise_for_status()
+        payload = r.json()
+        total += int(payload.get("total_count", 0))
+    return total
 
 
 def get_current_target(project: str, zone: str, mig_name: str, session: AuthorizedSession) -> int:
@@ -70,11 +74,11 @@ def scale():
     project = env("GCP_PROJECT")
     zone = env("MIG_ZONE")
     mig_name = env("MIG_NAME")
-    min_runners = int(env("MIN_RUNNERS", "3"))
-    max_runners = int(env("MAX_RUNNERS", "20"))
+    min_runners = int(env("MIN_RUNNERS", "0"))
+    max_runners = int(env("MAX_RUNNERS", "3"))
 
-    queued = count_queued_runs(repo, token)
-    desired = min(max(queued, min_runners), max_runners)
+    active_runs = count_active_runs(repo, token)
+    desired = min(max(active_runs, min_runners), max_runners)
 
     creds, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
     session = AuthorizedSession(creds)
@@ -87,7 +91,7 @@ def scale():
     return jsonify(
         {
             "repo": repo,
-            "queued_runs": queued,
+            "active_runs": active_runs,
             "current_target_size": current,
             "desired_target_size": desired,
             "resized": current != desired,
