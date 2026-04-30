@@ -370,16 +370,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - name: Cache Rust
-        uses: actions/cache@v4
+      # https://github.com/marketplace/actions/rust-cache — toolchain-aware keys + pruned target cache
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            softprobe-proxy/target
-          key: ${{ runner.os }}-wasm-${{ hashFiles('softprobe-proxy/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-wasm-
+          workspaces: softprobe-proxy -> target
+          # Self-hosted runners: avoid stripping ~/.cargo/bin across runs (see action README)
+          cache-bin: "false"
       - name: Install build deps
         run: |
           sudo apt-get update

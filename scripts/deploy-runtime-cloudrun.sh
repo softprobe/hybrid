@@ -11,7 +11,7 @@ set -euo pipefail
 #   --repository-format=docker --location=us-central1 --project="${PROJECT_ID}"
 #
 # Optional overrides:
-#   PROJECT_ID                 default: coral-smoke-455007-j2
+#   PROJECT_ID                 default: cs-poc-sasxbttlzroculpau4u6e2l
 #   REGION                     default: us-central1
 #   RUNTIME_SERVICE_NAME       default: softprobe-runtime
 #   DATALAKE_SERVICE_NAME      default: softprobe-datalake
@@ -34,7 +34,7 @@ set -euo pipefail
 #   RUN_HOSTED_E2E             default: 1 (run hosted e2e gate against deployed URL)
 #   LOCAL_E2E_API_KEY          default: dev-public-key (token for local authstub)
 
-PROJECT_ID="${PROJECT_ID:-coral-smoke-455007-j2}"
+PROJECT_ID="${PROJECT_ID:-cs-poc-sasxbttlzroculpau4u6e2l}"
 REGION="${REGION:-us-central1}"
 RUNTIME_SERVICE_NAME="${RUNTIME_SERVICE_NAME:-softprobe-runtime}"
 DATALAKE_SERVICE_NAME="${DATALAKE_SERVICE_NAME:-softprobe-datalake}"

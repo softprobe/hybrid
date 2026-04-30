@@ -1,0 +1,17 @@
+[
+  {
+    "name": "delete-versions-older-than-1h",
+    "action": { "type": "Delete" },
+    "condition": {
+      "tagState": "any",
+      "olderThan": "1h"
+    }
+  },
+  {
+    "name": "keep-10-newest-per-package",
+    "action": { "type": "Keep" },
+    "mostRecentVersions": {
+      "keepCount": 10
+    }
+  }
+]

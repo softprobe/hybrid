@@ -23,7 +23,7 @@ services:
 
   datalake:
     # Artifact Registry (not gcr.io) — same repo name as CI publish & deploy-runtime-cloudrun.sh
-    image: us-central1-docker.pkg.dev/coral-smoke-455007-j2/softprobe/softprobe-datalake:latest
+    image: us-central1-docker.pkg.dev/cs-poc-sasxbttlzroculpau4u6e2l/softprobe/softprobe-datalake:latest
     platform: linux/amd64
     mem_limit: 2g
     environment:
