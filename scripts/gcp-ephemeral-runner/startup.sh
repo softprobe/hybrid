@@ -10,12 +10,29 @@ log() {
 METADATA="http://metadata.google.internal/computeMetadata/v1/instance/attributes"
 MD_HEADER="Metadata-Flavor: Google"
 
-github_repo="$(curl -fsS -H "${MD_HEADER}" "${METADATA}/github_repo")"
-github_pat="$(curl -fsS -H "${MD_HEADER}" "${METADATA}/github_pat")"
-runner_labels="$(curl -fsS -H "${MD_HEADER}" "${METADATA}/runner_labels")"
-runner_group="$(curl -fsS -H "${MD_HEADER}" "${METADATA}/runner_group" || true)"
-runner_version="$(curl -fsS -H "${MD_HEADER}" "${METADATA}/runner_version" || true)"
-idle_timeout_seconds="$(curl -fsS -H "${MD_HEADER}" "${METADATA}/idle_timeout_seconds" || true)"
+metadata_get_required() {
+  local key="$1"
+  curl -fsS -H "${MD_HEADER}" "${METADATA}/${key}"
+}
+
+metadata_get_optional() {
+  local key="$1"
+  local body_file
+  body_file="$(mktemp)"
+  local code
+  code="$(curl -sS -o "${body_file}" -w "%{http_code}" -H "${MD_HEADER}" "${METADATA}/${key}" || true)"
+  if [[ "${code}" == "200" ]]; then
+    cat "${body_file}"
+  fi
+  rm -f "${body_file}"
+}
+
+github_repo="$(metadata_get_required github_repo)"
+github_pat="$(metadata_get_required github_pat)"
+runner_labels="$(metadata_get_required runner_labels)"
+runner_group="$(metadata_get_optional runner_group)"
+runner_version="$(metadata_get_optional runner_version)"
+idle_timeout_seconds="$(metadata_get_optional idle_timeout_seconds)"
 if [[ -z "${runner_version}" ]]; then
   runner_version="2.334.0"
 fi
@@ -26,6 +43,14 @@ fi
 RUNNER_USER="bill_softprobe_ai"
 RUNNER_ROOT="/home/${RUNNER_USER}/actions-runner-ephemeral"
 RUNNER_URL="https://github.com/${github_repo}"
+
+log "Stopping legacy baked-in runner services (if present)"
+for svc in $(systemctl list-units --type=service --all --no-legend 'actions.runner.*.service' 2>/dev/null | awk '{print $1}'); do
+  systemctl stop "${svc}" || true
+  systemctl disable "${svc}" || true
+done
+pkill -f '/actions-runner/bin/Runner.Listener run' || true
+pkill -f '/actions-runner-org/bin/Runner.Listener run' || true
 
 export DEBIAN_FRONTEND=noninteractive
 if command -v docker >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 && command -v unzip >/dev/null 2>&1 && command -v zip >/dev/null 2>&1; then
@@ -55,9 +80,13 @@ log "Downloading actions runner ${runner_version}"
 runner_tgz="actions-runner-linux-x64-${runner_version}.tar.gz"
 su - "${RUNNER_USER}" -c "cd '${RUNNER_ROOT}' && curl -fsSLo '${runner_tgz}' 'https://github.com/actions/runner/releases/download/v${runner_version}/${runner_tgz}'"
 su - "${RUNNER_USER}" -c "cd '${RUNNER_ROOT}' && tar xzf '${runner_tgz}'"
-log "Installing GitHub runner runtime dependencies"
-cd "${RUNNER_ROOT}"
-./bin/installdependencies.sh
+if ldconfig -p | grep -q libicu; then
+  log "Runner runtime libraries detected; skipping installdependencies"
+else
+  log "Installing GitHub runner runtime dependencies"
+  cd "${RUNNER_ROOT}"
+  ./bin/installdependencies.sh
+fi
 chown -R "${RUNNER_USER}:${RUNNER_USER}" "${RUNNER_ROOT}"
 
 group_args=()
