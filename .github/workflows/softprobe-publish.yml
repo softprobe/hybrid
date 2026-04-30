@@ -402,10 +402,10 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-go@v5
         with:
-          go-version-file: softprobe-runtime/go.mod
-          cache-dependency-path: softprobe-runtime/go.sum
+          go-version-file: archive/softprobe-runtime-go/go.mod
+          cache-dependency-path: archive/softprobe-runtime-go/go.sum
       - name: Build
-        working-directory: softprobe-runtime
+        working-directory: archive/softprobe-runtime-go
         env:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
