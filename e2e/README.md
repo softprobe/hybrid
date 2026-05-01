@@ -206,7 +206,8 @@ The `jest-hooks` harness also requires a running Envoy ingress proxy (`INGRESS_U
 To verify the real proxy path against the cloud deployment, run only `softprobe-proxy`, `app`, and `upstream`; do not start the local `softprobe-runtime` container.
 
 ```bash
-export SOFTPROBE_RUNTIME_URL=https://softprobe-runtime-1076343766237.us-central1.run.app
+# Public runtime ingress (recommended)
+export SOFTPROBE_RUNTIME_URL=https://runtime.softprobe.dev
 export SOFTPROBE_API_KEY=<your-api-key>
 export SOFTPROBE_API_TOKEN=$SOFTPROBE_API_KEY
 
