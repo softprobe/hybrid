@@ -69,6 +69,7 @@ export default withMermaid(defineConfig({
           items: [
             { text: 'Capture your first session', link: '/guides/capture-your-first-session' },
             { text: 'Proxy vs language instrumentation', link: '/guides/proxy-vs-language-instrumentation' },
+            { text: 'Export OpenTelemetry to Softprobe', link: '/guides/export-otel-to-softprobe' },
             { text: 'Replay in a Jest test', link: '/guides/replay-in-jest' },
             { text: 'Replay in pytest', link: '/guides/replay-in-pytest' },
             { text: 'Replay in JUnit', link: '/guides/replay-in-junit' },
