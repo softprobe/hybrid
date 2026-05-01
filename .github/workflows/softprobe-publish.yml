@@ -299,6 +299,8 @@ jobs:
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
             type=ref,event=tag
+      # Registry cache survives fresh self-hosted runners (local layers are wiped by prune above).
+      # `mode=max` exports intermediate layers (needed for cargo-chef multi-stage builds).
       - name: Build and push runtime image (linux/amd64)
         uses: docker/build-push-action@v6
         with:
@@ -308,6 +310,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.RUNTIME_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.RUNTIME_IMAGE }}:buildcache,mode=max
       - name: Smoke pushed image (main -> latest)
         if: github.ref == 'refs/heads/main'
         run: docker run --rm ${{ env.RUNTIME_IMAGE }}:latest test -x /app/softprobe-runtime
