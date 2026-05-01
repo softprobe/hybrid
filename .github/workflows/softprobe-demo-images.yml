@@ -8,11 +8,11 @@ on:
       - "e2e/go.mod"
       - "e2e/go.sum"
       - ".github/workflows/softprobe-demo-images.yml"
-  push:
-    branches:
-      - main
-    tags:
-      - "v*"
+  # push:
+  #   branches:
+  #     - main
+  #   tags:
+  #     - "v*"
 
 env:
   APP_IMAGE: softprobe/demo-app
