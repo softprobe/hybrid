@@ -1,4 +1,16 @@
 services:
+  ducklake-postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: ducklake
+      POSTGRES_USER: ducklake
+      POSTGRES_DB: ducklake
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ducklake -p 5432 -d ducklake"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   redis:
     image: redis:7-alpine
     healthcheck:
@@ -45,6 +57,7 @@ services:
       dockerfile: Dockerfile
     mem_limit: 2g
     environment:
+      CONFIG_FILE: /workspace/e2e/softprobe-runtime.yaml
       SOFTPROBE_LISTEN_ADDR: 0.0.0.0:8080
       SOFTPROBE_CAPTURE_CASE_PATH: /workspace/e2e/captured.case.json
       SOFTPROBE_AUTH_URL: http://authstub:8091/validate
@@ -62,6 +75,8 @@ services:
       retries: 30
       start_period: 60s
     depends_on:
+      ducklake-postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
       authstub:
